@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+#![allow(clippy::result_large_err, clippy::await_holding_lock)]
 //! Citadel API Server
 //!
 //! HTTP interface to the keystore + adaptive threat system.
@@ -284,11 +285,11 @@ struct AppState {
     enforcer: Arc<RwLock<citadel_core::StateEnforcer>>, // P247.1: Runtime enforcement choke point
     /// Pre-computed dummy decrypt material for timing-oracle mitigation. On every
     /// decrypt code path that exits before reaching real crypto (nonexistent key,
-    /// revoked key, wrong domain, auth denial), we burn through a full KEM-decapsulate
-    /// + AEAD-open cycle using this dummy material before returning. This makes the
-    /// fast-fail path cost the same CPU as the real-decrypt path, closing a ~5x timing
-    /// difference that let an attacker enumerate key existence by measuring latency.
-    /// Initialized once at startup, never changes.
+    /// revoked key, wrong domain, auth denial), we burn through a full
+    /// KEM-decapsulate + AEAD-open cycle using this dummy material before returning.
+    /// This makes the fast-fail path cost the same CPU as the real-decrypt path,
+    /// closing a ~5x timing difference that let an attacker enumerate key existence
+    /// by measuring latency. Initialized once at startup, never changes.
     timing_dummy: TimingDummy,
 }
 
@@ -1612,7 +1613,7 @@ async fn generate_key(
     };
 
     // For KEK/DEK, authorize against parent domain
-    let target_key = req.parent_id.as_ref().map(|p| KeyId::new(p));
+    let target_key = req.parent_id.as_ref().map(KeyId::new);
     if let Err(response) =
         authorize_domain_access(&state, &auth, operation, target_key.as_ref()).await
     {
@@ -1698,18 +1699,15 @@ async fn activate_key(
         "POST",
     );
 
-    match enforcer_result {
-        Err(reason) => {
-            return (
-                StatusCode::FORBIDDEN,
-                Json(ApiError {
-                    error: format!("StateEnforcer denied: {}", reason),
-                    request_id: Some(new_request_id()),
-                }),
-            )
-                .into_response();
-        }
-        Ok(_) => {}
+    if let Err(reason) = enforcer_result {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiError {
+                error: format!("StateEnforcer denied: {}", reason),
+                request_id: Some(new_request_id()),
+            }),
+        )
+            .into_response();
     }
 
     match state.keystore.activate(&key_id).await {
@@ -1744,18 +1742,15 @@ async fn rotate_key(
         resolved_domain.as_deref(),
     );
 
-    match enforcer_result {
-        Err(reason) => {
-            return (
-                StatusCode::FORBIDDEN,
-                Json(ApiError {
-                    error: format!("StateEnforcer denied: {}", reason),
-                    request_id: Some(new_request_id()),
-                }),
-            )
-                .into_response();
-        }
-        Ok(_) => {}
+    if let Err(reason) = enforcer_result {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiError {
+                error: format!("StateEnforcer denied: {}", reason),
+                request_id: Some(new_request_id()),
+            }),
+        )
+            .into_response();
     }
 
     match state.keystore.rotate(&key_id).await {
@@ -1798,18 +1793,15 @@ async fn revoke_key(
         "POST",
     );
 
-    match enforcer_result {
-        Err(reason) => {
-            return (
-                StatusCode::FORBIDDEN,
-                Json(ApiError {
-                    error: format!("StateEnforcer denied: {}", reason),
-                    request_id: Some(new_request_id()),
-                }),
-            )
-                .into_response();
-        }
-        Ok(_) => {}
+    if let Err(reason) = enforcer_result {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiError {
+                error: format!("StateEnforcer denied: {}", reason),
+                request_id: Some(new_request_id()),
+            }),
+        )
+            .into_response();
     }
 
     match state.keystore.revoke(&key_id, &req.reason).await {
@@ -4467,7 +4459,7 @@ mod integration {
             .oneshot(
                 axum::http::Request::builder()
                     .method("DELETE")
-                    .uri(&format!("/api/auth/keys/ck_bootstrap"))
+                    .uri("/api/auth/keys/ck_bootstrap".to_string())
                     .header("authorization", format!("Bearer {}", second_key))
                     .body(axum::body::Body::empty())
                     .unwrap(),
@@ -4488,7 +4480,7 @@ mod integration {
             .oneshot(
                 axum::http::Request::builder()
                     .method("DELETE")
-                    .uri(&format!("/api/auth/keys/{}", second_key_id))
+                    .uri(format!("/api/auth/keys/{}", second_key_id))
                     .header("authorization", format!("Bearer {}", second_key))
                     .body(axum::body::Body::empty())
                     .unwrap(),
@@ -5293,7 +5285,7 @@ mod integration {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(&format!("/api/keys/{}/encrypt", dek_a_id))
+                    .uri(format!("/api/keys/{}/encrypt", dek_a_id))
                     .header("authorization", format!("Bearer {}", scoped_key))
                     .header("content-type", "application/json")
                     .body(Body::from(
@@ -5424,7 +5416,7 @@ mod integration {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(&format!("/api/keys/{}/rotate", kek_a_id))
+                    .uri(format!("/api/keys/{}/rotate", kek_a_id))
                     .header("authorization", format!("Bearer {}", scoped_key))
                     .body(Body::empty())
                     .unwrap(),
@@ -5444,7 +5436,7 @@ mod integration {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(&format!("/api/keys/{}/revoke", kek_a_id))
+                    .uri(format!("/api/keys/{}/revoke", kek_a_id))
                     .header("authorization", format!("Bearer {}", scoped_key))
                     .header("content-type", "application/json")
                     .body(Body::from(r#"{"reason":"test"}"#))
@@ -5813,7 +5805,7 @@ mod integration {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(&format!("/api/keys/{}/revoke", kek_b_id))
+                    .uri(format!("/api/keys/{}/revoke", kek_b_id))
                     .header("authorization", format!("Bearer {}", scoped_key))
                     .header("content-type", "application/json")
                     .body(Body::from(r#"{"reason":"test"}"#))
@@ -5879,7 +5871,7 @@ mod integration {
             .oneshot(
                 Request::builder()
                     .method("DELETE")
-                    .uri(&format!("/api/auth/keys/{}", multi_key_id))
+                    .uri(format!("/api/auth/keys/{}", multi_key_id))
                     .header("authorization", format!("Bearer {}", scoped_key))
                     .body(Body::empty())
                     .unwrap(),
@@ -6127,7 +6119,7 @@ mod integration {
             .oneshot(
                 Request::builder()
                     .method("GET")
-                    .uri(&format!("/api/keys/{}/verifying-key", dek_a_id))
+                    .uri(format!("/api/keys/{}/verifying-key", dek_a_id))
                     .header("authorization", format!("Bearer {}", scoped_key))
                     .body(Body::empty())
                     .unwrap(),
@@ -6190,7 +6182,7 @@ mod integration {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(&format!("/api/keys/{}/encrypt", dek_a_id))
+                    .uri(format!("/api/keys/{}/encrypt", dek_a_id))
                     .header("authorization", format!("Bearer {}", scoped_key))
                     .header("content-type", "application/json")
                     .body(Body::from(
@@ -6501,7 +6493,7 @@ mod integration {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(&format!("/api/keys/{}/encrypt", dek_b_id))
+                    .uri(format!("/api/keys/{}/encrypt", dek_b_id))
                     .header("authorization", format!("Bearer {}", multi_key))
                     .header("content-type", "application/json")
                     .body(Body::from(
@@ -6611,7 +6603,7 @@ mod integration {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(&format!("/api/keys/{}/rotate", kek_a_id))
+                    .uri(format!("/api/keys/{}/rotate", kek_a_id))
                     .header("authorization", format!("Bearer {}", scoped_key))
                     .body(Body::empty())
                     .unwrap(),
@@ -7239,7 +7231,7 @@ mod integration {
             .oneshot(
                 Request::builder()
                     .method("GET")
-                    .uri(&format!("/api/keys/{}/verifying-key", key_a_id))
+                    .uri(format!("/api/keys/{}/verifying-key", key_a_id))
                     .header("authorization", format!("Bearer {}", scoped_key))
                     .body(Body::empty())
                     .unwrap(),

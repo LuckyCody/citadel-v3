@@ -6,7 +6,6 @@
 //! Verification compares local hash chain against external anchors to detect tampering.
 
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
 
 /// P007: Error type for witness operations
 #[derive(Debug, Clone)]
@@ -192,7 +191,7 @@ impl AuditWitness for NoOpWitness {
         Ok(true) // Always passes when disabled
     }
 
-    fn get_receipt(&self, entry_number: u64) -> Result<WitnessReceipt, WitnessError> {
+    fn get_receipt(&self, _entry_number: u64) -> Result<WitnessReceipt, WitnessError> {
         Err(WitnessError::new("witness disabled"))
     }
 

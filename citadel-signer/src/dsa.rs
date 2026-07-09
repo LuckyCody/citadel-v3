@@ -216,9 +216,8 @@ mod tests {
 
         // May return Ok(false) or Err (malformed) — both are correct rejections
         let result = verify_message(&vk, message, &sig);
-        match result {
-            Ok(valid) => assert!(!valid, "tampered signature must not verify"),
-            Err(_) => {} // Malformed signature also correctly rejected
+        if let Ok(valid) = result {
+            assert!(!valid, "tampered signature must not verify");
         }
     }
 

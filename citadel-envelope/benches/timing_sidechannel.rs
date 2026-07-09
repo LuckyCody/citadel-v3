@@ -71,7 +71,7 @@ fn bench_tag_first_byte_vs_last_byte_failure(runner: &mut CtRunner, rng: &mut Be
         }
     }
 
-    for (class, input) in classes.into_iter().zip(inputs.into_iter()) {
+    for (class, input) in classes.into_iter().zip(inputs) {
         runner.run_one(class, || {
             let _ = black_box(cit.open(&sk, black_box(&input), &aad, &ctx));
         });
@@ -104,7 +104,7 @@ fn bench_wrong_aad_vs_wrong_tag_failure(runner: &mut CtRunner, rng: &mut BenchRn
         }
     }
 
-    for (class, wrong_aad) in classes.into_iter().zip(use_wrong_aad.into_iter()) {
+    for (class, wrong_aad) in classes.into_iter().zip(use_wrong_aad) {
         let (input, aad) = if wrong_aad {
             (&ct, &aad_bad)
         } else {
@@ -145,7 +145,7 @@ fn bench_kem_corruption_a_vs_b_failure(runner: &mut CtRunner, rng: &mut BenchRng
         }
     }
 
-    for (class, input) in classes.into_iter().zip(inputs.into_iter()) {
+    for (class, input) in classes.into_iter().zip(inputs) {
         runner.run_one(class, || {
             let _ = black_box(cit.open(&sk, black_box(&input), &aad, &ctx));
         });
@@ -188,7 +188,7 @@ fn bench_key_material_fixed_vs_random_success(runner: &mut CtRunner, rng: &mut B
 
     let mut fixed_idx = 0usize;
     let mut random_idx = 0usize;
-    for (class, fixed) in classes.into_iter().zip(use_fixed.into_iter()) {
+    for (class, fixed) in classes.into_iter().zip(use_fixed) {
         if fixed {
             let pair = &fixed_pairs[fixed_idx % fixed_pairs.len()];
             fixed_idx += 1;
@@ -240,7 +240,7 @@ fn bench_null_fixed_vs_random_harness_control(runner: &mut CtRunner, rng: &mut B
 
     let mut fixed_idx = 0usize;
     let mut random_idx = 0usize;
-    for (class, fixed) in classes.into_iter().zip(use_fixed.into_iter()) {
+    for (class, fixed) in classes.into_iter().zip(use_fixed) {
         if fixed {
             let pair = &fixed_pairs[fixed_idx % fixed_pairs.len()];
             fixed_idx += 1;
@@ -257,6 +257,7 @@ fn bench_null_fixed_vs_random_harness_control(runner: &mut CtRunner, rng: &mut B
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn build_stage_pairs(
     count: usize,
     plaintext: &[u8],
@@ -876,7 +877,7 @@ fn bench_info_wrong_key_a_vs_b_failure(runner: &mut CtRunner, rng: &mut BenchRng
         }
     }
 
-    for (class, a) in classes.into_iter().zip(use_a.into_iter()) {
+    for (class, a) in classes.into_iter().zip(use_a) {
         let sk = if a { &sk_a } else { &sk_b };
         runner.run_one(class, || {
             let _ = black_box(cit.open(sk, black_box(&ct), &aad, &ctx));
@@ -907,7 +908,7 @@ fn bench_info_valid_vs_short_public_format(runner: &mut CtRunner, rng: &mut Benc
         }
     }
 
-    for (class, input) in classes.into_iter().zip(inputs.into_iter()) {
+    for (class, input) in classes.into_iter().zip(inputs) {
         runner.run_one(class, || {
             let _ = black_box(cit.open(&sk, black_box(&input), &aad, &ctx));
         });

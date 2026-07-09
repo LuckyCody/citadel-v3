@@ -177,6 +177,7 @@ impl AuthorizedContext {
     }
 
     /// P261: Get capability token (package-private for validation)
+    #[allow(dead_code)]
     pub(crate) fn capability(&self) -> &CapabilityToken {
         &self.capability
     }
@@ -351,9 +352,9 @@ impl std::fmt::Display for DenialReason {
     }
 }
 
-/// StateEnforcer — identity, lifecycle, and domain authority (layer 1 of 2).
-/// See also: Keystore (cryptographic role + replay authority — layer 2 of 2).
-/// StateEnforcer + Keystore together form the enforcement boundary.
+// StateEnforcer — identity, lifecycle, and domain authority (layer 1 of 2).
+// See also: Keystore (cryptographic role + replay authority — layer 2 of 2).
+// StateEnforcer + Keystore together form the enforcement boundary.
 // ---------------------------------------------------------------------------
 // P385 — Authority model: explicit boundary declaration
 // ---------------------------------------------------------------------------
@@ -461,7 +462,7 @@ impl StateEnforcer {
         if let Some(domain) = domain_id {
             self.domain_keys
                 .entry(domain)
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(key_id);
         }
     }
@@ -578,11 +579,7 @@ impl StateEnforcer {
         ))
     }
 
-    /// Authorize replay nonce claim operation
-    ///
-    /// Validates:
-    /// - Key exists and is valid
-    /// P329: authorize_replay_claim demoted — replay atomicity belongs to ReplayStore::claim().
+    // P329: authorize_replay_claim demoted — replay atomicity belongs to ReplayStore::claim().
 
     /// Authorize API request that touches cryptographic operations
     ///
@@ -1225,15 +1222,9 @@ mod enforcer_authority_tests {
         assert!(enforcer
             .authorize_key_rotation("key-1", "key-2", None)
             .is_err());
-        assert!(matches!(enforcer.authorize_decrypt("key-1", None), Err(_)));
-        assert!(matches!(
-            enforcer.authorize_encrypt("key-1", None, None),
-            Err(_)
-        ));
-        assert!(matches!(
-            enforcer.authorize_api_request("key-1", None, "/test", "GET"),
-            Err(_)
-        ));
+        assert!(enforcer.authorize_decrypt("key-1", None).is_err());
+        assert!(enforcer.authorize_encrypt("key-1", None, None).is_err());
+        assert!(enforcer.authorize_api_request("key-1", None, "/test", "GET").is_err());
 
         // Prove no bypass exists
     }
@@ -1252,18 +1243,9 @@ mod enforcer_authority_tests {
         assert!(enforcer
             .authorize_key_rotation("nonexistent", "new", None)
             .is_err());
-        assert!(matches!(
-            enforcer.authorize_decrypt("nonexistent", None),
-            Err(_)
-        ));
-        assert!(matches!(
-            enforcer.authorize_encrypt("nonexistent", None, None),
-            Err(_)
-        ));
-        assert!(matches!(
-            enforcer.authorize_api_request("nonexistent", None, "/test", "GET"),
-            Err(_)
-        ));
+        assert!(enforcer.authorize_decrypt("nonexistent", None).is_err());
+        assert!(enforcer.authorize_encrypt("nonexistent", None, None).is_err());
+        assert!(enforcer.authorize_api_request("nonexistent", None, "/test", "GET").is_err());
 
         // No authorization possible without valid key
     }
@@ -1285,18 +1267,9 @@ mod enforcer_authority_tests {
         assert!(enforcer
             .authorize_key_rotation("key-a", "key-new", Some("domain-b"))
             .is_err());
-        assert!(matches!(
-            enforcer.authorize_decrypt("key-a", Some("domain-b")),
-            Err(_)
-        ));
-        assert!(matches!(
-            enforcer.authorize_encrypt("key-a", Some("domain-b"), None),
-            Err(_)
-        ));
-        assert!(matches!(
-            enforcer.authorize_api_request("key-a", Some("domain-b"), "/test", "GET"),
-            Err(_)
-        ));
+        assert!(enforcer.authorize_decrypt("key-a", Some("domain-b")).is_err());
+        assert!(enforcer.authorize_encrypt("key-a", Some("domain-b"), None).is_err());
+        assert!(enforcer.authorize_api_request("key-a", Some("domain-b"), "/test", "GET").is_err());
 
         // Cross-domain access completely blocked
     }
@@ -1342,7 +1315,7 @@ mod enforcer_authority_tests {
 
         let token_from_a = enforcer_a.generate_capability_token();
         // Register key-1 in enforcer_b to ensure it's not a key-lookup failure
-        let mut eb = setup_enforcer();
+        let _eb = setup_enforcer();
         // token_from_a has generation = enforcer_a.generation
         assert!(
             !enforcer_b.validate_capability(&token_from_a),
@@ -1365,7 +1338,7 @@ mod enforcer_authority_tests {
     fn test_revoked_key_blocks_all_operations() {
         let mut enforcer = StateEnforcer::new();
         enforcer.register_key("key-1".into(), None);
-        enforcer.revoke_key("key-1".into());
+        enforcer.revoke_key("key-1");
 
         assert!(
             enforcer.authorize_encrypt("key-1", None, None).is_err(),
@@ -1492,7 +1465,7 @@ mod enforcer_authority_tests {
     fn test_authorize_sign_revoked_key_rejected() {
         let mut enforcer = StateEnforcer::new();
         enforcer.register_key("signing-key".into(), None);
-        enforcer.revoke_key("signing-key".into());
+        enforcer.revoke_key("signing-key");
         assert!(
             enforcer
                 .authorize_sign("signing-key", None, b"test-message")

@@ -18,6 +18,7 @@
 //! Inject a persistent backend via `set_replay_store()`:
 //!   - `FileReplayStore` — single-instance, restart-safe
 //!   - `RedisReplayStore` — multi-instance (requires `redis-backend` feature)
+//!
 //! Semantics: `claim(key, ttl)` → exclusive one-time use; `release(key)` → undo.
 //! Always use `fail_closed = true` in production.
 //! (V2 types `ReplayCacheBackend`, `InMemoryReplayCache`, `FileReplayCache`
@@ -1081,6 +1082,7 @@ impl Keystore {
     /// - `RewrapError::KeyNotFound` — key or parent not found
     /// - `RewrapError::UnwrapFailed` — cannot unwrap current secret key
     /// - `RewrapError::WrapFailed` — cannot wrap under new parent
+    ///
     /// P316: Capability-gated decrypt — requires AuthorizedContext from StateEnforcer.
     pub async fn decrypt_authorized(
         &self,
@@ -1092,11 +1094,11 @@ impl Keystore {
         // P378: Validate capability issuance at keystore boundary.
         self.validate_authz(authz)
             .await
-            .map_err(|e| DecryptError(e))?;
+            .map_err(DecryptError)?;
         // Cross-check: the context must authorize THIS specific key for decrypt.
         authz
             .require_decrypt_for(&blob.key_id)
-            .map_err(|e| DecryptError(e))?;
+            .map_err(DecryptError)?;
         self.decrypt(blob, aad, context).await
     }
 
@@ -1702,12 +1704,12 @@ impl Keystore {
         // P378: Validate capability issuance at keystore boundary.
         self.validate_authz(authz)
             .await
-            .map_err(|e| EncryptError(e))?;
+            .map_err(EncryptError)?;
         let key_id = KeyId::new(authz.key_id());
         // Cross-check: the context must authorize THIS specific key for encrypt.
         authz
             .require_encrypt_for(authz.key_id())
-            .map_err(|e| EncryptError(e))?;
+            .map_err(EncryptError)?;
         self.encrypt(&key_id, plaintext, aad, context).await
     }
 
@@ -2278,13 +2280,13 @@ impl Keystore {
         message: &[u8],
     ) -> Result<SignedPayload, SignError> {
         // P378: Validate capability issuance at keystore boundary.
-        self.validate_authz(authz).await.map_err(|e| SignError(e))?;
+        self.validate_authz(authz).await.map_err(SignError)?;
         let key_id = KeyId::new(authz.key_id());
         // P017/P022: Cross-check authorization is bound to THIS specific message hash.
         // Prevents authorization reuse across different messages.
         authz
             .require_sign_for_payload(authz.key_id(), message)
-            .map_err(|e| SignError(e))?;
+            .map_err(SignError)?;
         self.sign(&key_id, message).await
     }
 

@@ -108,9 +108,9 @@ mod tests {
         let ttl = Duration::from_secs(3600);
 
         // First claim succeeds
-        assert_eq!(cache.claim(&key, ttl).unwrap(), true);
+        assert!(cache.claim(&key, ttl).unwrap());
 
         // Second claim fails (replay detected)
-        assert_eq!(cache.claim(&key, ttl).unwrap(), false);
+        assert!(!cache.claim(&key, ttl).unwrap());
     }
 }

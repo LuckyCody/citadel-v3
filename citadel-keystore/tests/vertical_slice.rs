@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+#![allow(clippy::await_holding_lock)]
 //! P064 — Vertical slice test: full key lifecycle end-to-end.
 //!
 //! Proves that every seam in the system holds together:
@@ -988,7 +989,7 @@ async fn p089_keystore_concurrent_replay_atomicity_1000() {
             ks_decrypt_result(
                 &ks_clone,
                 &enforcer_clone,
-                &*blob_clone,
+                &blob_clone,
                 &Aad::raw(b"concurrent-replay-aad"),
                 &Context::raw(b"concurrent-replay-ctx"),
             )

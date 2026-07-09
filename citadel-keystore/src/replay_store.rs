@@ -269,7 +269,7 @@ impl ReplayStore for MemoryReplayStore {
 /// **Replay window**: Between flushes, there is a window of up to:
 /// - 5 seconds (time-based), OR
 /// - 100 operations (count-based)
-/// during which a crash allows replay of decrypted ciphertexts.
+///   during which a crash allows replay of decrypted ciphertexts.
 ///
 /// **Mitigation strategies**:
 /// 1. Implement graceful shutdown: Call `force_flush()` in SIGTERM handler (see P010)
@@ -636,8 +636,9 @@ impl RedisReplayStore {
     }
 
     /// Create from environment variables:
-    /// - `CITADEL_REDIS_URL` (required)
-    /// - `CITADEL_REDIS_PREFIX` (optional, default "citadel:replay:")
+    ///   - `CITADEL_REDIS_URL` (required)
+    ///   - `CITADEL_REDIS_PREFIX` (optional, default "citadel:replay:")
+    ///
     /// P395: Reads environment, validates Redis connectivity, returns Err on failure.
     ///
     /// This was previously just env-var reading. Now it PINGs Redis at startup:
@@ -1002,16 +1003,14 @@ mod tests {
         // Second claim: must return Ok(false) — replay detected, not a backend error.
         // Contract: Ok(true)=claimed, Ok(false)=replay, Err=backend failure.
         // Asserting is_err() was WRONG — MemoryReplayStore returns Ok(false) on replay.
-        assert_eq!(
-            store.claim(key, Duration::from_secs(60)).unwrap(),
-            false,
+        assert!(
+            !store.claim(key, Duration::from_secs(60)).unwrap(),
             "REPLAY INVARIANT VIOLATED: second claim must return Ok(false) — replay detected"
         );
 
         // Third claim: also Ok(false) — not a one-time flip
-        assert_eq!(
-            store.claim(key, Duration::from_secs(60)).unwrap(),
-            false,
+        assert!(
+            !store.claim(key, Duration::from_secs(60)).unwrap(),
             "REPLAY INVARIANT VIOLATED: third claim must return Ok(false) — replay detected"
         );
     }

@@ -35,7 +35,7 @@ async fn try_encrypt(
     enforcer: &SharedEnforcer,
     key_id: &str,
 ) -> Result<citadel_keystore::EncryptedBlob, String> {
-    let kid = KeyId::new(key_id);
+    let _kid = KeyId::new(key_id);
     let aad = Aad::raw(b"sm-aad");
     let ctx = Context::raw(b"sm-ctx");
     let mut enf = enforcer.write().await;
@@ -239,8 +239,8 @@ fn run_ops(ops: Vec<Op>) {
                             ktype
                         );
                     }
-                    if result.is_ok() {
-                        m.last_blob = Some(result.unwrap());
+                    if let Ok(blob) = result {
+                        m.last_blob = Some(blob);
                     }
                 }
                 Op::TryDecrypt => {

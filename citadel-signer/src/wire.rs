@@ -4,13 +4,11 @@
 //! These constants are distinct from citadel-envelope's wire format constants.
 //! Signing produces signatures, not encrypted blobs. The wire formats are orthogonal.
 
-/// ML-DSA-65 (NIST FIPS 204) key and signature sizes.
-///
-/// Confirmed from ml-dsa source (lib.rs test output_sizes):
-///   ML-DSA-65: sk=4032, vk=1952, sig=3309
-///
-/// Note: We store the 32-byte SEED (not the 4032-byte expanded sk).
-/// The expanded signing key is reconstructed from the seed on demand.
+// ML-DSA-65 (NIST FIPS 204) key and signature sizes.
+// Confirmed from ml-dsa source (lib.rs test output_sizes):
+//   ML-DSA-65: sk=4032, vk=1952, sig=3309
+// Note: We store the 32-byte SEED (not the 4032-byte expanded sk).
+// The expanded signing key is reconstructed from the seed on demand.
 
 /// ML-DSA-65 seed size (what we store) — 32 bytes.
 pub const MLDSA65_SEED_BYTES: usize = 32;
