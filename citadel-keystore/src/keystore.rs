@@ -452,6 +452,7 @@ impl Keystore {
     /// The four-level hierarchy (Root → Domain → KEK → DEK) requires at most 3
     /// levels of indirection. Depth 4 is a safety limit — exceeding it returns
     /// an error rather than looping indefinitely.
+    #[allow(clippy::type_complexity)]
     fn unwrap_key_version<'life0, 'life1, 'life2>(
         &'life0 self,
         key_id: &'life1 KeyId,
@@ -472,6 +473,7 @@ impl Keystore {
     /// Used exclusively by `rewrap()` — when we are extracting the raw secret key
     /// bytes so we can re-wrap them under a new parent, we must be able to read
     /// through a revoked parent. The new wrapping will be under a healthy parent.
+    #[allow(clippy::type_complexity)]
     fn unwrap_key_version_for_rewrap<'life0, 'life1, 'life2>(
         &'life0 self,
         key_id: &'life1 KeyId,
@@ -486,6 +488,7 @@ impl Keystore {
         self.unwrap_key_version_inner(key_id, kv, 0, true)
     }
 
+    #[allow(clippy::type_complexity)]
     fn unwrap_key_version_inner<'life0, 'life1, 'life2>(
         &'life0 self,
         key_id: &'life1 KeyId,

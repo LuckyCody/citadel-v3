@@ -173,7 +173,7 @@ impl FileBackend {
             if let Ok(entries) = std::fs::read_dir(&dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    if path.extension().map_or(false, |e| e == "json") {
+                    if path.extension().is_some_and(|e| e == "json") {
                         if let Ok(meta) = std::fs::metadata(&path) {
                             let mode = meta.permissions().mode() & 0o777;
                             if mode & 0o077 != 0 {
