@@ -187,8 +187,7 @@ pub fn diagnostic_mlkem_decapsulate_only(
     }
 
     let mlkem_ct_bytes = &ct[X25519_KEY_BYTES..];
-    let mlkem_ct =
-        pq_mlkem::Ciphertext::from_bytes(mlkem_ct_bytes).map_err(|_| DecryptionError)?;
+    let mlkem_ct = pq_mlkem::Ciphertext::from_bytes(mlkem_ct_bytes).map_err(|_| DecryptionError)?;
     let mlkem_ss = pq_mlkem::decapsulate(&mlkem_ct, &sk.mlkem_sk());
 
     let mut out = [0u8; SHARED_SECRET_BYTES];
@@ -204,10 +203,8 @@ pub fn diagnostic_mlkem_decapsulate_from_key_bytes(
     let mlkem_sk_bytes = &sk_bytes[X25519_KEY_BYTES..];
     let mlkem_ct_bytes = &ct[X25519_KEY_BYTES..];
 
-    let mlkem_sk =
-        pq_mlkem::SecretKey::from_bytes(mlkem_sk_bytes).map_err(|_| DecryptionError)?;
-    let mlkem_ct =
-        pq_mlkem::Ciphertext::from_bytes(mlkem_ct_bytes).map_err(|_| DecryptionError)?;
+    let mlkem_sk = pq_mlkem::SecretKey::from_bytes(mlkem_sk_bytes).map_err(|_| DecryptionError)?;
+    let mlkem_ct = pq_mlkem::Ciphertext::from_bytes(mlkem_ct_bytes).map_err(|_| DecryptionError)?;
     let mlkem_ss = pq_mlkem::decapsulate(&mlkem_ct, &mlkem_sk);
 
     let mut out = [0u8; SHARED_SECRET_BYTES];
