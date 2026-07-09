@@ -1,0 +1,885 @@
+openapi: 3.1.0
+info:
+  title: Citadel Key Management API
+  version: 1.0.0
+  description: |
+    Post-quantum cryptographic key management server.
+    Hybrid X25519 + ML-KEM-768 KEM, AES-256-GCM AEAD, ML-DSA-65 signing.
+    4-level key hierarchy: Root → Domain → KEK → DEK.
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        request_id:
+          type: string
+          nullable: true
+
+    KeyType:
+      type: string
+      enum: [Root, Domain, KeyEncrypting, DataEncrypting, HybridIdentity, Signing]
+
+    KeyState:
+      type: string
+      enum: [Pending, Active, Rotated, Revoked, Destroyed]
+
+    Scope:
+      type: string
+      enum: [read, encrypt, manage, admin]
+
+    GenerateKeyReq:
+      type: object
+      required: [name, key_type]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 256
+        key_type:
+          $ref: '#/components/schemas/KeyType'
+        policy_id:
+          type: string
+          nullable: true
+        parent_id:
+          type: string
+          nullable: true
+          description: Parent key ID. Required for KEK (parent=Domain) and DEK (parent=KEK).
+
+    EncryptReq:
+      type: object
+      required: [plaintext, aad, context]
+      additionalProperties: false
+      properties:
+        plaintext:
+          type: string
+          description: Hex-encoded plaintext bytes
+        aad:
+          type: string
+          description: Additional authenticated data
+        context:
+          type: string
+          description: Key derivation context
+
+    DecryptReq:
+      type: object
+      required: [blob, aad, context]
+      additionalProperties: false
+      properties:
+        blob:
+          $ref: '#/components/schemas/EncryptedBlob'
+        aad:
+          type: string
+        context:
+          type: string
+
+    EncryptedBlob:
+      type: object
+      required: [key_id, key_version, ciphertext_hex]
+      properties:
+        key_id:
+          type: string
+        key_version:
+          type: integer
+          minimum: 0
+        ciphertext_hex:
+          type: string
+          pattern: '^[0-9a-fA-F]+$'
+        nonce_hex:
+          type: string
+          pattern: '^[0-9a-fA-F]+$'
+
+    SignReq:
+      type: object
+      required: [payload_hex]
+      additionalProperties: false
+      properties:
+        payload_hex:
+          type: string
+          description: Hex-encoded payload bytes to sign
+          pattern: '^[0-9a-fA-F]+$'
+        context:
+          type: string
+          default: ''
+
+    VerifyReq:
+      type: object
+      required: [key_id, key_version, payload_hex, signature_hex]
+      additionalProperties: false
+      properties:
+        key_id:
+          type: string
+        key_version:
+          type: integer
+          minimum: 0
+        payload_hex:
+          type: string
+          pattern: '^[0-9a-fA-F]+$'
+        signature_hex:
+          type: string
+          pattern: '^[0-9a-fA-F]+$'
+
+    AssertionIssueReq:
+      type: object
+      required: [signing_key_id, ttl_secs, public_claims]
+      additionalProperties: false
+      properties:
+        signing_key_id:
+          type: string
+        ttl_secs:
+          type: integer
+          minimum: 1
+        public_claims:
+          type: object
+        sealed_claims_hex:
+          type: string
+          pattern: '^[0-9a-fA-F]*$'
+
+    AssertionVerifyReq:
+      type: object
+      required: [assertion_json]
+      additionalProperties: false
+      properties:
+        assertion_json:
+          type: string
+          description: JSON-serialized CitadelAssertion
+
+    CreateApiKeyReq:
+      type: object
+      required: [name, scopes]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Scope'
+          minItems: 1
+        allowed_domains:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Domain IDs this key can access. Null = global.
+
+    ThreatEventReq:
+      type: object
+      required: [kind, severity]
+      properties:
+        kind:
+          type: string
+        severity:
+          type: number
+          minimum: 0
+          maximum: 1
+        detail:
+          type: string
+
+  responses:
+    AuthError401:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    UnsupportedMedia415:
+      description: Unsupported or missing Content-Type header
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    UnprocessableEntity422:
+      description: JSON deserialization failed (wrong types, overflow, etc)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+paths:
+  /:
+    get:
+      summary: Dashboard HTML
+      security: []
+      responses:
+        '200':
+          description: Dashboard page
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /health:
+    get:
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+
+  /api/status:
+    get:
+      summary: System status (global admin only)
+      responses:
+        '200':
+          description: System status
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Not a global admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/metrics:
+    get:
+      summary: System metrics (global admin only)
+      responses:
+        '200':
+          description: Metrics
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Not a global admin
+
+  /api/keys:
+    get:
+      summary: List keys (filtered by domain scope)
+      responses:
+        '200':
+          description: Key list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        '401':
+          $ref: '#/components/responses/AuthError401'
+    post:
+      summary: Generate a new key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateKeyReq'
+      responses:
+        '201':
+          description: Key generated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [key_id]
+                properties:
+                  key_id:
+                    type: string
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Insufficient scope or domain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity422'
+
+  /api/keys/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get key metadata
+      responses:
+        '200':
+          description: Key metadata
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/keys/{id}/activate:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Activate a pending key
+      responses:
+        '200':
+          description: Key activated
+        '400':
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+
+  /api/keys/{id}/rotate:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Rotate an active key
+      responses:
+        '200':
+          description: Key rotated
+        '400':
+          description: Invalid state transition
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Access denied
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+
+  /api/keys/{id}/revoke:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Revoke a key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Key revoked
+        '400':
+          description: Invalid state transition
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Access denied
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity422'
+
+  /api/keys/{id}/destroy:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Destroy a revoked key (irreversible)
+      responses:
+        '200':
+          description: Key destroyed
+        '400':
+          description: Must revoke before destroying
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Access denied
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+
+  /api/keys/{id}/encrypt:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Encrypt data with a DEK
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncryptReq'
+      responses:
+        '200':
+          description: Encrypted blob
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncryptedBlob'
+        '400':
+          description: Encryption failed (wrong key type, inactive, etc)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Access denied
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity422'
+
+  /api/decrypt:
+    post:
+      summary: Decrypt data
+      description: |
+        All error paths return 400 "operation failed" — no distinction between
+        auth failure, wrong key, corrupted blob, or crypto failure. This prevents
+        decrypt error oracles.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecryptReq'
+      responses:
+        '200':
+          description: Decrypted data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plaintext:
+                    type: string
+        '400':
+          description: Operation failed (deliberately opaque)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity422'
+
+  /api/keys/{id}/sign:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Sign data with ML-DSA-65
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignReq'
+      responses:
+        '200':
+          description: Signature
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signature_hex:
+                    type: string
+                  key_version:
+                    type: integer
+        '400':
+          description: Signing failed
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Access denied
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity422'
+
+  /api/verify:
+    post:
+      summary: Verify an ML-DSA-65 signature
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyReq'
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+        '400':
+          description: Verification failed
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity422'
+
+  /api/keys/{id}/verifying-key:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get the public verifying key for a signing key
+      responses:
+        '200':
+          description: Verifying key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verifying_key_hex:
+                    type: string
+        '400':
+          description: Not a signing key
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/assertions/issue:
+    post:
+      summary: Issue a CNA (Citadel Native Assertion)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssertionIssueReq'
+      responses:
+        '200':
+          description: Issued assertion
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Issue failed
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Access denied
+        '404':
+          description: Signing key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity422'
+
+  /api/assertions/verify:
+    post:
+      summary: Verify a CNA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssertionVerifyReq'
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+        '400':
+          description: Verification failed
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity422'
+
+  /api/threat:
+    get:
+      summary: Get threat posture (global admin only)
+      responses:
+        '200':
+          description: Threat assessment
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Not a global admin
+
+  /api/threat/event:
+    post:
+      summary: Report a threat event (global admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ThreatEventReq'
+      responses:
+        '200':
+          description: Event recorded
+        '400':
+          description: Invalid threat event (unknown kind, etc)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Not a global admin
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity422'
+
+  /api/threat/reset:
+    post:
+      summary: Reset threat posture (global admin only)
+      responses:
+        '200':
+          description: Threat reset
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Not a global admin
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+
+  /api/policies:
+    get:
+      summary: Get active policies (global admin only)
+      responses:
+        '200':
+          description: Policy list
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Not a global admin
+
+  /api/expire:
+    post:
+      summary: Trigger key expiry sweep (global admin only)
+      responses:
+        '200':
+          description: Expiry results
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Not a global admin
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+
+  /api/auth/keys:
+    get:
+      summary: List API keys
+      responses:
+        '200':
+          description: API key list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        '401':
+          $ref: '#/components/responses/AuthError401'
+    post:
+      summary: Create a new API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyReq'
+      responses:
+        '201':
+          description: API key created (plaintext returned ONCE)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  key:
+                    type: string
+                    description: Plaintext key — shown once, never stored
+                  name:
+                    type: string
+                  scopes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Scope'
+        '400':
+          description: Invalid request (e.g. empty scopes)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Cannot create key (scoped admin restrictions)
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia415'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity422'
+
+  /api/auth/keys/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      summary: Revoke an API key
+      responses:
+        '200':
+          description: API key revoked
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          $ref: '#/components/responses/AuthError401'
+        '403':
+          description: Cannot revoke (scoped admin restrictions)
+        '404':
+          description: API key not found
+
+  /api/auth/whoami:
+    get:
+      summary: Show current API key info
+      responses:
+        '200':
+          description: Current key info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key_id:
+                    type: string
+                  key_name:
+                    type: string
+                  scopes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Scope'
+                  allowed_domains:
+                    type: array
+                    items:
+                      type: string
+                    nullable: true
+        '401':
+          $ref: '#/components/responses/AuthError401'

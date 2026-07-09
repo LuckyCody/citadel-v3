@@ -109,7 +109,7 @@ jobs:
           export CITADEL_WORKSPACE_DIR="$(pwd)"
           export CITADEL_DATA_DIR=$(mktemp -d)
           # Script path relative to repo. Adjust if scripts move.
-          bash ../../persistence_server_test.sh
+          bash scripts/security/persistence_server_test.sh
           rm -rf "$CITADEL_DATA_DIR"
 
       - name: Start server
@@ -125,10 +125,10 @@ jobs:
           done
 
       - name: Concurrency stress (20 rounds × 10 concurrent)
-        run: bash ../../concurrency_stress.sh 20 10
+        run: bash scripts/security/concurrency_stress.sh 20 10
 
       - name: Canary log leakage
-        run: bash ../../log_canary_test.sh /tmp/ci-server.log
+        run: bash scripts/security/log_canary_test.sh /tmp/ci-server.log
 
       - name: Stop server
         if: always()
@@ -180,7 +180,7 @@ jobs:
 
       - name: Schemathesis (500 examples/operation)
         run: |
-          ~/.local/bin/schemathesis run ../../openapi.yaml \
+          ~/.local/bin/schemathesis run scripts/security/openapi.yaml \
             --url http://localhost:3000 \
             -H "Authorization:Bearer $CITADEL_API_KEY" \
             -n 500 \
