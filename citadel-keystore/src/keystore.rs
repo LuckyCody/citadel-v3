@@ -1092,9 +1092,7 @@ impl Keystore {
         context: &Context,
     ) -> Result<Vec<u8>, DecryptError> {
         // P378: Validate capability issuance at keystore boundary.
-        self.validate_authz(authz)
-            .await
-            .map_err(DecryptError)?;
+        self.validate_authz(authz).await.map_err(DecryptError)?;
         // Cross-check: the context must authorize THIS specific key for decrypt.
         authz
             .require_decrypt_for(&blob.key_id)
@@ -1702,9 +1700,7 @@ impl Keystore {
         context: &Context,
     ) -> Result<EncryptedBlob, EncryptError> {
         // P378: Validate capability issuance at keystore boundary.
-        self.validate_authz(authz)
-            .await
-            .map_err(EncryptError)?;
+        self.validate_authz(authz).await.map_err(EncryptError)?;
         let key_id = KeyId::new(authz.key_id());
         // Cross-check: the context must authorize THIS specific key for encrypt.
         authz

@@ -460,10 +460,7 @@ impl StateEnforcer {
     pub fn register_key(&mut self, key_id: String, domain_id: Option<String>) {
         self.valid_keys.insert(key_id.clone());
         if let Some(domain) = domain_id {
-            self.domain_keys
-                .entry(domain)
-                .or_default()
-                .insert(key_id);
+            self.domain_keys.entry(domain).or_default().insert(key_id);
         }
     }
 
@@ -1224,7 +1221,9 @@ mod enforcer_authority_tests {
             .is_err());
         assert!(enforcer.authorize_decrypt("key-1", None).is_err());
         assert!(enforcer.authorize_encrypt("key-1", None, None).is_err());
-        assert!(enforcer.authorize_api_request("key-1", None, "/test", "GET").is_err());
+        assert!(enforcer
+            .authorize_api_request("key-1", None, "/test", "GET")
+            .is_err());
 
         // Prove no bypass exists
     }
@@ -1244,8 +1243,12 @@ mod enforcer_authority_tests {
             .authorize_key_rotation("nonexistent", "new", None)
             .is_err());
         assert!(enforcer.authorize_decrypt("nonexistent", None).is_err());
-        assert!(enforcer.authorize_encrypt("nonexistent", None, None).is_err());
-        assert!(enforcer.authorize_api_request("nonexistent", None, "/test", "GET").is_err());
+        assert!(enforcer
+            .authorize_encrypt("nonexistent", None, None)
+            .is_err());
+        assert!(enforcer
+            .authorize_api_request("nonexistent", None, "/test", "GET")
+            .is_err());
 
         // No authorization possible without valid key
     }
@@ -1267,9 +1270,15 @@ mod enforcer_authority_tests {
         assert!(enforcer
             .authorize_key_rotation("key-a", "key-new", Some("domain-b"))
             .is_err());
-        assert!(enforcer.authorize_decrypt("key-a", Some("domain-b")).is_err());
-        assert!(enforcer.authorize_encrypt("key-a", Some("domain-b"), None).is_err());
-        assert!(enforcer.authorize_api_request("key-a", Some("domain-b"), "/test", "GET").is_err());
+        assert!(enforcer
+            .authorize_decrypt("key-a", Some("domain-b"))
+            .is_err());
+        assert!(enforcer
+            .authorize_encrypt("key-a", Some("domain-b"), None)
+            .is_err());
+        assert!(enforcer
+            .authorize_api_request("key-a", Some("domain-b"), "/test", "GET")
+            .is_err());
 
         // Cross-domain access completely blocked
     }
