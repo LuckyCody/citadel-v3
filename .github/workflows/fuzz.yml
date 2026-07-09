@@ -1,0 +1,30 @@
+name: fuzz
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 9 * * 1" # Mondays 09:00 UTC
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: citadel-envelope
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Build fuzz targets
+        run: cargo fuzz build
+
+      # Keep this short so it doesn't burn CI minutes.
+      - name: Run fuzz decode_wire (60s)
+        run: cargo fuzz run decode_wire -- -max_total_time=60
+
+      - name: Run fuzz decrypt_full (60s)
+        run: cargo fuzz run decrypt_full -- -max_total_time=60

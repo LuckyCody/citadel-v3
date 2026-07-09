@@ -1,0 +1,194 @@
+# Citadel V3 — Kubernetes Deployment
+# ─────────────────────────────────────────────────────────────────────────────
+# Prerequisites:
+#   kubectl apply -f secret-template.yaml   (after filling in CITADEL_MASTER_KEY)
+#   kubectl apply -f ../redis/replay-store.yaml
+#   kubectl apply -f deployment.yaml
+#
+# The deployment enforces:
+#   - CITADEL_MASTER_KEY from a Kubernetes Secret (never in ConfigMap)
+#   - CITADEL_ENV=production enforced via literal env
+#   - CITADEL_ALLOW_PLAINTEXT_KEYS must not appear
+#   - readOnlyRootFilesystem, runAsNonRoot, no privilege escalation
+#   - Readiness probe calls /health before traffic is routed
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: citadel
+  labels:
+    app: citadel
+    version: v3
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: citadel
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: citadel
+        version: v3
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      serviceAccountName: citadel
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        runAsGroup: 10000
+        fsGroup: 10000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: doctor
+          image: citadel:v3
+          command: ["citadel", "doctor"]
+          env:
+            - name: CITADEL_ENV
+              value: "production"
+            - name: CITADEL_DATA_DIR
+              value: "/data"
+            - name: CITADEL_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: citadel-secrets
+                  key: master-key
+            # P135: mirror all safety-relevant env from main container
+            - name: CITADEL_REPLAY_STORE
+              value: "redis"
+            - name: CITADEL_REDIS_URL
+              value: "redis://citadel-redis:6379"
+            - name: CITADEL_REPLAY_FAIL_CLOSED
+              value: "true"
+            - name: CITADEL_API_KEY_HASH
+              valueFrom:
+                secretKeyRef:
+                  name: citadel-secrets
+                  key: api-key-hash
+            - name: CITADEL_RATE_LIMIT_RPS
+              value: "100"
+            - name: CITADEL_RATE_LIMIT_BURST
+              value: "200"
+          volumeMounts:
+            - name: citadel-data
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: citadel
+          image: citadel:v3
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8443
+              name: api
+            - containerPort: 9090
+              name: metrics
+          env:
+            - name: CITADEL_ENV
+              value: "production"
+            - name: CITADEL_PORT
+              value: "8443"
+            - name: CITADEL_DATA_DIR
+              value: "/data"
+            - name: CITADEL_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: citadel-secrets
+                  key: master-key
+            - name: CITADEL_API_KEY_HASH
+              valueFrom:
+                secretKeyRef:
+                  name: citadel-secrets
+                  key: api-key-hash
+            - name: CITADEL_REPLAY_STORE
+              value: "redis"
+            - name: CITADEL_REDIS_URL
+              value: "redis://citadel-redis:6379"
+            - name: CITADEL_REPLAY_FAIL_CLOSED
+              value: "true"
+            - name: CITADEL_RATE_LIMIT_RPS
+              value: "100"
+            - name: CITADEL_RATE_LIMIT_BURST
+              value: "200"
+          volumeMounts:
+            - name: citadel-data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8443
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8443
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: citadel-data
+          persistentVolumeClaim:
+            claimName: citadel-data
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: citadel
+  labels:
+    app: citadel
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: citadel
+  labels:
+    app: citadel
+spec:
+  selector:
+    app: citadel
+  ports:
+    - port: 8443
+      targetPort: 8443
+      name: api
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: citadel-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi

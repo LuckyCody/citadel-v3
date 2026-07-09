@@ -1,0 +1,53 @@
+[package]
+name = "citadel-keystore"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Post-quantum key lifecycle management for the Citadel ecosystem"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/mrcord77/rust_citadel"
+keywords = ["cryptography", "post-quantum", "keystore", "key-management"]
+categories = ["cryptography"]
+
+[features]
+default = []
+# Enable Redis-backed distributed replay store.
+# Requires CITADEL_REDIS_URL env var at runtime.
+# Activate with: cargo build --features redis-backend
+redis-backend = ["dep:redis"]
+
+[lib]
+name = "citadel_keystore"
+path = "src/lib.rs"
+
+[dependencies]
+citadel-envelope = { path = "../citadel-envelope" }
+citadel-core = { path = "../citadel-core" }
+tokio = { version = "1", features = ["sync", "fs", "io-util", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rand_core = { version = "0.6", features = ["getrandom"] }
+hex = "0.4"
+sha2 = "0.10"
+# AES-256-GCM for at-rest secret key wrapping (P009 fix)
+aes-gcm = { version = "0.10", features = ["aes"] }
+hkdf = "0.12"
+zeroize = { version = "1.7", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+# Optional: Redis-backed distributed replay store (P078)
+redis = { version = "0.25", optional = true }
+# ML-DSA (NIST FIPS 204) — post-quantum digital signatures (P361/P364)
+# Pin exact — same philosophy as ml-kem pin. Any upgrade is an explicit reviewed decision.
+# Not yet independently audited; same experimental status as ml-kem at integration time.
+# Requires Rust 1.85+ (rust-version updated accordingly).
+ml-dsa = { version = "=0.1.0-rc.9", default-features = false, features = ["alloc", "rand_core"] }
+# P372: citadel-signer is the single ML-DSA algorithm surface — keystore delegates to it.
+# This eliminates the duplicate signing path that existed in keystore.rs directly.
+citadel-signer = { path = "../citadel-signer" }
+
+[dev-dependencies]
+getrandom = "0.2"
+tokio = { version = "1", features = ["full", "test-util"] }
+tempfile = "3"
+proptest = "1.11.0"

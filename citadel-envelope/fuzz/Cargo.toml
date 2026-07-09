@@ -1,0 +1,28 @@
+[package]
+name = "citadel-envelope-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+once_cell = "1.19"
+citadel-envelope = { path = ".." }
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "decode_wire"
+path = "fuzz_targets/decode_wire.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "decrypt_full"
+path = "fuzz_targets/decrypt_full.rs"
+test = false
+doc = false

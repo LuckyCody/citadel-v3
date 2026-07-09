@@ -1,0 +1,40 @@
+[package]
+name = "citadel-envelope-fuzz"
+version = "0.0.0"
+authors = ["Automatically generated"]
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+
+[dependencies.citadel-envelope]
+path = "../citadel-envelope"
+
+[[bin]]
+name = "fuzz_wire_parse"
+path = "fuzz_targets/fuzz_wire_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_decrypt"
+path = "fuzz_targets/fuzz_decrypt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_roundtrip"
+path = "fuzz_targets/fuzz_roundtrip.rs"
+test = false
+doc = false
+bench = false

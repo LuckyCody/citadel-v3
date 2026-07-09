@@ -1,0 +1,62 @@
+[Unit]
+Description=Citadel Post-Quantum Key Management Service (V3)
+Documentation=https://github.com/mrcord77/rust_citadel
+After=network.target redis.service
+Requires=network.target
+
+[Service]
+Type=simple
+User=citadel
+Group=citadel
+WorkingDirectory=/var/lib/citadel
+
+# REQUIRED: Provide CITADEL_MASTER_KEY via EnvironmentFile or LoadCredential.
+# Never hardcode. Example:
+#   LoadCredential=master_key:/run/secrets/citadel_master_key
+EnvironmentFile=-/etc/citadel/citadel.env
+
+Environment=CITADEL_ENV=production
+Environment=CITADEL_DATA_DIR=/var/lib/citadel/data
+# NOTE on data paths:
+# Native binary (this file): /var/lib/citadel/data
+# Docker container:          /data (set in Dockerfile; override with CITADEL_DATA_DIR)
+# Both are correct for their deployment type.
+Environment=CITADEL_REPLAY_STORE=redis
+Environment=CITADEL_REPLAY_FAIL_CLOSED=true
+# P123: correct names match what the API reads
+Environment=CITADEL_RATE_LIMIT_RPS=100
+Environment=CITADEL_RATE_LIMIT_BURST=200
+# P121: CITADEL_API_KEY_HASH and CITADEL_MASTER_KEY must be in EnvironmentFile
+# (see /etc/citadel/citadel.env). Do not set secrets in this unit file.
+# Required keys for EnvironmentFile:
+#   CITADEL_MASTER_KEY=<64-char hex>
+#   CITADEL_API_KEY_HASH=<HMAC-SHA256 hash from: CITADEL_MASTER_KEY=<key> citadel hash-apikey --generate>
+Environment=CITADEL_PORT=8443
+
+# Run doctor check before starting — exits 1 on any FAIL
+ExecStartPre=/usr/bin/citadel doctor
+ExecStart=/usr/bin/citadel-api
+Restart=on-failure
+RestartSec=5s
+
+# Hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/citadel
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+LimitNOFILE=65536
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

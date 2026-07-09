@@ -1,0 +1,53 @@
+# =============================================================================
+# Citadel API Server - Production Docker Compose
+# =============================================================================
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: citadel-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      citadel:
+        condition: service_healthy
+    environment:
+      - CITADEL_DOMAIN=${CITADEL_DOMAIN:-}
+
+  citadel:
+    build: .
+    image: citadel:latest
+    container_name: citadel-api
+    ports:
+      - "3000:3000"
+    environment:
+      - CITADEL_PORT=3000
+      - CITADEL_DATA_DIR=/data
+      - CITADEL_API_KEY_HASH=${CITADEL_API_KEY_HASH:-}
+      - CITADEL_SEED_DEMO=${CITADEL_SEED_DEMO:-true}
+      - CITADEL_LOG_FORMAT=${CITADEL_LOG_FORMAT:-json}
+      - CITADEL_RATE_LIMIT_RPS=${CITADEL_RATE_LIMIT_RPS:-20}
+      - CITADEL_RATE_LIMIT_BURST=${CITADEL_RATE_LIMIT_BURST:-50}
+    volumes:
+      - citadel-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  citadel-data:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
+    driver: local

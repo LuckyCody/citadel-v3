@@ -1,0 +1,210 @@
+{
+  "spec_version": "1.0.0",
+  "generator": "citadel-envelope test vector generator",
+  "generated_at": "2026-01-28T00:00:00Z",
+  "note": "IMPORTANT: These are TEMPLATE vectors. Run 'cargo run --release --example generate_vectors > test_vectors.json' to generate actual vectors with real keys/ciphertexts.",
+  "constants": {
+    "HEADER_BYTES": 6,
+    "HYBRID_KEM_CT_BYTES": 1120,
+    "NONCE_BYTES": 12,
+    "MIN_CIPHERTEXT_BYTES": 1154,
+    "PUBLIC_KEY_BYTES": 1216,
+    "SECRET_KEY_BYTES": 2432,
+    "X25519_CT_BYTES": 32,
+    "MLKEM768_CT_BYTES": 1088,
+    "AES_TAG_BYTES": 16
+  },
+  "wire_format": {
+    "header": {
+      "offset": 0,
+      "fields": [
+        {"offset": 0, "size": 1, "name": "version", "value": "0x01"},
+        {"offset": 1, "size": 1, "name": "suite_kem", "value": "0xA3"},
+        {"offset": 2, "size": 1, "name": "suite_aead", "value": "0xB1"},
+        {"offset": 3, "size": 1, "name": "flags", "value": "0x00"},
+        {"offset": 4, "size": 2, "name": "kem_ct_len", "value": "0x0460 (1120)"}
+      ]
+    },
+    "body": [
+      {"offset": 6, "size": 32, "name": "x25519_ciphertext"},
+      {"offset": 38, "size": 1088, "name": "mlkem768_ciphertext"},
+      {"offset": 1126, "size": 12, "name": "aead_nonce"},
+      {"offset": 1138, "size": "variable", "name": "aead_ciphertext_and_tag"}
+    ]
+  },
+  "domain_separation": {
+    "shared_secret_info": "citadel-hybrid-v1",
+    "aes_key_info_prefix": "citadel-hybrid-env-v1|aes|",
+    "aes_key_info_format": "prefix || SHA3-256(kem_ciphertext) || context"
+  },
+  "test_vectors": [
+    {
+      "name": "basic_roundtrip",
+      "description": "Basic encryption/decryption - run generator to populate",
+      "public_key": "RUN_GENERATOR_TO_POPULATE",
+      "secret_key": "RUN_GENERATOR_TO_POPULATE",
+      "plaintext": "48656c6c6f2c20576f726c6421",
+      "plaintext_ascii": "Hello, World!",
+      "aad": "",
+      "context": "",
+      "ciphertext": "RUN_GENERATOR_TO_POPULATE",
+      "expected": "success"
+    },
+    {
+      "name": "with_aad",
+      "description": "Encryption with additional authenticated data",
+      "plaintext": "536563726574206d657373616765",
+      "plaintext_ascii": "Secret message",
+      "aad": "6d657461646174613a757365723d616c696365",
+      "aad_ascii": "metadata:user=alice",
+      "context": "",
+      "expected": "success"
+    },
+    {
+      "name": "with_context",
+      "description": "Encryption with application context for domain separation",
+      "plaintext": "436f6e746578742d626f756e642064617461",
+      "plaintext_ascii": "Context-bound data",
+      "aad": "",
+      "context": "6d796170702e7631",
+      "context_ascii": "myapp.v1",
+      "expected": "success"
+    },
+    {
+      "name": "empty_plaintext",
+      "description": "Valid edge case: encrypting empty plaintext",
+      "plaintext": "",
+      "aad": "61616420666f7220656d707479",
+      "context": "637478",
+      "expected": "success"
+    },
+    {
+      "name": "truncated_ciphertext",
+      "description": "Failure: ciphertext shorter than MIN_CIPHERTEXT_BYTES",
+      "ciphertext_length": 100,
+      "expected": "failure",
+      "failure_reason": "wire_format_too_short"
+    },
+    {
+      "name": "wrong_version",
+      "description": "Failure: version byte != 0x01",
+      "mutation": "ciphertext[0] = 0xFF",
+      "expected": "failure",
+      "failure_reason": "wire_format_invalid_version"
+    },
+    {
+      "name": "wrong_kem_suite",
+      "description": "Failure: KEM suite byte != 0xA3",
+      "mutation": "ciphertext[1] = 0xFF",
+      "expected": "failure",
+      "failure_reason": "wire_format_invalid_kem_suite"
+    },
+    {
+      "name": "wrong_aead_suite",
+      "description": "Failure: AEAD suite byte != 0xB1",
+      "mutation": "ciphertext[2] = 0xFF",
+      "expected": "failure",
+      "failure_reason": "wire_format_invalid_aead_suite"
+    },
+    {
+      "name": "nonzero_flags",
+      "description": "Failure: flags byte != 0x00",
+      "mutation": "ciphertext[3] = 0x01",
+      "expected": "failure",
+      "failure_reason": "wire_format_invalid_flags"
+    },
+    {
+      "name": "wrong_kem_ct_len",
+      "description": "Failure: kem_ct_len field != 1120",
+      "mutation": "ciphertext[4:6] = 0x0000",
+      "expected": "failure",
+      "failure_reason": "wire_format_invalid_kem_length"
+    },
+    {
+      "name": "corrupted_x25519",
+      "description": "Failure: bit flip in X25519 ciphertext region",
+      "mutation": "ciphertext[10] ^= 0xFF",
+      "expected": "failure",
+      "failure_reason": "aead_authentication_failed"
+    },
+    {
+      "name": "corrupted_mlkem",
+      "description": "Failure: bit flip in ML-KEM ciphertext region",
+      "mutation": "ciphertext[500] ^= 0xFF",
+      "expected": "failure",
+      "failure_reason": "aead_authentication_failed"
+    },
+    {
+      "name": "corrupted_nonce",
+      "description": "Failure: bit flip in AEAD nonce",
+      "mutation": "ciphertext[1130] ^= 0xFF",
+      "expected": "failure",
+      "failure_reason": "aead_authentication_failed"
+    },
+    {
+      "name": "corrupted_aead_tag",
+      "description": "Failure: bit flip in AEAD authentication tag",
+      "mutation": "ciphertext[len-1] ^= 0xFF",
+      "expected": "failure",
+      "failure_reason": "aead_authentication_failed"
+    },
+    {
+      "name": "wrong_aad",
+      "description": "Failure: decrypt with different AAD than encrypt",
+      "decrypt_aad": "77726f6e675f616164",
+      "decrypt_aad_ascii": "wrong_aad",
+      "expected": "failure",
+      "failure_reason": "aead_authentication_failed"
+    },
+    {
+      "name": "wrong_context",
+      "description": "Failure: decrypt with different context than encrypt",
+      "decrypt_context": "77726f6e675f637478",
+      "decrypt_context_ascii": "wrong_ctx",
+      "expected": "failure",
+      "failure_reason": "key_derivation_mismatch"
+    },
+    {
+      "name": "wrong_secret_key",
+      "description": "Failure: decrypt with different secret key",
+      "note": "Use freshly generated keypair for decryption",
+      "expected": "failure",
+      "failure_reason": "kem_decapsulation_mismatch"
+    }
+  ],
+  "constraint_tests": [
+    {
+      "name": "max_aad_boundary",
+      "description": "AAD at exactly MAX_AAD_BYTES (65536) should succeed",
+      "aad_length": 65536,
+      "expected": "success"
+    },
+    {
+      "name": "oversized_aad",
+      "description": "AAD exceeding MAX_AAD_BYTES should fail",
+      "aad_length": 65537,
+      "expected": "failure",
+      "failure_reason": "constraint_aad_too_large"
+    },
+    {
+      "name": "max_context_boundary",
+      "description": "Context at exactly MAX_CONTEXT_BYTES (256) should succeed",
+      "context_length": 256,
+      "expected": "success"
+    },
+    {
+      "name": "oversized_context",
+      "description": "Context exceeding MAX_CONTEXT_BYTES should fail",
+      "context_length": 257,
+      "expected": "failure",
+      "failure_reason": "constraint_context_too_large"
+    }
+  ],
+  "interop_notes": {
+    "ml_kem_variant": "ML-KEM-768 (FIPS 203)",
+    "x25519_format": "Raw 32-byte u-coordinate (RFC 7748)",
+    "hkdf_salt": "Empty (zero-length)",
+    "byte_order": "Big-endian for multi-byte integers",
+    "aead_format": "ciphertext || 16-byte tag"
+  }
+}

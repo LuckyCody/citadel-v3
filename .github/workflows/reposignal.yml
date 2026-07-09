@@ -1,0 +1,16 @@
+name: RepoSignal
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  reposignal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: RepoSignal-io/reposignal-action@v1
+        with:
+          api-key: ${{ secrets.REPOSIGNAL_API_KEY }}
+          api-url: https://reposignal.onrender.com

@@ -1,0 +1,15 @@
+[package]
+name = "citadel-ffi"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+description = "C FFI bindings for citadel-envelope — enables Java, C#, Go, Python, and Node.js integration"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/mrcord77/rust_citadel"
+
+[lib]
+name = "citadel"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+citadel-envelope = { path = "../citadel-envelope" }

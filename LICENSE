@@ -1,0 +1,37 @@
+Copyright (C) 2026 Andre Cordero
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+--------------------------------------------------------------------
+
+DUAL LICENSING NOTICE
+
+This software is offered under a dual licensing model:
+
+1. GNU Affero General Public License v3 (AGPL) — for open source use
+2. Commercial License — for proprietary or commercial use
+
+If you use this software in a way that does not comply with the AGPL,
+you must obtain a commercial license from the Licensor.
+
+For commercial licensing inquiries, contact:
+commit@reposignal.io
+
+--------------------------------------------------------------------
+
+TRADEMARK NOTICE
+
+"Citadel", "citadel-envelope", "citadel-keystore", and "citadel-api"
+are trademarks of Andre Cordero and may not be used to endorse or
+promote derived products without prior written permission.

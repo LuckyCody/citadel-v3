@@ -1,0 +1,56 @@
+[package]
+name = "citadel-api"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.74"
+description = "REST API layer for the Citadel post-quantum encryption ecosystem"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/mrcord77/rust_citadel"
+keywords = ["cryptography", "post-quantum", "encryption", "api", "rest"]
+categories = ["cryptography", "web-programming::http-server"]
+
+[[bin]]
+name = "citadel-api"
+path = "src/main.rs"
+
+[[bin]]
+name = "hash-apikey"
+path = "src/hash_apikey.rs"
+
+[features]
+default = []
+# Enable Redis-backed distributed replay store.
+# Must match the feature enabled in citadel-keystore.
+# Build: cargo build --features redis-backend
+redis-backend = ["citadel-keystore/redis-backend"]
+
+[dependencies]
+axum = { version = "0.7", features = ["macros"] }
+chrono = { version = "0.4", features = ["serde"] }
+citadel-envelope = { path = "../citadel-envelope" }
+citadel-keystore = { path = "../citadel-keystore" }
+citadel-core = { path = "../citadel-core" }
+# P373: CNA assertion API routes require citadel-signer for CitadelAssertion type
+citadel-signer = { path = "../citadel-signer" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+sha2 = "0.10"
+# HMAC-SHA256 for API key hashing with server-side secret (P021 fix)
+hmac = "0.12"
+subtle = "2"
+hex = "0.4"
+getrandom = "0.2"
+
+[dev-dependencies]
+# In-process HTTP testing via tower::ServiceExt
+tower = { version = "0.4", features = ["util"] }
+http-body-util = "0.1"
+axum = { version = "0.7", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+serde_json = "1"
+proptest = "1.8.0"

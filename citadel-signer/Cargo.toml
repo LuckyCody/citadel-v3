@@ -1,0 +1,37 @@
+[package]
+name = "citadel-signer"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "ML-DSA-65 signing primitives and Citadel Native Assertion format for Citadel V3"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/mrcord77/rust_citadel"
+keywords = ["cryptography", "post-quantum", "ml-dsa", "signing", "assertion"]
+categories = ["cryptography"]
+
+[lib]
+name = "citadel_signer"
+path = "src/lib.rs"
+
+[dependencies]
+# ML-DSA (NIST FIPS 204) — post-quantum digital signatures
+# Pin exact — same philosophy as ml-kem pin. Any upgrade is an explicit reviewed decision.
+ml-dsa = { version = "=0.1.0-rc.9", default-features = false, features = ["alloc", "rand_core"] }
+# Secure random number generation
+rand_core = { version = "0.6", features = ["getrandom"] }
+# Memory zeroing for sensitive data
+zeroize = { version = "1.7", features = ["derive"] }
+# Serialization for CitadelAssertion format
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Hex encoding
+hex = "0.4"
+# Timestamps
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+hex = "0.4"
+
+[[test]]
+name = "signing_tests"
+path = "tests/signing_tests.rs"

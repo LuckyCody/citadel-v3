@@ -1,0 +1,17 @@
+[workspace]
+members = [
+    "citadel-core",
+    "citadel-envelope",
+    "citadel-keystore",
+    "citadel-api",
+    "citadel-ffi",
+    "citadel-cli",
+    "citadel-signer",
+]
+resolver = "2"
+
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "unwind"

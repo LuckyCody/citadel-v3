@@ -1,0 +1,59 @@
+# =============================================================================
+# Citadel - Caddy Reverse Proxy Configuration
+#
+# Caddy automatically obtains and renews TLS certificates via Let's Encrypt.
+# Replace {$CITADEL_DOMAIN} with your actual domain (e.g., citadel.example.com).
+#
+# For local dev/testing without a domain, use the localhost block below.
+# =============================================================================
+
+# --- PRODUCTION: automatic HTTPS with real domain ---
+# Uncomment and set CITADEL_DOMAIN env var or replace directly.
+#
+# {$CITADEL_DOMAIN:citadel.example.com} {
+#     reverse_proxy citadel:3000
+#
+#     # Security headers
+#     header {
+#         Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+#         X-Content-Type-Options "nosniff"
+#         X-Frame-Options "DENY"
+#         Referrer-Policy "strict-origin-when-cross-origin"
+#         -Server
+#     }
+#
+#     # Access log
+#     log {
+#         output file /var/log/caddy/access.log {
+#             roll_size 100mb
+#             roll_keep 5
+#         }
+#         format json
+#     }
+# }
+
+# --- LOCAL DEV/TESTING: self-signed TLS on localhost ---
+# Caddy auto-generates a local CA and self-signed cert.
+:443 {
+    tls internal
+
+    reverse_proxy citadel:3000
+
+    header {
+        Strict-Transport-Security "max-age=63072000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    log {
+        output stdout
+        format json
+    }
+}
+
+# Redirect HTTP → HTTPS
+:80 {
+    redir https://{host}{uri} permanent
+}
