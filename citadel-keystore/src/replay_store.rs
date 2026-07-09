@@ -345,7 +345,7 @@ impl FileReplayStore {
                              — aborting to prevent replay bypass. \
                              Delete the file only if you accept replay risk for that ciphertext.",
                             path.display(),
-                            &entry.key_hex.chars().take(16).collect::<String>(),
+                            entry.key_hex.chars().take(16).collect::<String>(),
                             e
                         ))
                     })?;
