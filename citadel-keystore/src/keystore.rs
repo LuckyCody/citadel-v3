@@ -457,7 +457,9 @@ impl Keystore {
         key_id: &'life1 KeyId,
         kv: &'life2 KeyVersion,
         depth: u8,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<Vec<u8>, String>> + Send + 'life0>>
+    ) -> Pin<
+        Box<dyn std::future::Future<Output = Result<Zeroizing<Vec<u8>>, String>> + Send + 'life0>,
+    >
     where
         'life1: 'life0,
         'life2: 'life0,
@@ -474,7 +476,9 @@ impl Keystore {
         &'life0 self,
         key_id: &'life1 KeyId,
         kv: &'life2 KeyVersion,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<Vec<u8>, String>> + Send + 'life0>>
+    ) -> Pin<
+        Box<dyn std::future::Future<Output = Result<Zeroizing<Vec<u8>>, String>> + Send + 'life0>,
+    >
     where
         'life1: 'life0,
         'life2: 'life0,
@@ -488,7 +492,9 @@ impl Keystore {
         kv: &'life2 KeyVersion,
         depth: u8,
         skip_parent_state_check: bool,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<Vec<u8>, String>> + Send + 'life0>>
+    ) -> Pin<
+        Box<dyn std::future::Future<Output = Result<Zeroizing<Vec<u8>>, String>> + Send + 'life0>,
+    >
     where
         'life1: 'life0,
         'life2: 'life0,
@@ -514,7 +520,9 @@ impl Keystore {
                             "plaintext key in use; rotate to re-encrypt under CITADEL_MASTER_KEY"
                         );
                     }
-                    hex::decode(hex_str).map_err(|e| format!("plaintext hex decode: {}", e))
+                    hex::decode(hex_str)
+                        .map(Zeroizing::new)
+                        .map_err(|e| format!("plaintext hex decode: {}", e))
                 }
 
                 SecretKeyMaterial::Encrypted(enc) => {
@@ -548,9 +556,13 @@ impl Keystore {
 
                     let cipher = Aes256Gcm::new((&*aes_key).into());
                     let nonce = Nonce::from_slice(&nonce_bytes);
-                    cipher.decrypt(nonce, ciphertext.as_ref()).map_err(|_| {
-                        "AES-256-GCM decryption failed — wrong master key or corruption".to_string()
-                    })
+                    cipher
+                        .decrypt(nonce, ciphertext.as_ref())
+                        .map(Zeroizing::new)
+                        .map_err(|_| {
+                            "AES-256-GCM decryption failed — wrong master key or corruption"
+                                .to_string()
+                        })
                 }
 
                 SecretKeyMaterial::CitadelWrapped(ckw) => {
@@ -653,6 +665,7 @@ impl Keystore {
 
                     self.envelope
                     .open(&parent_sk, &ciphertext, &aad, &ctx)
+                    .map(Zeroizing::new)
                     .map_err(|_| {
                         format!(
                             "CitadelWrapped decryption failed for key {} v{} (wrong parent key or corruption)",

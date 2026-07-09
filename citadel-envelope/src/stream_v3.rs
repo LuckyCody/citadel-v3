@@ -151,7 +151,7 @@ fn make_chunk_aad(stream_id: &[u8; 16], seq: u64, is_final: bool, user_aad: &Aad
 /// and a final HMAC tag covering the entire stream.
 pub struct StreamV3Encryptor {
     stream_key: Zeroizing<[u8; 32]>,
-    final_key: [u8; 32],
+    final_key: Zeroizing<[u8; 32]>,
     stream_id: [u8; 16],
     header: Vec<u8>,
     next_seq: u64,
@@ -175,7 +175,7 @@ impl StreamV3Encryptor {
 
         // Derive header key and final key.
         let header_key = derive_header_key(&stream_key)?;
-        let final_key = derive_final_key(&stream_key)?;
+        let final_key = Zeroizing::new(derive_final_key(&stream_key)?);
 
         // Build header (everything before header_tag).
         let mut pre_header = Vec::with_capacity(STREAM_V3_HEADER_BYTES - 16);
@@ -258,7 +258,7 @@ impl StreamV3Encryptor {
         if !self.finalized {
             return Err(EncodingError); // Must finalize stream first.
         }
-        let mut mac = HmacSha256::new_from_slice(&self.final_key).map_err(|_| EncodingError)?;
+        let mut mac = HmacSha256::new_from_slice(&*self.final_key).map_err(|_| EncodingError)?;
         mac.update(&self.stream_id);
         mac.update(&self.next_seq.to_be_bytes()); // total chunks encrypted
         Ok(mac.finalize().into_bytes().to_vec())
@@ -280,7 +280,7 @@ impl StreamV3Encryptor {
 /// V3 streaming decryptor.
 pub struct StreamV3Decryptor {
     stream_key: Zeroizing<[u8; 32]>,
-    final_key: [u8; 32],
+    final_key: Zeroizing<[u8; 32]>,
     stream_id: [u8; 16],
     expected_seq: u64,
     done: bool,
@@ -367,7 +367,7 @@ impl StreamV3Decryptor {
             return Err(DecryptionError);
         }
 
-        let final_key = derive_final_key(&stream_key).map_err(|_| DecryptionError)?;
+        let final_key = Zeroizing::new(derive_final_key(&stream_key).map_err(|_| DecryptionError)?);
 
         let _ = aad; // AAD is validated per-chunk
 
@@ -435,7 +435,7 @@ impl StreamV3Decryptor {
         if !self.done {
             return Err(DecryptionError); // Can't verify until all chunks received.
         }
-        let mut mac = HmacSha256::new_from_slice(&self.final_key).map_err(|_| DecryptionError)?;
+        let mut mac = HmacSha256::new_from_slice(&*self.final_key).map_err(|_| DecryptionError)?;
         mac.update(&self.stream_id);
         mac.update(&self.expected_seq.to_be_bytes());
         mac.verify_slice(final_tag).map_err(|_| DecryptionError)

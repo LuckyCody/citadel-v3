@@ -433,6 +433,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "zeroize",
 ]
 
 [[package]]
@@ -479,6 +480,8 @@ dependencies = [
  "pqcrypto-traits",
  "rand 0.8.6",
  "rand_core 0.6.4",
+ "serde",
+ "serde_json",
  "sha2",
  "sha3 0.10.9",
  "subtle",

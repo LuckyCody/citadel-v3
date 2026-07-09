@@ -44,6 +44,7 @@ use std::time::Instant;
 use subtle::ConstantTimeEq;
 use tokio::sync::{Mutex, RwLock};
 use tower_http::cors::CorsLayer;
+use zeroize::Zeroize;
 
 // ---------------------------------------------------------------------------
 // Scopes
@@ -580,16 +581,15 @@ fn hash_api_key(key: &str) -> [u8; 32] {
     let master_key_str = std::env::var("CITADEL_MASTER_KEY")
         .unwrap_or_else(|_| "citadel-api-pepper-not-configured".to_string());
 
-    let master_key_bytes = if master_key_str == "citadel-api-pepper-not-configured" {
-        // Not set — use the fixed fallback (create_keystore() already enforces MASTER_KEY
-        // at startup, so this path is only hit in the hash_apikey utility).
+    let mut master_key_bytes = if master_key_str == "citadel-api-pepper-not-configured" {
         master_key_str.into_bytes()
     } else {
-        // P002: Validate entropy before accepting the key
         validate_master_key(&master_key_str)
     };
 
-    hmac_sha256(key, &master_key_bytes)
+    let result = hmac_sha256(key, &master_key_bytes);
+    master_key_bytes.zeroize();
+    result
 }
 
 /// Generate a random API key.
@@ -605,9 +605,9 @@ fn hash_api_key(key: &str) -> [u8; 32] {
 fn generate_api_key() -> String {
     let mut buf = [0u8; 32];
     getrandom::getrandom(&mut buf).expect("failed to generate random bytes");
-    // 32 random bytes → 64-char lowercase hex string.
-    // Using hex (not base64) for unambiguous cut-and-paste and no padding issues.
-    hex::encode(buf)
+    let key = hex::encode(buf);
+    buf.zeroize();
+    key
 }
 
 fn generate_key_id() -> String {

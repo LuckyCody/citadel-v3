@@ -15,6 +15,7 @@
 
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
+use zeroize::Zeroize;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -45,8 +46,7 @@ fn main() {
         let mut buf = [0u8; 32];
         getrandom::getrandom(&mut buf).expect("failed to generate random bytes");
         let key = hex::encode(buf);
-        // P179: print key to STDOUT so scripts can capture it.
-        // Also print to stderr for human-readable context.
+        buf.zeroize();
         eprintln!("Generated API key (save this - it cannot be recovered):");
         eprintln!("  {}", key);
         println!("KEY:{}", key);
@@ -58,7 +58,7 @@ fn main() {
 
     // Decode and validate CITADEL_MASTER_KEY — must be 64-char hex encoding 32 bytes.
     // Hard-fail on any error: a wrong key here produces a hash that never authenticates.
-    let hmac_key = match hex::decode(master_key.trim()) {
+    let mut hmac_key = match hex::decode(master_key.trim()) {
         Err(e) => {
             eprintln!("[FATAL] CITADEL_MASTER_KEY is not valid hex: {}", e);
             eprintln!("  Generate a valid key: openssl rand -hex 32");
@@ -77,6 +77,7 @@ fn main() {
 
     let mut mac =
         HmacSha256::new_from_slice(&hmac_key).expect("HMAC-SHA256 accepts any key length");
+    hmac_key.zeroize();
     mac.update(key.as_bytes());
     let hash = mac.finalize().into_bytes();
     let hex_hash = hex::encode(hash);

@@ -5,17 +5,18 @@
 **Citadel is unaudited software.**
 
 The implementation:
-- Uses NIST-standardized primitives (ML-KEM-768, AES-256-GCM, HKDF-SHA256)
-- Follows established hybrid construction patterns (X25519 + ML-KEM)
-- Has comprehensive test coverage including fuzz testing
+- Uses NIST-standardized primitives (ML-KEM-768, AES-256-GCM, HKDF-SHA256, X25519)
+- Follows established hybrid construction patterns (X25519 + ML-KEM-768)
+- Has comprehensive test coverage (328+ tests) including fuzz testing and ACVP KAT vectors
+- Has dudect-based timing validation covering all attacker-controlled-input classes
 - Has NOT undergone independent security audit
 
 ## Supported Versions
 
 | Version | Support Status |
 |---------|---------------|
-| 0.1.x   | Active (security fixes) |
-| < 0.1   | Unsupported |
+| 0.2.x   | Active (security fixes) |
+| < 0.2   | Unsupported |
 
 Only the latest release receives security fixes.
 
@@ -32,8 +33,6 @@ Only the latest release receives security fixes.
 ### Alternative: Direct Contact
 
 Email: andre.cordero36@gmail.com
-
-PGP key available at: [keyserver-link]
 
 ### What to Include
 
@@ -67,7 +66,7 @@ PGP key available at: [keyserver-link]
 
 - Key management, access control, or compliance certification
 - Platform-level compromise (OS, hardware)
-- Side-channel attacks requiring physical access
+- Side-channel attacks requiring physical access or co-residency
 - Denial of service via large inputs (documented limitation)
 - Issues in dependencies (report upstream, notify us)
 
@@ -80,82 +79,72 @@ PGP key available at: [keyserver-link]
 3. **Tampering detection** — any modification to ciphertext causes failure
 4. **Uniform errors** — all decryption failures produce identical error type
 5. **Wire format stability** — v1 format will always be decodable
+6. **Attacker-controlled-input timing** — dudect validation passes for all classes where the attacker varies the input (ciphertext, tag, AAD, KEM bytes)
 
 ### What We Do NOT Guarantee
 
-1. **Constant-time execution** — inherited from dependencies, not verified
-2. **Side-channel resistance** — not tested against power/EM/timing attacks
+1. **Key-material timing independence** — ML-KEM-768 decapsulation shows key-value-dependent timing on tested x86-64 hardware, reproduced across three independently developed providers (PQClean, libcrux, AWS-LC). This is a platform-level effect (Hertzbleed-class), not a code defect. See `TIMING.md` for the full finding and required wording.
+2. **Side-channel resistance** — not tested against power/EM/cache attacks beyond dudect
 3. **FIPS compliance** — uses NIST primitives, not a certified module
-4. **Performance** — optimized for correctness, not speed
+4. **Constant-time validation** — source code follows CT discipline, but hardware data-dependent execution is unresolved
 
 ## Dependency Security
 
 Citadel depends on:
 
-| Crate | Purpose | Maintainer |
-|-------|---------|-----------|
-| `ml-kem` | Post-quantum KEM | RustCrypto |
-| `x25519-dalek` | Classical ECDH | Dalek |
-| `aes-gcm` | Symmetric encryption | RustCrypto |
-| `hkdf` | Key derivation | RustCrypto |
-| `sha2`, `sha3` | Hash functions | RustCrypto |
-| `zeroize` | Secure memory clearing | RustCrypto |
-| `subtle` | Constant-time operations | Dalek |
+| Crate | Purpose | Version | Maintainer |
+|-------|---------|---------|-----------|
+| `pqcrypto-mlkem` | Post-quantum KEM (ML-KEM-768) | =0.1.1 | PQClean project |
+| `pqcrypto-traits` | PQClean type traits | =0.3.5 | PQClean project |
+| `x25519-dalek` | Classical ECDH | 2.x | Dalek |
+| `aes-gcm` | Symmetric encryption | 0.10 | RustCrypto |
+| `hkdf` | Key derivation | 0.12 | RustCrypto |
+| `sha2`, `sha3` | Hash functions | 0.10 | RustCrypto |
+| `zeroize` | Secure memory clearing | 1.7 | RustCrypto |
+| `subtle` | Constant-time operations | 2.5 | Dalek |
+
+All cryptographic dependencies are exact-pinned; any upgrade is an explicit, reviewed decision.
+
+### ML-KEM provider: PQClean
+
+The production ML-KEM-768 provider is PQClean (`pqcrypto-mlkem 0.1.1`), which wraps the PQClean C reference implementation compiled via the `cc` crate. PQClean was selected after comparative timing validation against libcrux and AWS-LC. See `PROVIDER_DECISION_LOG.md` for the full decision history and rollback instructions.
+
+ACVP validation (60 NIST vectors — 25 keygen, 25 encap, 10 decap) is performed via the libcrux dev dependency, which exposes deterministic seed-based APIs. Both providers implement FIPS 203 ML-KEM-768; passing ACVP vectors through libcrux validates algorithmic correctness. PQClean correctness is further confirmed by round-trip and structural tests.
 
 We track security advisories for all dependencies via `cargo audit`.
 
-### ml-kem audit status
-
-The `ml-kem` crate (pinned to `=0.2.2`) carries an **experimental** designation in its own README and has not received an independent security audit. It implements FIPS 203 (ML-KEM / Kyber), a finalized NIST standard, but the *implementation* has not been reviewed for constant-time properties, side-channel resistance, or correctness beyond the RustCrypto team's own testing.
-
-**What this means in practice:**
-- The mathematical construction (ML-KEM-768 + X25519 hybrid) is sound.
-- The specific Rust implementation may contain implementation-level defects that an audit would catch.
-- The version is exact-pinned (`=0.2.2`); any upgrade is an explicit, reviewed decision — `cargo update` will not silently pull a new patch version.
-
-If your deployment requires audited PQ-KEM, track the [RustCrypto audit schedule](https://github.com/RustCrypto/KEMs) or evaluate a FIPS-validated commercial alternative. This constraint will be re-evaluated as the RustCrypto ecosystem matures.
-
 ### Build toolchain requirement
 
-**Minimum build toolchain: Rust / Cargo 1.81+**
+**Minimum build toolchain: Rust / Cargo 1.74+**
 
-The `ml-kem` dependency chain transitively pulls `crypto-common 0.2.x` which uses
-`edition = "2024"`. Cargo versions prior to 1.85 cannot parse edition-2024 manifests
-at the registry level, even for crates that are not ultimately selected in the build.
+A C compiler is required for the PQClean ML-KEM-768 provider (`cc` crate).
 
-This means:
-- `cargo build` on Rust 1.75 (Ubuntu 24.04 LTS `apt`) fails at dependency resolution
-- Use `rustup toolchain install stable` to get a current toolchain (1.85+ as of 2026)
-- Docker builds using the official `rust:latest` image work correctly
-- The **runtime** has no toolchain dependency — only the build does
+## Timing Validation
+
+See `TIMING.md` for the complete timing validation model, including:
+- Secret/public inventories
+- Enforced invariants
+- Known limitation: key-value-dependent decapsulation timing (platform-level)
+- Bare-metal dudect results across three providers
+- Attacker-controlled-input class pass/fail
+- Required grant/security wording
+- Production risk assessment and mitigations
+- Follow-up work priorities
 
 ## Upgrade Policy
 
-### Minor Versions (0.1.x → 0.1.y)
+### Minor Versions (0.2.x → 0.2.y)
 
 - Bug fixes and security patches
 - No breaking API changes
 - Wire format compatible
 - Safe to upgrade immediately
 
-### Major Versions (0.x → 0.y before 1.0)
-
-- May include breaking changes
-- Migration guide provided
-- Old versions supported for 6 months
-- Announce 30 days before release
-
 ### Post-1.0 Policy
 
 - Semantic versioning strictly followed
 - LTS versions designated annually
 - Security fixes backported to LTS
-
-## Deprecation Process
-
-1. **Announcement** — deprecated feature marked in docs
-2. **Warning** — compile-time warning for 2 releases
-3. **Removal** — removed in next major version
 
 ## Incident Response
 
@@ -175,13 +164,6 @@ The wire format includes suite identifiers to support future algorithms:
 - New AEAD suites can be added (different `suite_aead` byte)
 - Old suites remain decodable (no silent downgrades)
 
-Migration path for algorithm updates:
-
-1. New version supports both old and new suites
-2. Encrypt with new suite, decrypt both
-3. Re-encrypt legacy data during maintenance window
-4. Eventually deprecate old suite
-
 ## Audit Status
 
 | Component | Last Review | Reviewer |
@@ -189,14 +171,11 @@ Migration path for algorithm updates:
 | Wire format | Internal | — |
 | KDF construction | Internal | — |
 | Error handling | Internal | — |
+| Timing validation | Internal (dudect) | — |
+| ACVP KAT vectors | Automated (60/60) | — |
 | Fuzz testing | Ongoing | libFuzzer |
 
 **No independent audit has been conducted.**
-
-If you require audited cryptography, consider:
-- AWS Encryption SDK
-- Google Tink
-- libsodium
 
 ## Contact
 

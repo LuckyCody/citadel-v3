@@ -45,6 +45,7 @@ hmac = "0.12"
 subtle = "2"
 hex = "0.4"
 getrandom = "0.2"
+zeroize = "1.7"
 
 [dev-dependencies]
 # In-process HTTP testing via tower::ServiceExt

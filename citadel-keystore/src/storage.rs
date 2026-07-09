@@ -168,6 +168,28 @@ impl FileBackend {
             let perms = std::fs::Permissions::from_mode(0o700);
             std::fs::set_permissions(&dir, perms)
                 .map_err(|e| KeystoreError::StorageError(format!("set dir permissions: {}", e)))?;
+
+            // Warn about any existing key files with overly permissive modes.
+            if let Ok(entries) = std::fs::read_dir(&dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().map_or(false, |e| e == "json") {
+                        if let Ok(meta) = std::fs::metadata(&path) {
+                            let mode = meta.permissions().mode() & 0o777;
+                            if mode & 0o077 != 0 {
+                                eprintln!(
+                                    "[SECURITY] key file {:?} has mode {:04o} (expected 0600) — fixing",
+                                    path, mode
+                                );
+                                let _ = std::fs::set_permissions(
+                                    &path,
+                                    std::fs::Permissions::from_mode(0o600),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Ok(Self { dir })

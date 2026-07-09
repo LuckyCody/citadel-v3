@@ -35,7 +35,7 @@ use crate::wire::{
     KEM_CIPHERTEXT_BYTES, KEM_PUBLIC_KEY_BYTES, KEM_SECRET_KEY_BYTES, MLKEM_PUBLIC_KEY_BYTES,
     MLKEM_SECRET_KEY_BYTES, SHARED_SECRET_BYTES, X25519_KEY_BYTES,
 };
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 // ---------------------------------------------------------------------------
 // Public key (hybrid)
@@ -102,9 +102,18 @@ impl PublicKey {
 // ---------------------------------------------------------------------------
 
 /// Hybrid secret key: X25519 static secret + ML-KEM-768 decapsulation key.
+///
+/// Implements [`Drop`] to zeroize `mlkem_bytes` on destruction.
+/// `x25519_dalek::StaticSecret` handles its own zeroization internally.
 pub struct SecretKey {
     x25519: StaticSecret,
     mlkem_bytes: [u8; MLKEM_SECRET_KEY_BYTES],
+}
+
+impl Drop for SecretKey {
+    fn drop(&mut self) {
+        self.mlkem_bytes.zeroize();
+    }
 }
 
 impl SecretKey {
@@ -118,6 +127,9 @@ impl SecretKey {
     }
 
     /// Serialize: x25519_sk[32] || mlkem_dk[2400]
+    ///
+    /// Returns a bare array. Callers storing this beyond immediate use
+    /// should wrap in `Zeroizing::new(sk.to_bytes())`.
     pub fn to_bytes(&self) -> [u8; KEM_SECRET_KEY_BYTES] {
         let mut out = [0u8; KEM_SECRET_KEY_BYTES];
         out[..X25519_KEY_BYTES].copy_from_slice(&self.x25519.to_bytes());
@@ -130,10 +142,9 @@ impl SecretKey {
             return Err(DecryptionError);
         }
 
-        let x25519_bytes: [u8; X25519_KEY_BYTES] = bytes[..X25519_KEY_BYTES]
-            .try_into()
-            .map_err(|_| DecryptionError)?;
-        let x25519 = StaticSecret::from(x25519_bytes);
+        let mut x25519_bytes = Zeroizing::new([0u8; X25519_KEY_BYTES]);
+        x25519_bytes.copy_from_slice(&bytes[..X25519_KEY_BYTES]);
+        let x25519 = StaticSecret::from(*x25519_bytes);
 
         let mut mlkem_bytes = [0u8; MLKEM_SECRET_KEY_BYTES];
         mlkem_bytes.copy_from_slice(&bytes[X25519_KEY_BYTES..]);

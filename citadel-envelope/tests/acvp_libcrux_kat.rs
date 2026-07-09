@@ -85,12 +85,14 @@ fn acvp_keygen_25_vectors() {
         let dk_bytes = dk.as_slice();
 
         assert_eq!(
-            ek_bytes, &expected_ek[..],
+            ek_bytes,
+            &expected_ek[..],
             "ACVP keygen tc{}: encapsulation key mismatch",
             v.tc_id
         );
         assert_eq!(
-            dk_bytes, &expected_dk[..],
+            dk_bytes,
+            &expected_dk[..],
             "ACVP keygen tc{}: decapsulation key mismatch",
             v.tc_id
         );

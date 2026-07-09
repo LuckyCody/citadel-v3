@@ -302,11 +302,22 @@ impl FileAuditSink {
 impl AuditSinkSync for FileAuditSink {
     fn record(&self, event: AuditEvent) {
         use std::io::Write;
-        match std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.path)
-        {
+        let opts = {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                let mut o = std::fs::OpenOptions::new();
+                o.create(true).append(true).mode(0o600);
+                o
+            }
+            #[cfg(not(unix))]
+            {
+                let mut o = std::fs::OpenOptions::new();
+                o.create(true).append(true);
+                o
+            }
+        };
+        match opts.open(&self.path) {
             Ok(mut file) => match serde_json::to_string(&event) {
                 Ok(json) => {
                     if let Err(e) = writeln!(file, "{}", json) {

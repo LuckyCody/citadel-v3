@@ -108,10 +108,22 @@ impl AuditWitness for FileWitness {
             proof: format!("fsync-{}", entry_number),
         };
 
-        // Append to receipts file with fsync
-        let mut file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
+        let opts = {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                let mut o = std::fs::OpenOptions::new();
+                o.create(true).append(true).mode(0o600);
+                o
+            }
+            #[cfg(not(unix))]
+            {
+                let mut o = std::fs::OpenOptions::new();
+                o.create(true).append(true);
+                o
+            }
+        };
+        let mut file = opts
             .open(&self.receipts_path)
             .map_err(|e| WitnessError::new(format!("open receipts file: {}", e)))?;
 
