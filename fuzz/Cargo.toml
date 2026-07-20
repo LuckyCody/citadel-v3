@@ -18,6 +18,9 @@ arbitrary = { version = "1", features = ["derive"] }
 [dependencies.citadel-envelope]
 path = "../citadel-envelope"
 
+[dependencies.citadel-ffi]
+path = "../citadel-ffi"
+
 [[bin]]
 name = "fuzz_wire_parse"
 path = "fuzz_targets/fuzz_wire_parse.rs"
@@ -35,6 +38,13 @@ bench = false
 [[bin]]
 name = "fuzz_roundtrip"
 path = "fuzz_targets/fuzz_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_ffi_free"
+path = "fuzz_targets/fuzz_ffi_free.rs"
 test = false
 doc = false
 bench = false

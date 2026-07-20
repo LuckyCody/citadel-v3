@@ -43,4 +43,4 @@ sha2::Sha256::digest(message) == payload_hash
 
 This makes authorization single-use for specific message content.
 
-**Status:** OPEN
+**Status:** RESOLVED (verified 2026-07-15) — payload-hash binding coverage passed in the locked Ubuntu API/core suite; see ev_004 and the packet-003 receipt.

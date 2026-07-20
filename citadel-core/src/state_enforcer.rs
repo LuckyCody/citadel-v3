@@ -57,7 +57,7 @@ impl CapabilityToken {
 /// This context is the ONLY way to execute sensitive operations.
 /// It cannot be constructed manually OR reconstructed from its contents.
 /// It contains a capability token that proves authorization actually occurred.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AuthorizedContext {
     /// P261: Unforgeable capability token - CANNOT be reconstructed
     capability: CapabilityToken,
@@ -404,8 +404,8 @@ pub struct StateEnforcer {
     /// Domain-to-keys mapping (for domain enforcement)
     domain_keys: std::collections::HashMap<String, HashSet<String>>,
     /// P332: Registry of issued capability token nonces with issue timestamp (nanos).
-    /// validate_capability() checks membership here — proves the exact token
-    /// was issued by THIS enforcer instance, not just that nonce != 0.
+    /// validate_capability() atomically removes membership here — proving the
+    /// exact token was issued by THIS enforcer instance and enforcing one-shot use.
     /// P370: HashMap<nonce, issued_at_nanos> enables TTL cleanup.
     issued_tokens: std::sync::Mutex<std::collections::HashMap<u128, u128>>,
     /// P370: Per-instance generation counter — ties tokens to this specific enforcer.
@@ -736,6 +736,22 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    /// Packet 002: sensitive-operation capabilities are execution permits, not
+    /// reusable TTL sessions. The first boundary validation consumes the token.
+    #[test]
+    fn authorized_context_cannot_be_validated_twice() {
+        let enforcer = setup_enforcer();
+        let context = enforcer
+            .authorize_encrypt("key-1", Some("domain-a"), None)
+            .expect("authorization");
+
+        assert!(context.validate(&enforcer).is_ok());
+        assert!(
+            context.validate(&enforcer).is_err(),
+            "an AuthorizedContext was reusable after its first execution validation"
+        );
+    }
+
     #[test]
     fn test_authorize_encrypt_nonexistent_key() {
         let enforcer = setup_enforcer();
@@ -874,7 +890,7 @@ impl StateEnforcer {
                 issued.retain(|_, issued_at| {
                     now_nanos.saturating_sub(*issued_at) < CAPABILITY_TOKEN_TTL_NANOS
                 });
-                issued.contains_key(&token.nonce)
+                issued.remove(&token.nonce).is_some()
             })
             .unwrap_or(false)
     }

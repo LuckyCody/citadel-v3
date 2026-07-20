@@ -50,4 +50,4 @@ Eventually implement real external witness:
 - RFC 3161 timestamping
 - S3 with Object Lock
 
-**Status:** OPEN
+**Status:** RESOLVED (documentation, 2026-07-15) — NoOpWitness and FileWitness limitations are explicit; external immutable anchoring remains unimplemented and unclaimed.

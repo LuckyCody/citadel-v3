@@ -41,6 +41,18 @@ cargo +nightly fuzz run fuzz_roundtrip
 
 **Goal:** Find cases where valid encryptions fail to decrypt correctly.
 
+### 4. FFI Allocation Release (`fuzz_ffi_free`)
+
+Exercises Citadel-owned key buffers with arbitrary caller lengths, free order,
+unknown interior pointers, repeated frees, and null pointers.
+
+```bash
+cargo +nightly fuzz run fuzz_ffi_free
+```
+
+**Goal:** Prove the C ABI free path never trusts caller length metadata and safely
+ignores pointers it does not own.
+
 ## Running Fuzzing
 
 ```bash

@@ -9,7 +9,7 @@ repository = "https://github.com/mrcord77/rust_citadel"
 
 [lib]
 name = "citadel"
-crate-type = ["cdylib", "staticlib"]
+crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
 citadel-envelope = { path = "../citadel-envelope" }

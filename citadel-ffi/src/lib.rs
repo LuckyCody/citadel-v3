@@ -19,9 +19,46 @@
 //!   5 = CITADEL_ERR_ALLOC  (memory allocation failed)
 
 use std::alloc::{alloc, dealloc, Layout};
+use std::collections::HashMap;
 use std::slice;
+use std::sync::{Mutex, OnceLock};
 
 use citadel_envelope::{Aad, Citadel, Context, PublicKey, SecretKey};
+
+#[cfg(test)]
+mod allocation_probe {
+    use std::alloc::{GlobalAlloc, Layout, System};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    pub static TRACKED_PTR: AtomicUsize = AtomicUsize::new(0);
+    pub static TRACKED_SIZE: AtomicUsize = AtomicUsize::new(0);
+    pub static LAYOUT_MISMATCH: AtomicBool = AtomicBool::new(false);
+
+    pub struct TrackingAllocator;
+
+    unsafe impl GlobalAlloc for TrackingAllocator {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            System.alloc(layout)
+        }
+
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            if TRACKED_PTR.load(Ordering::SeqCst) == ptr as usize {
+                let expected = TRACKED_SIZE.load(Ordering::SeqCst);
+                if layout.size() != expected {
+                    LAYOUT_MISMATCH.store(true, Ordering::SeqCst);
+                    // Do not forward an invalid layout to the system allocator.
+                    return;
+                }
+                TRACKED_PTR.store(0, Ordering::SeqCst);
+            }
+            System.dealloc(ptr, layout);
+        }
+    }
+}
+
+#[cfg(test)]
+#[global_allocator]
+static TEST_ALLOCATOR: allocation_probe::TrackingAllocator = allocation_probe::TrackingAllocator;
 
 pub const CITADEL_OK: i32 = 0;
 pub const CITADEL_ERR_NULL: i32 = 1;
@@ -29,6 +66,11 @@ pub const CITADEL_ERR_SEAL: i32 = 2;
 pub const CITADEL_ERR_OPEN: i32 = 3;
 pub const CITADEL_ERR_KEY: i32 = 4;
 pub const CITADEL_ERR_ALLOC: i32 = 5;
+
+fn allocations() -> &'static Mutex<HashMap<usize, usize>> {
+    static ALLOCATIONS: OnceLock<Mutex<HashMap<usize, usize>>> = OnceLock::new();
+    ALLOCATIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 fn alloc_buf(size: usize) -> *mut u8 {
     if size == 0 {
@@ -38,7 +80,21 @@ fn alloc_buf(size: usize) -> *mut u8 {
         Ok(l) => l,
         Err(_) => return std::ptr::null_mut(),
     };
-    unsafe { alloc(layout) }
+    let ptr = unsafe { alloc(layout) };
+    if ptr.is_null() {
+        return ptr;
+    }
+
+    match allocations().lock() {
+        Ok(mut owned) => {
+            owned.insert(ptr as usize, size);
+            ptr
+        }
+        Err(_) => {
+            unsafe { dealloc(ptr, layout) };
+            std::ptr::null_mut()
+        }
+    }
 }
 
 fn write_output(data: &[u8], out_ptr: *mut *mut u8, out_len: *mut usize) -> i32 {
@@ -199,22 +255,38 @@ pub unsafe extern "C" fn citadel_open(
 
 /// Free a buffer allocated by citadel_keygen, citadel_seal, or citadel_open.
 ///
-/// Passing NULL is safe. Length must exactly match what was returned.
+/// Passing NULL is safe. The length argument is retained for ABI compatibility;
+/// deallocation uses Citadel's allocator-owned length metadata.
 ///
 /// # Safety
-/// `ptr` must have been allocated by citadel and `len` must match exactly.
-/// Passing a wrong length is undefined behavior.
+/// `ptr` must be a currently live allocation returned by Citadel and must be
+/// released exactly once. Unrecognized pointers and immediate repeated calls are
+/// ignored as a best-effort guard, but a stale pointer could alias a later reused
+/// address and remains a caller ownership violation. Caller-provided length is
+/// never used for memory access or layout.
 ///
 /// P145: zeros the buffer before deallocation so secret keys and plaintext
 /// do not linger in heap memory after the caller is done with them.
 #[no_mangle]
-pub unsafe extern "C" fn citadel_free(ptr: *mut u8, len: usize) {
-    if ptr.is_null() || len == 0 {
+pub unsafe extern "C" fn citadel_free(ptr: *mut u8, _len: usize) {
+    if ptr.is_null() {
         return;
     }
+
+    let actual_len = match allocations().lock() {
+        Ok(mut owned) => owned.remove(&(ptr as usize)),
+        Err(_) => None,
+    };
+    let Some(actual_len) = actual_len else {
+        return;
+    };
+    if actual_len == 0 {
+        return;
+    }
+
     // Zero before free — required for secret key material and decrypted plaintext.
-    std::ptr::write_bytes(ptr, 0u8, len);
-    if let Ok(layout) = Layout::array::<u8>(len) {
+    std::ptr::write_bytes(ptr, 0u8, actual_len);
+    if let Ok(layout) = Layout::array::<u8>(actual_len) {
         dealloc(ptr, layout);
     }
 }
@@ -259,24 +331,43 @@ mod safety_tests {
     /// so we capture the zeroing that happens inside citadel_free.
     #[test]
     fn free_zeros_before_dealloc() {
-        // Allocate a buffer with a known pattern via our own alloc
-        // (mirrors exactly what citadel_keygen/citadel_open do).
-        use std::alloc::{alloc, Layout};
+        // Allocate through the production registry path used by keygen/open.
         let len = 32usize;
-        let layout = Layout::array::<u8>(len).unwrap();
-        let ptr = unsafe { alloc(layout) };
+        let ptr = alloc_buf(len);
         assert!(!ptr.is_null());
         // Fill with non-zero sentinel
         unsafe { std::ptr::write_bytes(ptr, 0xAB, len) };
         // Confirm sentinel is there
         let before: Vec<u8> = unsafe { std::slice::from_raw_parts(ptr, len).to_vec() };
         assert!(before.iter().all(|&b| b == 0xAB), "sentinel not written");
-        // citadel_free must zero then dealloc — we snapshot contents mid-zero
-        // by wrapping in a scope that reads before the OS can reuse the memory.
-        // We can't read after dealloc, so we test the zeroing with a small helper.
-        // This is the best we can do in safe/test code; full proof requires ASAN.
+        // We cannot read after deallocation. The allocation probe below checks
+        // layout correctness; sanitizer/fuzz runs exercise the whole boundary.
         unsafe { citadel_free(ptr, len) };
-        // The important thing: no crash, no UB triggered by zeroing.
+    }
+
+    /// Packet 002: the FFI caller is untrusted and may return the right pointer
+    /// with the wrong length. Freeing must use allocator-owned metadata rather
+    /// than that caller-controlled length.
+    #[test]
+    fn free_uses_allocator_owned_length_not_caller_length() {
+        use std::sync::atomic::Ordering;
+
+        let actual_len = 32usize;
+        let ptr = alloc_buf(actual_len);
+        assert!(!ptr.is_null());
+        unsafe { std::ptr::write_bytes(ptr, 0xA5, actual_len) };
+
+        allocation_probe::LAYOUT_MISMATCH.store(false, Ordering::SeqCst);
+        allocation_probe::TRACKED_SIZE.store(actual_len, Ordering::SeqCst);
+        allocation_probe::TRACKED_PTR.store(ptr as usize, Ordering::SeqCst);
+
+        // A shorter caller length keeps the zeroing write in bounds while the
+        // tracking allocator detects the wrong deallocation layout.
+        unsafe { citadel_free(ptr, actual_len - 16) };
+        assert!(
+            !allocation_probe::LAYOUT_MISMATCH.load(Ordering::SeqCst),
+            "citadel_free trusted the caller length instead of allocation metadata"
+        );
     }
 
     /// P150 — citadel_keygen returns non-null, correct-length keys.
@@ -525,25 +616,19 @@ fn open_with_wrong_ct_len_returns_error() {
     }
 }
 
-/// P161 — Document: double-free and reused-freed-pointer are UB in Rust/C.
-/// This test verifies our mitigation: citadel_free zeros before dealloc,
-/// so any accidental read of a freed buffer sees zeros, not secret key material.
-/// Actual double-free protection is the caller's responsibility (see OWNERSHIP.md).
+/// P161 — Immediate repeated release is ignored by the allocation registry.
+/// This is a best-effort guard only: a stale pointer can alias a later allocation
+/// after allocator address reuse, so callers still own exactly-once release.
 #[test]
-fn free_zeros_are_visible_before_dealloc_fires() {
-    // Allocate known-pattern buffer, verify zeros appear after citadel_free
-    // by checking the sentinel approach used in free_zeros_before_dealloc.
-    // This confirms the zero-write happens before memory is returned to the allocator.
-    use std::alloc::{alloc, Layout};
+fn immediate_repeated_free_is_ignored() {
     let len = 64usize;
-    let layout = Layout::array::<u8>(len).unwrap();
-    let ptr = unsafe { alloc(layout) };
+    let ptr = alloc_buf(len);
     assert!(!ptr.is_null());
     unsafe { std::ptr::write_bytes(ptr, 0xFF, len) };
-    // After citadel_free, the memory is zeroed then deallocated.
-    // We can't safely read after dealloc, but we confirm no panic occurs
-    // and the zero-before-free path executes for non-null non-zero-len input.
-    unsafe { citadel_free(ptr, len) }; // must not panic or crash
+    unsafe {
+        citadel_free(ptr, len);
+        citadel_free(ptr, usize::MAX);
+    }
 }
 
 /// P160 — Wrong sk_len (too small) passed to citadel_open must return error, not UB.

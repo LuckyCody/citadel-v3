@@ -77,7 +77,8 @@ CITADEL_REPLAY_FLUSH_MODE=immediate
 **Guarantees**:
 - ✅ Every claim immediately fsynced to disk
 - ✅ No crash window
-- ✅ Replay protection survives any failure
+- ✅ Successful synchronous claims survive ordinary process termination and restart
+- ⚠️ Does not protect against storage rollback, deletion, corruption, or host compromise
 - ⚠️ Significantly slower (100-1000x write amplification)
 
 **Use For**:
@@ -122,9 +123,9 @@ CITADEL_REPLAY_BACKEND=redis
 |-------------|-------------------|--------|
 | Development | Memory | `CITADEL_REPLAY_BACKEND=memory` |
 | Testing | File (batched) | `CITADEL_REPLAY_BACKEND=file` |
-| High-throughput prod | File (batched) + monitoring | Default + force_flush handler |
-| High-assurance prod | File (strict) | `CITADEL_REPLAY_FLUSH_MODE=immediate` |
-| Distributed prod | Redis/DynamoDB | `CITADEL_REPLAY_BACKEND=redis` |
+| High-throughput controlled pilot | File (batched) + monitoring | Default + force_flush handler |
+| Higher-durability controlled pilot | File (strict) | `CITADEL_REPLAY_FLUSH_MODE=immediate` |
+| Distributed future deployment | Redis/DynamoDB | `CITADEL_REPLAY_BACKEND=redis` |
 
 ---
 

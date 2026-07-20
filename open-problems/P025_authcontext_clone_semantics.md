@@ -21,11 +21,9 @@ not:
 Because they are not one-shot."
 ```
 
-**Root cause:**
-AuthorizedContext is cloneable (derives Clone).
-Can be used multiple times during TTL.
-
-Documentation doesn't clarify: are they one-shot or reusable?
+**Root cause (historical):**
+AuthorizedContext derived Clone and capability validation checked registry membership
+without consuming the nonce, allowing repeated execution during TTL.
 
 **Required fix:**
 Either:
@@ -48,4 +46,7 @@ if !self.used_nonces.insert(authz.capability.nonce) {
 }
 ```
 
-**Status:** OPEN
+**Status:** RESOLVED (implementation, 2026-07-15) — AuthorizedContext no longer
+implements Clone, and successful Keystore-boundary validation atomically removes the
+issued nonce. A second validation fails. See the fail-before/pass-after evidence in
+`citadel/eem/002_attempt_5.md`; full packet closeout remains pending.

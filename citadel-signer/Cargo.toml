@@ -16,7 +16,7 @@ path = "src/lib.rs"
 [dependencies]
 # ML-DSA (NIST FIPS 204) — post-quantum digital signatures
 # Pin exact — same philosophy as ml-kem pin. Any upgrade is an explicit reviewed decision.
-ml-dsa = { version = "=0.1.0-rc.9", default-features = false, features = ["alloc", "rand_core"] }
+ml-dsa = { version = "=0.1.0-rc.9", default-features = false, features = ["alloc", "rand_core", "zeroize"] }
 # Secure random number generation
 rand_core = { version = "0.6", features = ["getrandom"] }
 # Memory zeroing for sensitive data

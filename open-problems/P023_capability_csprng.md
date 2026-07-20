@@ -39,4 +39,4 @@ let unique_nonce = u128::from_le_bytes(bytes);
 
 Keep registry validation as defense-in-depth.
 
-**Status:** OPEN
+**Status:** RESOLVED (verified 2026-07-15) — capability nonce uniqueness, zero-nonce rejection, and registry-binding tests passed in the locked Ubuntu core suite; see ev_004.

@@ -45,4 +45,4 @@ Replay protection guarantees depend on backend durability mode:
 Choose based on threat model and performance requirements.
 ```
 
-**Status:** OPEN
+**Status:** RESOLVED (documentation, 2026-07-15) — replay guarantees are backend-specific and crash/storage limitations are explicit. Operational durability remains a deployment gate.
