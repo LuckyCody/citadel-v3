@@ -4,10 +4,10 @@
 //! Combines classical ECDH (X25519) with post-quantum KEM (ML-KEM-768).
 //! Security holds if *either* primitive remains secure (defense-in-depth).
 //!
-//! ML-KEM-768 provider: PQClean reference implementation via pqcrypto-mlkem.
-//! Switched from libcrux-ml-kem 0.0.9 after dudect timing validation found
-//! key-material-dependent timing in libcrux decapsulation. See
-//! PROVIDER_DECISION_LOG.md.
+//! ML-KEM-768 provider: RustCrypto `ml-kem` 0.3.2.
+//! Selected by the Packet 006 preregistered provider gate; see
+//! PROVIDER_BAKEOFF_2026.md. Citadel v1 retains the legacy expanded private-key
+//! encoding for compatibility while validating it at import.
 //!
 //! Key serialization:
 //!   PublicKey  = x25519_pk[32] || mlkem_ek[1184]   (1216 bytes)
@@ -22,11 +22,18 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-use pqcrypto_mlkem::mlkem768 as pq_mlkem;
-use pqcrypto_traits::kem::{
-    Ciphertext as PqCiphertext, PublicKey as PqPublicKey, SecretKey as PqSecretKey,
-    SharedSecret as PqSharedSecret,
+#[cfg(feature = "kat")]
+use ml_kem::Seed;
+use ml_kem::{
+    kem::{Decapsulate as MlKemDecapsulate, Encapsulate as MlKemEncapsulate, Kem, KeyExport},
+    ml_kem_768::{
+        Ciphertext as MlKemCiphertext, DecapsulationKey as MlKemSecretKey,
+        EncapsulationKey as MlKemPublicKey,
+    },
+    MlKem768,
 };
+#[allow(deprecated)]
+use ml_kem::{ml_kem_768::ExpandedDecapsulationKey, ExpandedKeyEncoding};
 use rand_core::OsRng;
 use x25519_dalek::{EphemeralSecret, PublicKey as X25519PublicKey, StaticSecret};
 
@@ -35,7 +42,7 @@ use crate::wire::{
     KEM_CIPHERTEXT_BYTES, KEM_PUBLIC_KEY_BYTES, KEM_SECRET_KEY_BYTES, MLKEM_PUBLIC_KEY_BYTES,
     MLKEM_SECRET_KEY_BYTES, SHARED_SECRET_BYTES, X25519_KEY_BYTES,
 };
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
 
 // ---------------------------------------------------------------------------
 // Public key (hybrid)
@@ -49,9 +56,9 @@ pub struct PublicKey {
 }
 
 impl PublicKey {
-    pub(crate) fn from_parts_pq(x25519: X25519PublicKey, mlkem_pk: &pq_mlkem::PublicKey) -> Self {
+    pub(crate) fn from_parts_mlkem(x25519: X25519PublicKey, mlkem_pk: &MlKemPublicKey) -> Self {
         let mut mlkem_bytes = [0u8; MLKEM_PUBLIC_KEY_BYTES];
-        mlkem_bytes.copy_from_slice(mlkem_pk.as_bytes());
+        mlkem_bytes.copy_from_slice(mlkem_pk.to_bytes().as_ref());
         Self {
             x25519,
             mlkem_bytes,
@@ -80,7 +87,8 @@ impl PublicKey {
         mlkem_bytes.copy_from_slice(&bytes[X25519_KEY_BYTES..]);
 
         // Validate by attempting to parse
-        pq_mlkem::PublicKey::from_bytes(&mlkem_bytes).map_err(|_| DecryptionError)?;
+        let encoded = mlkem_bytes.into();
+        MlKemPublicKey::new(&encoded).map_err(|_| DecryptionError)?;
 
         Ok(Self {
             x25519,
@@ -92,8 +100,9 @@ impl PublicKey {
         &self.x25519
     }
 
-    pub(crate) fn mlkem_pk(&self) -> pq_mlkem::PublicKey {
-        pq_mlkem::PublicKey::from_bytes(&self.mlkem_bytes).expect("validated at construction")
+    pub(crate) fn mlkem_pk(&self) -> MlKemPublicKey {
+        let encoded = self.mlkem_bytes.into();
+        MlKemPublicKey::new(&encoded).expect("validated at construction")
     }
 }
 
@@ -103,27 +112,19 @@ impl PublicKey {
 
 /// Hybrid secret key: X25519 static secret + ML-KEM-768 decapsulation key.
 ///
-/// Implements [`Drop`] to zeroize `mlkem_bytes` on destruction.
-/// `x25519_dalek::StaticSecret` handles its own zeroization internally.
+/// Both halves zeroize on destruction via their own types: the `ml-kem` crate's
+/// `MlKemSecretKey` clears its material when the zeroize feature is enabled (the
+/// pinned configuration), and `x25519_dalek::StaticSecret` handles its own
+/// zeroization internally. This type therefore needs no explicit `Drop` impl.
 pub struct SecretKey {
     x25519: StaticSecret,
-    mlkem_bytes: [u8; MLKEM_SECRET_KEY_BYTES],
-}
-
-impl Drop for SecretKey {
-    fn drop(&mut self) {
-        self.mlkem_bytes.zeroize();
-    }
+    mlkem: MlKemSecretKey,
 }
 
 impl SecretKey {
-    pub(crate) fn from_parts_pq(x25519: StaticSecret, mlkem_sk: &pq_mlkem::SecretKey) -> Self {
-        let mut mlkem_bytes = [0u8; MLKEM_SECRET_KEY_BYTES];
-        mlkem_bytes.copy_from_slice(mlkem_sk.as_bytes());
-        Self {
-            x25519,
-            mlkem_bytes,
-        }
+    #[allow(deprecated)]
+    pub(crate) fn from_parts_mlkem(x25519: StaticSecret, mlkem: MlKemSecretKey) -> Self {
+        Self { x25519, mlkem }
     }
 
     /// Serialize: x25519_sk[32] || mlkem_dk[2400]
@@ -133,7 +134,8 @@ impl SecretKey {
     pub fn to_bytes(&self) -> [u8; KEM_SECRET_KEY_BYTES] {
         let mut out = [0u8; KEM_SECRET_KEY_BYTES];
         out[..X25519_KEY_BYTES].copy_from_slice(&self.x25519.to_bytes());
-        out[X25519_KEY_BYTES..].copy_from_slice(&self.mlkem_bytes);
+        #[allow(deprecated)]
+        out[X25519_KEY_BYTES..].copy_from_slice(self.mlkem.to_expanded_bytes().as_ref());
         out
     }
 
@@ -146,21 +148,32 @@ impl SecretKey {
         x25519_bytes.copy_from_slice(&bytes[..X25519_KEY_BYTES]);
         let x25519 = StaticSecret::from(*x25519_bytes);
 
-        let mut mlkem_bytes = [0u8; MLKEM_SECRET_KEY_BYTES];
+        let mut mlkem_bytes = Zeroizing::new([0u8; MLKEM_SECRET_KEY_BYTES]);
         mlkem_bytes.copy_from_slice(&bytes[X25519_KEY_BYTES..]);
 
-        Ok(Self {
-            x25519,
-            mlkem_bytes,
-        })
+        // V1 compatibility retains the legacy expanded 2400-byte key encoding.
+        // Validate it now rather than deferring malformed-key detection until use.
+        #[allow(deprecated)]
+        {
+            let encoded: ExpandedDecapsulationKey = (*mlkem_bytes).into();
+            let mlkem =
+                MlKemSecretKey::from_expanded_bytes(&encoded).map_err(|_| DecryptionError)?;
+            Ok(Self { x25519, mlkem })
+        }
     }
 
     pub(crate) fn x25519(&self) -> &StaticSecret {
         &self.x25519
     }
 
-    pub(crate) fn mlkem_sk(&self) -> pq_mlkem::SecretKey {
-        pq_mlkem::SecretKey::from_bytes(&self.mlkem_bytes).expect("validated at construction")
+    #[allow(deprecated)]
+    pub(crate) fn mlkem_sk(&self) -> &MlKemSecretKey {
+        &self.mlkem
+    }
+
+    pub(crate) fn public_key(&self) -> PublicKey {
+        let x25519 = X25519PublicKey::from(&self.x25519);
+        PublicKey::from_parts_mlkem(x25519, self.mlkem.encapsulation_key())
     }
 }
 
@@ -198,11 +211,12 @@ pub fn diagnostic_mlkem_decapsulate_only(
     }
 
     let mlkem_ct_bytes = &ct[X25519_KEY_BYTES..];
-    let mlkem_ct = pq_mlkem::Ciphertext::from_bytes(mlkem_ct_bytes).map_err(|_| DecryptionError)?;
-    let mlkem_ss = pq_mlkem::decapsulate(&mlkem_ct, &sk.mlkem_sk());
+    let mlkem_ct_array: [u8; 1088] = mlkem_ct_bytes.try_into().map_err(|_| DecryptionError)?;
+    let mlkem_ct: MlKemCiphertext = mlkem_ct_array.into();
+    let mlkem_ss = sk.mlkem_sk().decapsulate(&mlkem_ct);
 
     let mut out = [0u8; SHARED_SECRET_BYTES];
-    out.copy_from_slice(mlkem_ss.as_bytes());
+    out.copy_from_slice(mlkem_ss.as_ref());
     Ok(out)
 }
 
@@ -214,12 +228,17 @@ pub fn diagnostic_mlkem_decapsulate_from_key_bytes(
     let mlkem_sk_bytes = &sk_bytes[X25519_KEY_BYTES..];
     let mlkem_ct_bytes = &ct[X25519_KEY_BYTES..];
 
-    let mlkem_sk = pq_mlkem::SecretKey::from_bytes(mlkem_sk_bytes).map_err(|_| DecryptionError)?;
-    let mlkem_ct = pq_mlkem::Ciphertext::from_bytes(mlkem_ct_bytes).map_err(|_| DecryptionError)?;
-    let mlkem_ss = pq_mlkem::decapsulate(&mlkem_ct, &mlkem_sk);
+    let mlkem_sk_array: [u8; MLKEM_SECRET_KEY_BYTES] =
+        mlkem_sk_bytes.try_into().map_err(|_| DecryptionError)?;
+    let mlkem_ct_array: [u8; 1088] = mlkem_ct_bytes.try_into().map_err(|_| DecryptionError)?;
+    #[allow(deprecated)]
+    let mlkem_sk =
+        MlKemSecretKey::from_expanded_bytes(&mlkem_sk_array.into()).map_err(|_| DecryptionError)?;
+    let mlkem_ct: MlKemCiphertext = mlkem_ct_array.into();
+    let mlkem_ss = mlkem_sk.decapsulate(&mlkem_ct);
 
     let mut out = [0u8; SHARED_SECRET_BYTES];
-    out.copy_from_slice(mlkem_ss.as_bytes());
+    out.copy_from_slice(mlkem_ss.as_ref());
     Ok(out)
 }
 
@@ -243,16 +262,107 @@ pub trait KemProvider {
 /// KEM ciphertext = x25519_ephemeral_pk[32] || mlkem_ct[1088] (1120 bytes).
 pub struct HybridX25519MlKem768Provider;
 
+#[cfg(feature = "kat")]
+impl HybridX25519MlKem768Provider {
+    /// Deterministic FIPS 203 key generation for checked-in vectors only.
+    #[doc(hidden)]
+    #[allow(deprecated)]
+    pub fn kat_mlkem_keygen(d: [u8; 32], z: [u8; 32]) -> ([u8; 1184], [u8; 2400]) {
+        let mut seed_bytes = [0u8; 64];
+        seed_bytes[..32].copy_from_slice(&d);
+        seed_bytes[32..].copy_from_slice(&z);
+        let dk = MlKemSecretKey::from_seed(Seed::from(seed_bytes));
+        let ek = dk.encapsulation_key();
+        let mut ek_out = [0u8; 1184];
+        let mut dk_out = [0u8; 2400];
+        ek_out.copy_from_slice(ek.to_bytes().as_ref());
+        dk_out.copy_from_slice(dk.to_expanded_bytes().as_ref());
+        (ek_out, dk_out)
+    }
+
+    /// Deterministic FIPS 203 encapsulation for checked-in vectors only.
+    #[doc(hidden)]
+    pub fn kat_mlkem_encapsulate(
+        ek: &[u8; 1184],
+        m: [u8; 32],
+    ) -> Result<([u8; 1088], [u8; 32]), EncodingError> {
+        let ek = MlKemPublicKey::new(&(*ek).into()).map_err(|_| EncodingError)?;
+        let (ct, ss) = ek.encapsulate_deterministic(&m.into());
+        let mut ct_out = [0u8; 1088];
+        let mut ss_out = [0u8; 32];
+        ct_out.copy_from_slice(ct.as_ref());
+        ss_out.copy_from_slice(ss.as_ref());
+        Ok((ct_out, ss_out))
+    }
+
+    /// FIPS 203 decapsulation for checked-in vectors, including implicit rejection.
+    #[doc(hidden)]
+    #[allow(deprecated)]
+    pub fn kat_mlkem_decapsulate(
+        dk: &[u8; 2400],
+        ct: &[u8; 1088],
+    ) -> Result<[u8; 32], DecryptionError> {
+        let dk = MlKemSecretKey::from_expanded_bytes(&(*dk).into()).map_err(|_| DecryptionError)?;
+        let ct: MlKemCiphertext = (*ct).into();
+        let ss = dk.decapsulate(&ct);
+        let mut out = [0u8; 32];
+        out.copy_from_slice(ss.as_ref());
+        Ok(out)
+    }
+
+    /// Deterministic complete hybrid keypair for envelope-v2 vectors only.
+    #[doc(hidden)]
+    #[allow(deprecated)]
+    pub fn kat_hybrid_keygen(
+        x25519_secret: [u8; 32],
+        d: [u8; 32],
+        z: [u8; 32],
+    ) -> (PublicKey, SecretKey) {
+        let x25519 = StaticSecret::from(x25519_secret);
+        let x25519_public = X25519PublicKey::from(&x25519);
+        let mut seed = [0u8; 64];
+        seed[..32].copy_from_slice(&d);
+        seed[32..].copy_from_slice(&z);
+        let mlkem = MlKemSecretKey::from_seed(Seed::from(seed));
+        let public = PublicKey::from_parts_mlkem(x25519_public, mlkem.encapsulation_key());
+        (public, SecretKey::from_parts_mlkem(x25519, mlkem))
+    }
+
+    /// Deterministic complete hybrid encapsulation for envelope-v2 vectors only.
+    #[doc(hidden)]
+    pub fn kat_hybrid_encapsulate(
+        pk: &PublicKey,
+        x25519_ephemeral_secret: [u8; 32],
+        m: [u8; 32],
+    ) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), EncodingError> {
+        let ephemeral = StaticSecret::from(x25519_ephemeral_secret);
+        let ephemeral_public = X25519PublicKey::from(&ephemeral);
+        let x25519_ss = ephemeral.diffie_hellman(pk.x25519());
+        if !x25519_ss.was_contributory() {
+            return Err(EncodingError);
+        }
+        let (mlkem_ct, mlkem_ss) = pk.mlkem_pk().encapsulate_deterministic(&m.into());
+
+        let mut shared = Zeroizing::new(Vec::with_capacity(64));
+        shared.extend_from_slice(x25519_ss.as_bytes());
+        shared.extend_from_slice(mlkem_ss.as_ref());
+        let mut kem_ct = Vec::with_capacity(KEM_CIPHERTEXT_BYTES);
+        kem_ct.extend_from_slice(ephemeral_public.as_bytes());
+        kem_ct.extend_from_slice(mlkem_ct.as_ref());
+        Ok((shared, kem_ct))
+    }
+}
+
 impl KemProvider for HybridX25519MlKem768Provider {
     fn keygen() -> (PublicKey, SecretKey) {
         let x25519_sk = StaticSecret::random_from_rng(OsRng);
         let x25519_pk = X25519PublicKey::from(&x25519_sk);
 
-        let (mlkem_pk, mlkem_sk) = pq_mlkem::keypair();
+        let (mlkem_sk, mlkem_pk) = MlKem768::generate_keypair();
 
         (
-            PublicKey::from_parts_pq(x25519_pk, &mlkem_pk),
-            SecretKey::from_parts_pq(x25519_sk, &mlkem_sk),
+            PublicKey::from_parts_mlkem(x25519_pk, &mlkem_pk),
+            SecretKey::from_parts_mlkem(x25519_sk, mlkem_sk),
         )
     }
 
@@ -260,17 +370,20 @@ impl KemProvider for HybridX25519MlKem768Provider {
         let x25519_eph = EphemeralSecret::random_from_rng(OsRng);
         let x25519_eph_pk = X25519PublicKey::from(&x25519_eph);
         let x25519_ss = x25519_eph.diffie_hellman(pk.x25519());
+        if !x25519_ss.was_contributory() {
+            return Err(EncodingError);
+        }
 
-        let (mlkem_ss, mlkem_ct) = pq_mlkem::encapsulate(&pk.mlkem_pk());
+        let (mlkem_ct, mlkem_ss) = pk.mlkem_pk().encapsulate();
 
         let mut combined_raw = Zeroizing::new([0u8; SHARED_SECRET_BYTES * 2]);
         combined_raw[..SHARED_SECRET_BYTES].copy_from_slice(x25519_ss.as_bytes());
-        combined_raw[SHARED_SECRET_BYTES..].copy_from_slice(mlkem_ss.as_bytes());
+        combined_raw[SHARED_SECRET_BYTES..].copy_from_slice(mlkem_ss.as_ref());
         let combined_ss = Zeroizing::new(combined_raw.to_vec());
 
         let mut kem_ct = Vec::with_capacity(KEM_CIPHERTEXT_BYTES);
         kem_ct.extend_from_slice(x25519_eph_pk.as_bytes());
-        kem_ct.extend_from_slice(mlkem_ct.as_bytes());
+        kem_ct.extend_from_slice(mlkem_ct.as_ref());
 
         Ok((combined_ss, kem_ct))
     }
@@ -286,15 +399,18 @@ impl KemProvider for HybridX25519MlKem768Provider {
         let x25519_epk = X25519PublicKey::from(x25519_epk_bytes);
 
         let mlkem_ct_bytes = &ct[X25519_KEY_BYTES..];
-        let mlkem_ct =
-            pq_mlkem::Ciphertext::from_bytes(mlkem_ct_bytes).map_err(|_| DecryptionError)?;
+        let mlkem_ct_array: [u8; 1088] = mlkem_ct_bytes.try_into().map_err(|_| DecryptionError)?;
+        let mlkem_ct: MlKemCiphertext = mlkem_ct_array.into();
 
         let x25519_ss = sk.x25519().diffie_hellman(&x25519_epk);
-        let mlkem_ss = pq_mlkem::decapsulate(&mlkem_ct, &sk.mlkem_sk());
+        if !x25519_ss.was_contributory() {
+            return Err(DecryptionError);
+        }
+        let mlkem_ss = sk.mlkem_sk().decapsulate(&mlkem_ct);
 
         let mut combined_raw = Zeroizing::new([0u8; SHARED_SECRET_BYTES * 2]);
         combined_raw[..SHARED_SECRET_BYTES].copy_from_slice(x25519_ss.as_bytes());
-        combined_raw[SHARED_SECRET_BYTES..].copy_from_slice(mlkem_ss.as_bytes());
+        combined_raw[SHARED_SECRET_BYTES..].copy_from_slice(mlkem_ss.as_ref());
         let combined_ss = Zeroizing::new(combined_raw.to_vec());
 
         Ok(combined_ss)

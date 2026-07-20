@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Known Answer / envelope-only tests (v1 structured wire)
+//! Envelope format and error tests. Historical v1 migration has a separate suite.
 
-use citadel_envelope::{wire, Aad, Citadel, Context, OpenError};
+use citadel_envelope::{inspect, Aad, Citadel, Context, OpenError};
 
 use citadel_envelope::wire::{
-    AEAD_TAG_BYTES, FLAGS_V1, HEADER_BYTES, KEM_CIPHERTEXT_BYTES, MIN_CIPHERTEXT_BYTES,
-    NONCE_BYTES, PROTOCOL_VERSION, SUITE_AEAD_AES256GCM, SUITE_KEM_HYBRID_X25519_MLKEM768,
+    AEAD_TAG_BYTES, HEADER_BYTES, KEM_CIPHERTEXT_BYTES, MIN_CIPHERTEXT_BYTES, NONCE_BYTES,
+    SUITE_AEAD_AES256GCM, SUITE_KEM_HYBRID_X25519_MLKEM768,
 };
 
 #[test]
@@ -26,15 +26,21 @@ fn test_wire_format_structure() {
         .seal(&pk, b"test", &Aad::empty(), &Context::empty())
         .unwrap();
 
-    let parts = wire::decode_wire(&ct).unwrap();
-    assert_eq!(parts.version, PROTOCOL_VERSION);
-    assert_eq!(parts.suite_kem, SUITE_KEM_HYBRID_X25519_MLKEM768);
-    assert_eq!(parts.suite_aead, SUITE_AEAD_AES256GCM);
-    assert_eq!(parts.flags, FLAGS_V1);
-    assert_eq!(parts.kem_ct_len as usize, KEM_CIPHERTEXT_BYTES);
-    assert_eq!(parts.kem_ciphertext.len(), 1120);
-    assert_eq!(parts.nonce.len(), 12);
-    assert!(parts.aead_ciphertext.len() >= 16);
+    assert!(ct.starts_with(b"CTD2"));
+    assert_eq!(ct[4], 2);
+    assert_eq!(ct[5], 0);
+    assert_eq!(ct[6], SUITE_KEM_HYBRID_X25519_MLKEM768);
+    assert_eq!(ct[7], 0xC1);
+    assert_eq!(ct[8], SUITE_AEAD_AES256GCM);
+    assert_eq!(u16::from_be_bytes([ct[10], ct[11]]), 98);
+    assert_eq!(
+        u16::from_be_bytes([ct[12], ct[13]]) as usize,
+        KEM_CIPHERTEXT_BYTES
+    );
+    let info = inspect(&ct).unwrap();
+    assert_eq!(info.version, 2);
+    assert!(!info.streaming);
+    assert_eq!(info.plaintext_bytes, 4);
 }
 
 #[test]
@@ -45,7 +51,7 @@ fn test_minimum_ciphertext_roundtrip() {
     let ct = citadel
         .seal(&pk, b"", &Aad::empty(), &Context::empty())
         .unwrap();
-    assert_eq!(ct.len(), MIN_CIPHERTEXT_BYTES);
+    assert_eq!(ct.len(), 98 + KEM_CIPHERTEXT_BYTES + AEAD_TAG_BYTES);
 
     let pt = citadel
         .open(&sk, &ct, &Aad::empty(), &Context::empty())

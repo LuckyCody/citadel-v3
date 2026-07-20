@@ -3,7 +3,7 @@ name = "citadel-envelope"
 version = "0.2.0"
 edition = "2021"
 rust-version = "1.74"
-description = "Citadel Envelope v1: X25519 + ML-KEM-768 hybrid post-quantum encryption with AES-256-GCM"
+description = "Citadel Envelope v2: X25519 + ML-KEM-768 hybrid encryption with AES-256-GCM"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/mrcord77/rust_citadel"
 keywords = ["cryptography", "post-quantum", "encryption", "ml-kem", "hybrid"]
@@ -14,15 +14,11 @@ name = "citadel_envelope"
 path = "src/lib.rs"
 
 [dependencies]
-# ML-KEM-768 (FIPS 203) — PQClean reference implementation.
-# Switched from libcrux-ml-kem 0.0.9 after dudect validation found
-# key-material-dependent timing in libcrux decapsulation (|t|=19.5).
-# PQClean passed 3/3 independent key-A-vs-key-B runs (|t| < 4.5).
-# See PROVIDER_DECISION_LOG.md for rollback instructions.
-# Exact pin: any cryptographic provider upgrade must be revalidated
-# with the dudect timing suite.
-pqcrypto-mlkem = { version = "=0.1.1", default-features = false }
-pqcrypto-traits = { version = "=0.3.5", default-features = false }
+# ML-KEM-768 (FIPS 203) — selected RustCrypto release provider.
+# Exact pin with zeroization and system randomness; deterministic access is
+# exposed only through the KAT feature for final-standard vectors.
+# See PROVIDER_BAKEOFF_2026.md and PROVIDER_DECISION_LOG.md.
+ml-kem = { version = "=0.3.2", default-features = false, features = ["getrandom", "zeroize"] }
 
 # X25519 ECDH - classical KEM for hybrid defense-in-depth
 x25519-dalek = { version = "2", features = ["static_secrets"] }
@@ -44,6 +40,10 @@ getrandom = "0.2"
 # Memory zeroing for sensitive data
 zeroize = { version = "1.7", features = ["derive"] }
 
+# Comparison-only AWS-LC provider. Optional so ordinary workspace tests and
+# production builds do not compile it; enable only for the standalone provider bench.
+aws-lc-rs = { version = "1.17", features = ["unstable"], optional = true }
+
 [dev-dependencies]
 hex = "0.4"
 rand = "0.8"
@@ -56,18 +56,47 @@ dudect-bencher = "0.6.0"
 # Previous ML-KEM provider — kept for comparison benches only.
 # See PROVIDER_DECISION_LOG.md for why it was replaced.
 libcrux-ml-kem = { version = "=0.0.9", default-features = false, features = ["mlkem768"] }
+# Screening-only fourth candidate: direct deterministic API plus an upstream
+# dudect harness. It is not part of production unless every frozen gate passes.
+fips203 = { version = "=0.4.3", default-features = false, features = ["ml-kem-768"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-aws-lc-rs = { version = "1.17", features = ["unstable"] }
 
 [features]
 default = []
 # Deterministic mode for Known Answer Tests - NEVER use in production
-kat = []
+kat = ["ml-kem/hazmat"]
 # Enable criterion benchmarks: cargo bench --features bench
 bench = []
+# Explicit opt-in for the AWS-LC comparison path. Never selected by default.
+aws-lc-comparison = ["dep:aws-lc-rs"]
+# Compatibility-only V2 streaming API. New integrations must use stream_v3.
+legacy-stream-v2 = []
+# Compatibility-only creation of historical envelope v1 fixtures. Default
+# production builds can decrypt v1 but cannot create new v1 envelopes.
+legacy-envelope-v1 = []
 # Enable std features
 std = []
+
+[[test]]
+name = "streaming"
+path = "tests/streaming.rs"
+required-features = ["legacy-stream-v2"]
+
+[[test]]
+name = "production_mlkem_acvp"
+path = "tests/production_mlkem_acvp.rs"
+required-features = ["kat"]
+
+[[test]]
+name = "migration_v1"
+path = "tests/migration_v1.rs"
+required-features = ["legacy-envelope-v1"]
+
+[[test]]
+name = "v2_vector"
+path = "tests/v2_vector.rs"
+required-features = ["kat"]
 
 [[bench]]
 name = "timing"
@@ -80,6 +109,7 @@ harness = false
 [[bench]]
 name = "mlkem_standalone"
 harness = false
+required-features = ["aws-lc-comparison"]
 
 [[bench]]
 name = "comparative"

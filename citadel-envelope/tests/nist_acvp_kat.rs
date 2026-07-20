@@ -1,15 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! NIST ACVP KAT-adjacent tests for ML-KEM-768 and the hybrid envelope.
 //!
-//! ## Coverage tier: Full (Tier 1) via libcrux dev provider
+//! ## Coverage tier: structural and envelope behavior
 //!
-//! The production provider (PQClean) does not expose deterministic seed-based
-//! keygen, so full ACVP vectors are validated through the libcrux dev
-//! dependency instead (see acvp_libcrux_kat.rs: 60/60 vectors byte-identical
-//! to NIST reference). Both providers implement the same FIPS 203 ML-KEM-768
-//! algorithm, so ACVP validation through libcrux confirms algorithmic
-//! correctness. PQClean correctness is further confirmed by round-trip and
-//! structural tests in this file.
+//! Full ACVP vectors now run directly through the selected RustCrypto release
+//! provider in `production_mlkem_acvp.rs`. The libcrux test remains as an
+//! independent differential implementation. This file exercises hybrid-envelope
+//! structure, negative behavior, sizes, AAD, and context binding.
 //!
 //! This file covers:
 //!   1. Round-trip correctness (100 independent keypairs).
@@ -19,11 +16,11 @@
 //!   5. AAD and context binding enforcement.
 //!
 //! See also:
-//!   - acvp_libcrux_kat.rs: 60 NIST ACVP vectors (25 keygen, 25 encap, 10 decap)
+//!   - production_mlkem_acvp.rs: direct production-provider vectors and 10,000 round trips
+//!   - acvp_libcrux_kat.rs: independent differential vectors
 //!   - primitive_kat.rs: HKDF, AES-GCM, SHA3, X25519 KATs from NIST/RFC
 
-use citadel_envelope::wire;
-use citadel_envelope::{Aad, Citadel, Context};
+use citadel_envelope::{wire, Aad, Citadel, Context};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ML-KEM-768 structural validation (FIPS 203 Section 7)
@@ -68,18 +65,19 @@ fn mlkem768_ciphertext_size_matches_fips203() {
         .seal(&pk, b"test", &Aad::empty(), &Context::empty())
         .unwrap();
 
-    // Wire format: header[6] + kem_ct[1120] + nonce[12] + aead_ct[4+16] = 1158
+    // V2 wire: header[98] + kem_ct[1120] + aead_ct[4+16] = 1238.
     // KEM ciphertext = X25519 ephemeral[32] + ML-KEM ct[1088] = 1120
-    let parts = wire::decode_wire(&ct).unwrap();
+    assert!(ct.starts_with(b"CTD2"));
+    let kem_ciphertext = &ct[98..1218];
     assert_eq!(
-        parts.kem_ciphertext.len(),
+        kem_ciphertext.len(),
         1120,
         "Hybrid KEM ciphertext must be X25519[32] + ML-KEM-768[1088] = 1120, got {}",
-        parts.kem_ciphertext.len()
+        kem_ciphertext.len()
     );
 
     // Verify ML-KEM-768 ct portion is exactly 1088 bytes
-    let mlkem_ct = &parts.kem_ciphertext[32..];
+    let mlkem_ct = &kem_ciphertext[32..];
     assert_eq!(
         mlkem_ct.len(),
         1088,
