@@ -537,7 +537,7 @@ fn bench_stage_mlkem_secret_bit_balanced_success(
     while left_indices.len() < PER_CLASS || right_indices.len() < PER_CLASS {
         let (_, random_sk) = cit.generate_keypair();
         let random_sk_bytes = random_sk.to_bytes();
-        let mut isolated_sk_bytes = fixed_sk_bytes.clone();
+        let mut isolated_sk_bytes = fixed_sk_bytes;
         isolated_sk_bytes[private_start..private_end]
             .copy_from_slice(&random_sk_bytes[private_start..private_end]);
         let is_left = isolated_sk_bytes[private_start + mlkem_secret_offset] & mask == 0;
@@ -607,7 +607,7 @@ fn bench_stage_mlkem_multikey_random_label_control(runner: &mut CtRunner, rng: &
     for index in 0..(PER_CLASS * 2) {
         let (_, random_sk) = cit.generate_keypair();
         let random_sk_bytes = random_sk.to_bytes();
-        let mut isolated_sk_bytes = fixed_sk_bytes.clone();
+        let mut isolated_sk_bytes = fixed_sk_bytes;
         isolated_sk_bytes[private_start..private_end]
             .copy_from_slice(&random_sk_bytes[private_start..private_end]);
         let sk = SecretKey::from_bytes(&isolated_sk_bytes)
@@ -1192,7 +1192,7 @@ fn run_independent_isolated_sample(mode: &str, count: usize, output: &PathBuf) {
     while left_indices.len() < PER_CLASS || right_indices.len() < PER_CLASS {
         let (_, random_sk) = cit.generate_keypair();
         let random_sk_bytes = random_sk.to_bytes();
-        let mut isolated_sk_bytes = fixed_sk_bytes.clone();
+        let mut isolated_sk_bytes = fixed_sk_bytes;
         isolated_sk_bytes[private_start..private_end]
             .copy_from_slice(&random_sk_bytes[private_start..private_end]);
         let is_left = isolated_sk_bytes[private_start + MLKEM_DKPKE_BYTES - 1] & 0x80 == 0;
