@@ -272,6 +272,22 @@ impl Citadel {
         self.inner
             .decrypt(sk, ciphertext, aad.as_bytes(), context.as_bytes())
     }
+
+    /// Create a historical envelope-v1 ciphertext for controlled migrations.
+    ///
+    /// This API is absent from default builds. It requires the explicit
+    /// `legacy-envelope-v1` feature; new application data must use [`Self::seal`].
+    #[cfg(feature = "legacy-envelope-v1")]
+    pub fn seal_v1_compat(
+        &self,
+        pk: &PublicKey,
+        plaintext: &[u8],
+        aad: &Aad,
+        context: &Context,
+    ) -> Result<Vec<u8>, SealError> {
+        self.inner
+            .encrypt_v1_compat(pk, plaintext, aad.as_bytes(), context.as_bytes())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +297,7 @@ impl Citadel {
 /// Ciphertext metadata (extracted without decryption).
 #[derive(Debug, Clone)]
 pub struct CiphertextInfo {
-    /// Protocol version (0x01 = standard envelope, 0x02 = streaming)
+    /// Protocol version (1 = historical envelope, 2 = current envelope or legacy stream)
     pub version: u8,
     /// KEM suite identifier
     pub kem_suite: &'static str,
@@ -321,10 +337,8 @@ impl fmt::Display for CiphertextInfo {
 
 /// Inspect ciphertext metadata without decrypting.
 ///
-/// Handles both V1 standard envelopes (version = 0x01) and V2 streaming headers
-/// (version = 0x02). Returns `CiphertextInfo` with `streaming = true` for the
-/// latter; `plaintext_bytes` will be 0 since stream chunk sizes are not available
-/// from the header alone.
+/// Handles v2 envelopes, historical v1 envelopes, and legacy v2 stream headers.
+/// Returns `streaming = true` only for the legacy stream form.
 ///
 /// Does NOT reveal any secret information.
 pub fn inspect(ciphertext: &[u8]) -> Result<CiphertextInfo, OpenError> {
@@ -333,7 +347,21 @@ pub fn inspect(ciphertext: &[u8]) -> Result<CiphertextInfo, OpenError> {
         STREAM_VERSION, SUITE_AEAD_AES256GCM, SUITE_KEM_HYBRID_X25519_MLKEM768,
     };
 
-    // Route on the version byte without consuming the data.
+    // Envelope v2 has a complete magic discriminator. It must be checked before
+    // the historical byte-based stream-v2 dispatch.
+    if ciphertext.starts_with(crate::wire_v2::MAGIC) {
+        let parts = crate::wire_v2::decode(ciphertext)?;
+        return Ok(CiphertextInfo {
+            version: crate::wire_v2::VERSION,
+            kem_suite: "X25519+ML-KEM-768",
+            aead_suite: "AES-256-GCM",
+            total_bytes: ciphertext.len(),
+            plaintext_bytes: parts.plaintext_len,
+            streaming: false,
+        });
+    }
+
+    // Route legacy formats on the version byte without consuming the data.
     let version_byte = ciphertext.first().copied().ok_or(OpenError)?;
 
     if version_byte == STREAM_VERSION {
@@ -397,8 +425,14 @@ pub fn inspect(ciphertext: &[u8]) -> Result<CiphertextInfo, OpenError> {
 /// SDK version string.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Protocol version (wire format).
+/// Historical envelope-v1 protocol version retained for API compatibility.
 pub const PROTOCOL_VERSION: u8 = 0x01;
 
-/// Minimum ciphertext size in bytes.
+/// Historical envelope-v1 minimum ciphertext size retained for compatibility.
 pub const MIN_CIPHERTEXT_BYTES: usize = crate::wire::MIN_CIPHERTEXT_BYTES;
+
+/// Current default non-streaming envelope version.
+pub const ENVELOPE_VERSION: u8 = crate::wire_v2::VERSION;
+
+/// Minimum current envelope-v2 size (empty plaintext).
+pub const MIN_ENVELOPE_V2_BYTES: usize = crate::wire_v2::MIN_ENVELOPE_LEN;

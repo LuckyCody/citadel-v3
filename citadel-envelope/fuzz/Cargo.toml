@@ -26,3 +26,15 @@ name = "decrypt_full"
 path = "fuzz_targets/decrypt_full.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "decode_envelope_v2"
+path = "fuzz_targets/decode_envelope_v2.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "decrypt_v2_mutation"
+path = "fuzz_targets/decrypt_v2_mutation.rs"
+test = false
+doc = false

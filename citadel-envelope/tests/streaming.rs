@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+#![allow(deprecated)] // This suite intentionally validates the feature-gated legacy API.
 //! Tests for streaming authenticated encryption (V2 — P046).
 
 use citadel_envelope::stream::{StreamDecryptor, StreamEncryptor};
@@ -246,6 +247,7 @@ fn inspect_stream_header_succeeds() {
 }
 
 #[test]
+#[cfg(feature = "legacy-envelope-v1")]
 fn inspect_v1_envelope_still_works() {
     // Regression: inspect() must still work correctly on V1 envelopes.
     use citadel_envelope::{inspect, wire::MIN_CIPHERTEXT_BYTES, Citadel};
@@ -253,7 +255,7 @@ fn inspect_v1_envelope_still_works() {
     let (pk, _sk) = setup();
     let cit = Citadel::new();
     let ct = cit
-        .seal(&pk, b"hello", &Aad::raw(b"a"), &Context::raw(b"c"))
+        .seal_v1_compat(&pk, b"hello", &Aad::raw(b"a"), &Context::raw(b"c"))
         .unwrap();
 
     let info = inspect(&ct).expect("inspect() should work on V1 envelope");

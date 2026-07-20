@@ -188,6 +188,17 @@ pub fn decode_wire(data: &[u8]) -> Result<WireComponents<'_>, DecryptionError> {
     Ok(c)
 }
 
+/// Return the authenticated nonce field from a non-streaming v1 or v2 envelope.
+///
+/// Adjacent components must use this helper instead of freezing a
+/// version-specific byte offset into replay or audit logic.
+pub fn envelope_nonce(data: &[u8]) -> Result<&[u8; NONCE_BYTES], DecryptionError> {
+    if data.starts_with(crate::wire_v2::MAGIC) {
+        return Ok(crate::wire_v2::decode(data)?.nonce);
+    }
+    Ok(decode_wire(data)?.nonce)
+}
+
 pub fn encode_wire(
     kem_ct: &[u8],
     nonce: &[u8; NONCE_BYTES],

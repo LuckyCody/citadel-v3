@@ -188,8 +188,6 @@ fn timing_truncated_vs_full_bad() {
 
 #[test]
 fn nonce_uniqueness_under_volume() {
-    use citadel_envelope::wire;
-
     let (cit, pk, _sk) = setup();
     let aad = Aad::raw(b"aad");
     let ctx = Context::raw(b"ctx");
@@ -201,8 +199,8 @@ fn nonce_uniqueness_under_volume() {
     for i in 0..count {
         let plaintext = format!("message-{}", i);
         let ct = cit.seal(&pk, plaintext.as_bytes(), &aad, &ctx).unwrap();
-        let parts = wire::decode_wire(&ct).expect("wire decode failed");
-        let nonce = parts.nonce.to_vec();
+        assert!(ct.starts_with(b"CTD2"));
+        let nonce = ct[86..98].to_vec();
         if !nonces.insert(nonce) {
             collisions += 1;
         }
@@ -222,8 +220,6 @@ fn nonce_uniqueness_under_volume() {
 #[test]
 fn nonce_uniqueness_multiple_keypairs() {
     // Nonces should also be unique across different keypairs using the same plaintext
-    use citadel_envelope::wire;
-
     let count = 1_000;
     let mut nonces: HashSet<Vec<u8>> = HashSet::with_capacity(count);
 
@@ -238,8 +234,8 @@ fn nonce_uniqueness_multiple_keypairs() {
                 &Context::raw(b"ctx"),
             )
             .unwrap();
-        let parts = wire::decode_wire(&ct).expect("wire decode");
-        nonces.insert(parts.nonce.to_vec());
+        assert!(ct.starts_with(b"CTD2"));
+        nonces.insert(ct[86..98].to_vec());
     }
 
     // All nonces should be unique

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use citadel_envelope::wire::{
-    FLAGS_V1, HEADER_BYTES, KEM_CIPHERTEXT_BYTES, MIN_CIPHERTEXT_BYTES, PROTOCOL_VERSION,
-    SUITE_AEAD_AES256GCM, SUITE_KEM_HYBRID_X25519_MLKEM768,
+    KEM_CIPHERTEXT_BYTES, MIN_CIPHERTEXT_BYTES, SUITE_AEAD_AES256GCM,
+    SUITE_KEM_HYBRID_X25519_MLKEM768,
 };
 use citadel_envelope::{Aad, Citadel, Context, OpenError, PublicKey, SecretKey};
 
@@ -83,11 +83,12 @@ fn header_version_check() {
     let aad = Aad::raw(b"aad");
     let ctx = Context::raw(b"ctx");
     let ct = cit.seal(&pk, b"data", &aad, &ctx).unwrap();
-    assert_eq!(ct[0], PROTOCOL_VERSION);
-    assert_eq!(ct[1], SUITE_KEM_HYBRID_X25519_MLKEM768);
-    assert_eq!(ct[2], SUITE_AEAD_AES256GCM);
-    assert_eq!(ct[3], FLAGS_V1);
-    let kem_ct_len = u16::from_be_bytes([ct[4], ct[5]]);
+    assert_eq!(&ct[..4], b"CTD2");
+    assert_eq!(ct[4], 2);
+    assert_eq!(ct[5], 0);
+    assert_eq!(ct[6], SUITE_KEM_HYBRID_X25519_MLKEM768);
+    assert_eq!(ct[8], SUITE_AEAD_AES256GCM);
+    let kem_ct_len = u16::from_be_bytes([ct[12], ct[13]]);
     assert_eq!(kem_ct_len as usize, KEM_CIPHERTEXT_BYTES);
 }
 
@@ -116,7 +117,7 @@ fn tamper_suite_kem_fails() {
     let aad = Aad::raw(b"aad");
     let ctx = Context::raw(b"ctx");
     let mut ct = cit.seal(&pk, b"data", &aad, &ctx).unwrap();
-    ct[1] = 0xA2; // old ML-KEM-only suite ID
+    ct[6] = 0xA2; // old ML-KEM-only suite ID
     assert_eq!(cit.open(&sk, &ct, &aad, &ctx), Err(OpenError));
 }
 
@@ -126,7 +127,7 @@ fn tamper_kem_ciphertext_fails() {
     let aad = Aad::raw(b"aad");
     let ctx = Context::raw(b"ctx");
     let mut ct = cit.seal(&pk, b"data", &aad, &ctx).unwrap();
-    ct[HEADER_BYTES + 10] ^= 0x01;
+    ct[98 + 10] ^= 0x01;
     assert_eq!(cit.open(&sk, &ct, &aad, &ctx), Err(OpenError));
 }
 
@@ -136,7 +137,7 @@ fn tamper_nonce_fails() {
     let aad = Aad::raw(b"aad");
     let ctx = Context::raw(b"ctx");
     let mut ct = cit.seal(&pk, b"data", &aad, &ctx).unwrap();
-    let nonce_offset = HEADER_BYTES + KEM_CIPHERTEXT_BYTES;
+    let nonce_offset = 86;
     ct[nonce_offset] ^= 0x01;
     assert_eq!(cit.open(&sk, &ct, &aad, &ctx), Err(OpenError));
 }
@@ -175,7 +176,7 @@ fn all_errors_are_uniform() {
     let err3 = cit.open(&sk, b"short", &aad, &ctx).unwrap_err();
 
     let mut tampered = ct.clone();
-    tampered[HEADER_BYTES] ^= 0x01;
+    tampered[98] ^= 0x01;
     let err4 = cit.open(&sk, &tampered, &aad, &ctx).unwrap_err();
 
     // All errors must be identical
