@@ -1,33 +1,45 @@
-=== Tier 2b: supply-chain — 2026-07-20 (Ubuntu WSL2) ===
-Tools: cargo deny check, cargo audit, cargo vet   (condensed; re-run via run.sh tier2b)
+=== Tier 2b: supply-chain (post-fix) — 2026-07-20, Ubuntu WSL2 ===
+libcrux dev-oracle bumped 0.0.9 -> 0.0.10 (fixes RUSTSEC-2026-0207/0208/0212).
+Policy + accepted-visible warnings documented in SUPPLY_CHAIN.md. No per-ID ignore.
 
---- cargo audit: 3 vulnerabilities found (all HIGH, severity 8.2) ---
-RUSTSEC-2026-0212  libcrux-secrets 0.0.5  Incorrect CT swap/select on aarch64   -> fix >=0.0.6
-RUSTSEC-2026-0207  libcrux-sha3   0.0.9   Incorrect incremental SHAKE output    -> fix >=0.0.10
-RUSTSEC-2026-0208  libcrux-sha3   0.0.9   AVX2 SHAKE-256 potential panic        -> fix >=0.0.10
+--- cargo audit (gate: fail on vulnerabilities only) ---
+    Fetching advisory database from `https://github.com/RustSec/advisory-db.git`
+      Loaded 1166 security advisories (from /home/andre/.cargo/advisory-db)
+    Updating crates.io index
+    Scanning Cargo.lock for vulnerabilities (321 crate dependencies)
+Crate:     ansi_term
+Version:   0.12.1
+Warning:   unmaintained
+Title:     ansi_term is Unmaintained
+Date:      2021-08-18
+ID:        RUSTSEC-2021-0139
+URL:       https://rustsec.org/advisories/RUSTSEC-2021-0139
 
-Plus warnings (unmaintained): ansi_term, atty, proc-macro-error2 (all via dev tooling
-chains: dudect-bencher / hax-lib).
+Crate:     atty
+Version:   0.2.14
+Warning:   unmaintained
+Title:     `atty` is unmaintained
+Date:      2024-09-25
+ID:        RUSTSEC-2024-0375
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0375
 
---- KEY ANALYSIS: shipped vs test-only ---
-All three HIGH advisories arrive through:
-    libcrux-ml-kem 0.0.9  --> (dev)-dependency of citadel-envelope
-i.e. the libcrux DIFFERENTIAL-TEST ORACLE, NOT the production provider.
-Production ML-KEM provider is RustCrypto ml-kem 0.3.2 (clean).
-- RUSTSEC-2026-0207/0208 explicitly "does not impact the use in libcrux-ml-kem or ML-DSA".
-- RUSTSEC-2026-0212 is aarch64-only; dev/CI host is x86-64.
-=> No vulnerable code SHIPS in the production binary.
+Crate:     proc-macro-error2
+Version:   2.0.1
+Warning:   unmaintained
+Title:     proc-macro-error2 is unmaintained
+Date:      2026-06-07
+ID:        RUSTSEC-2026-0173
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0173
 
---- cargo deny check ---
-advisories FAILED (same 3 + unmaintained), bans ok, licenses ok, sources ok.
-Numerous duplicate-crate warnings (block-buffer, cpufeatures, digest, getrandom,
-rand_core, sha3, tower) from the newer digest/rand ecosystem (ml-dsa/libcrux) coexisting
-with the older one — hygiene, not vulnerabilities.
+Crate:     atty
+Version:   0.2.14
+Warning:   unsound
+Title:     Potential unaligned read
+Date:      2021-07-04
+ID:        RUSTSEC-2021-0145
+URL:       https://rustsec.org/advisories/RUSTSEC-2021-0145
 
---- cargo vet ---
-Large unaudited backlog (~2.3M lines) — expected; importing mozilla/google/bytecode-
-alliance audit sets eliminates most. Config task, not a risk signal.
+warning: 4 allowed warnings found
 
-REQUIRED ACTION (auditor optics): bump libcrux dev-dep >=0.0.10, OR scope dev-deps out
-of the advisory gate in deny.toml/audit config with written rationale. Nothing to fix in
-shipped code.
+--- cargo deny check advisories ---
+advisories ok

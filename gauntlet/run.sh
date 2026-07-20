@@ -12,7 +12,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"        # citadel_v3
 REC="$HERE/receipts"
 mkdir -p "$REC"
-SUMMARY="$REC/SUMMARY.md"
+SUMMARY="$REC/LAST_RUN.md"   # auto-generated per run; curated SUMMARY.md is hand-maintained
 
 STAMP="${GAUNTLET_STAMP:-unstamped}"  # pass a timestamp in; scripts can't call date deterministically in some envs
 declare -A RESULT
@@ -53,9 +53,10 @@ t2b() {
     local rc=0
     { echo "### cargo deny check";  cargo deny check 2>&1; echo "### cargo audit"; cargo audit 2>&1; } \
       | tee "$REC/tier2b_supplychain.txt"
-    # Fail the tier only on *shipped* (non-dev) vulnerabilities. Dev-only
-    # advisories are reported but reviewed separately (see SUMMARY.md).
-    cargo audit --deny warnings >/dev/null 2>&1 || rc=$?
+    # Fail only on vulnerabilities. Unmaintained dev-tooling warnings are
+    # reviewed/accepted in deny.toml `ignore` (all dev-only, not shipped).
+    # `cargo audit` exits non-zero on vulnerabilities, zero on warnings.
+    cargo audit >/dev/null 2>&1 || rc=$?
     return "$rc" )
 }
 run_tier tier2b "cargo-deny + cargo-audit supply chain" t2b

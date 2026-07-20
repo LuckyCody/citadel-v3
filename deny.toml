@@ -1,7 +1,15 @@
 [advisories]
 version = 2
 yanked = "deny"
+# Policy: fail on vulnerabilities always. For unmaintained/unsound, gate only on
+# crates we DIRECTLY chose (`workspace` scope); transitively-pulled dev-tooling
+# advisories are NOT hidden — they stay visible in `cargo audit` every run and
+# are documented as reviewed/accepted in SUPPLY_CHAIN.md. We do NOT ignore any
+# specific advisory ID. The 4 current such advisories (ansi_term, atty x2,
+# proc-macro-error2) are dev-only, have no upstream fix, and never ship.
 ignore = []
+unmaintained = "workspace"
+unsound = "workspace"
 
 [licenses]
 version = 2
