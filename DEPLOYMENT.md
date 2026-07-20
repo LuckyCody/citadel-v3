@@ -1,5 +1,64 @@
 # Citadel Production Deployment Guide
 
+## Linux local-pilot custody profile
+
+Packet 008 adds a hardened single-host profile that removes the root wrapping
+key from environment variables. This profile is the supported zero-budget pilot
+path; it does **not** claim HSM, TPM, non-exportability, FIPS validation, or
+independent review.
+
+The provider accepts exactly one 32-byte raw file. It opens with `O_NOFOLLOW`,
+requires a regular file owned by the effective service user with owner-read
+permission and no group/world permissions (`0400` or `0600`), requires one hard link,
+checks the parent directory, and fails closed on length, ownership, permissions,
+or symlink errors. Keep the provider file on the Ubuntu filesystem (for example
+`/var/lib/citadel`), not on `/mnt/c`.
+
+```bash
+cd /path/to/citadel_v3
+bash scripts/linux_root_custody_preflight.sh
+
+install -d -m 0700 "$HOME/.local/share/citadel-custody"
+cargo run -p citadel-keystore --bin citadel-root-key -- \
+  init "$HOME/.local/share/citadel-custody/root.key"
+cargo run -p citadel-keystore --bin citadel-root-key -- \
+  check "$HOME/.local/share/citadel-custody/root.key"
+
+export CITADEL_PROFILE=local-pilot
+export CITADEL_ROOT_KEY_FILE="$HOME/.local/share/citadel-custody/root.key"
+export CITADEL_ENV=pilot
+export CITADEL_REPLAY_STORE=file
+
+cargo run -p citadel-api --bin hash-apikey -- --generate
+export CITADEL_API_KEY_HASH=<HASH value from the command>
+cargo run -p citadel-api
+```
+
+Local-pilot startup rejects `CITADEL_MASTER_KEY`, `CITADEL_API_KEY`,
+`CITADEL_ALLOW_PLAINTEXT_KEYS`, `CITADEL_ALLOW_FLAT_DEKS`, and
+`CITADEL_ENV=development`. The replay store must be `file` or `redis`.
+
+### Recovery and rotation boundary
+
+- Back up the **root provider file separately**, offline, with owner-only access.
+  Metadata backups intentionally do not contain it.
+- A metadata backup can be verified/restored only with the same provider key;
+  tests prove a different provider fails authentication.
+- Logical Citadel root keys can rotate normally while remaining wrapped by this
+  provider. Replacing the provider file itself is **not an online rotation**:
+  existing `enc:` material and backups become unreadable. Provider-key rewrap is
+  not implemented in this packet, so retain the old provider and never replace
+  it in place.
+- The key is exportable and enters zeroizing process memory. A host/root process
+compromise can obtain it. Use an external KMS/HSM provider for a higher-assurance
+  deployment when budget and integration authority are available.
+- Linux `O_NOFOLLOW` protects the final path component; the configured parent
+  path must therefore also be administrator-controlled. The provider checks its
+  immediate parent, but does not claim kernel-enforced resolution beneath a
+  pre-opened directory descriptor.
+
+---
+
 ## What Changed (Tier 1 Security Hardening)
 
 Three security gaps closed in this release:
@@ -305,6 +364,16 @@ The key is configured via CITADEL_API_KEY_HASH and stored in api-keys.json.
 1. Implement and test API key rotation (generate new key, update hash, verify old key rejected)
 2. Define scope enforcement rules per route
 3. Test multi-key scenarios before production deployment
+
+### Timing-sensitive host profile
+
+Citadel's fixed-server-key remote timing classes pass the current statistical
+screen, but local/co-resident key-value timing independence is not established.
+Deployments whose threat model includes a hostile local tenant should use a
+dedicated host, prevent untrusted co-resident execution, and disable CPU
+frequency boost using the host's supported controls. The WSL validation host
+does not prove those production host controls. Do not claim physical
+side-channel resistance or universally constant execution.
 
 ### FileReplayStore growth
 FileReplayStore is append-only. It does not evict expired entries from disk.

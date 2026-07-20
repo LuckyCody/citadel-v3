@@ -35,13 +35,13 @@ hkdf = "0.12"
 zeroize = { version = "1.7", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
+libc = "0.2"
 # Optional: Redis-backed distributed replay store (P078)
 redis = { version = "0.25", optional = true }
 # ML-DSA (NIST FIPS 204) — post-quantum digital signatures (P361/P364)
 # Pin exact — same philosophy as ml-kem pin. Any upgrade is an explicit reviewed decision.
 # Not yet independently audited; same experimental status as ml-kem at integration time.
 # Requires Rust 1.85+ (rust-version updated accordingly).
-ml-dsa = { version = "=0.1.0-rc.9", default-features = false, features = ["alloc", "rand_core"] }
 # P372: citadel-signer is the single ML-DSA algorithm surface — keystore delegates to it.
 # This eliminates the duplicate signing path that existed in keystore.rs directly.
 citadel-signer = { path = "../citadel-signer" }

@@ -44,6 +44,7 @@ pub mod policy;
 )]
 pub mod replay;
 pub mod replay_store;
+pub mod root_key_provider;
 pub mod sharded_replay_cache; // P006
 pub mod storage;
 pub mod threat;
@@ -53,7 +54,10 @@ pub use audit::{
     AuditEvent, AuditSinkSync, FileAuditSink, InMemoryAuditSink, IntegrityChainSink,
     TracingAuditSink,
 };
-pub use backup::{create_backup, restore_backup, verify_backup};
+pub use backup::{
+    create_backup, create_backup_with_provider, restore_backup, restore_backup_with_provider,
+    verify_backup, verify_backup_with_provider,
+};
 pub use doctor::{run_all_checks, CheckStatus, DoctorCheck, DoctorReport};
 pub use error::{
     CascadeError, DecryptError, DestroyDecision, EncryptError, ExpirationDecision,
@@ -75,6 +79,9 @@ pub use policy::{KeyPolicy, PolicyVerdict, RotationTrigger};
 pub use replay_store::{
     derive_replay_key, FileReplayStore, MemoryReplayStore, RedisReplayStore, ReplayError,
     ReplayStore,
+};
+pub use root_key_provider::{
+    LinuxFileRootKeyProvider, LocalPilotConfig, RootKeyCapabilities, RootKeyError, RootKeyProvider,
 };
 pub use storage::{FileBackend, InMemoryBackend, StorageBackend};
 pub use threat::{
@@ -267,6 +274,98 @@ mod tests {
         let blob = ks.encrypt(&dek_id, b"hello v3", &aad, &ctx).await.unwrap();
         let pt = ks.decrypt(&blob, &aad, &ctx).await.unwrap();
         assert_eq!(pt, b"hello v3");
+    }
+
+    /// Strict enforcement is an operation-time boundary, not merely a background
+    /// lifecycle transition. Non-strict policy preserves recipient processing of
+    /// existing ciphertext, as permitted by NIST SP 800-57.
+    #[tokio::test]
+    async fn test_decrypt_cryptoperiod_respects_strict_enforcement_mode() {
+        let master_key = [0xACu8; 32];
+        let storage = Arc::new(InMemoryBackend::new());
+        let audit = Arc::new(InMemoryAuditSink::new());
+        let mut ks = Keystore::with_master_key(
+            storage.clone() as Arc<dyn StorageBackend>,
+            audit as Arc<dyn AuditSinkSync>,
+            master_key,
+        );
+
+        let policy_id = PolicyId::new("test-enforced-decrypt-cryptoperiod");
+        ks.register_policy(KeyPolicy {
+            id: policy_id.clone(),
+            name: "Test enforced decrypt cryptoperiod".into(),
+            applies_to: vec![KeyType::DataEncrypting],
+            rotation_triggers: vec![],
+            rotation_grace_period: Duration::from_secs(30),
+            max_lifetime: Some(Duration::from_secs(60)),
+            max_usage_count: None,
+            auto_rotate: false,
+            min_versions_retained: 1,
+            enforce_cryptoperiod: true,
+        });
+
+        let root = ks
+            .generate("root", KeyType::Root, None, None)
+            .await
+            .unwrap();
+        ks.activate(&root).await.unwrap();
+        let domain = ks
+            .generate("domain", KeyType::Domain, None, Some(root))
+            .await
+            .unwrap();
+        ks.activate(&domain).await.unwrap();
+        let kek = ks
+            .generate("kek", KeyType::KeyEncrypting, None, Some(domain))
+            .await
+            .unwrap();
+        ks.activate(&kek).await.unwrap();
+        let dek = ks
+            .generate(
+                "dek",
+                KeyType::DataEncrypting,
+                Some(policy_id.clone()),
+                Some(kek),
+            )
+            .await
+            .unwrap();
+        ks.activate(&dek).await.unwrap();
+
+        let aad = Aad::raw(b"cryptoperiod-aad");
+        let ctx = Context::raw(b"cryptoperiod-context");
+        let blob = ks
+            .encrypt(&dek, b"must not decrypt after expiration", &aad, &ctx)
+            .await
+            .unwrap();
+
+        // Simulate passage beyond the policy lifetime while leaving lifecycle
+        // state Active, which is the interval between expiry and a sweeper run.
+        let mut meta = storage.get(&dek).unwrap().unwrap();
+        meta.activated_at = Some(chrono::Utc::now() - chrono::Duration::days(40));
+        storage.put(&meta).unwrap();
+
+        let result = ks.decrypt(&blob, &aad, &ctx).await;
+        assert!(
+            result.is_err(),
+            "decrypt must fail at operation time when an enforced cryptoperiod has elapsed"
+        );
+
+        // Re-register the same policy without strict enforcement. The failed
+        // strict-mode attempt occurs before replay claim, so the same valid blob
+        // must remain processable under the explicit recipient-usage choice.
+        ks.register_policy(KeyPolicy {
+            id: policy_id,
+            name: "Test recipient processing after originator period".into(),
+            applies_to: vec![KeyType::DataEncrypting],
+            rotation_triggers: vec![],
+            rotation_grace_period: Duration::from_secs(30),
+            max_lifetime: Some(Duration::from_secs(60)),
+            max_usage_count: None,
+            auto_rotate: false,
+            min_versions_retained: 1,
+            enforce_cryptoperiod: false,
+        });
+        let plaintext = ks.decrypt(&blob, &aad, &ctx).await.unwrap();
+        assert_eq!(plaintext, b"must not decrypt after expiration");
     }
 
     #[tokio::test]

@@ -36,7 +36,7 @@ replay protection.
 | Replay store deleted mid-run | Store recreates safely, in-memory state preserved | `file_store_recreates_after_deletion` |
 | Quantum attack on key exchange | ML-KEM-768 (NIST FIPS 203) — security holds even if X25519 broken | Hybrid KEM design |
 | Attacker-varied ciphertext timing | dudect passes all attacker-controlled classes | `timing_sidechannel` bench suite |
-| ACVP vector correctness | 60/60 NIST vectors byte-identical (keygen, encap, decap) | `acvp_libcrux_kat` |
+| ACVP vector correctness for the libcrux test path | 60/60 NIST vectors byte-identical (keygen, encap, decap) | `acvp_libcrux_kat`; not evidence for the PQClean production provider |
 | Corrupted X25519 ephemeral | Authentication fails | `corrupted_x25519_ephemeral_rejected` |
 | Corrupted AEAD tag | Authentication fails | `corrupted_aead_tag_rejected` |
 
@@ -48,12 +48,14 @@ These are explicit non-goals or unverified properties:
 
 ### Key-material timing independence
 
-ML-KEM-768 decapsulation shows key-value-dependent timing on tested x86-64
-hardware, reproduced across three independently developed providers (PQClean,
-libcrux, AWS-LC). Source inspection confirms constant-time discipline in the
-code; the effect is consistent with hardware data-dependent execution
-(Hertzbleed-class). All attacker-controlled-input timing classes pass dudect.
-See `TIMING.md` for the full finding and required wording.
+ML-KEM-768 decapsulation shows a small key-value-dependent timing distribution
+on the tested x86-64 host. The isolated final-private-byte class crossed the
+screen in both the RustCrypto release provider and libcrux while random-label
+controls passed; an independent monotonic-clock sample corroborated a tiny
+distribution effect. This is retained as a local/co-resident side-channel
+limitation, not attributed to a proved root cause. Fixed-server-key,
+attacker-controlled ciphertext, tag, and AAD classes pass the frozen dudect
+screen. See the Packet 012 receipt and `TIMING.md` for scope and wording.
 
 ### Formal verification
 No part of Citadel V3 has been formally verified. Correctness claims rest on
@@ -112,7 +114,7 @@ standards. Citadel itself has not undergone FIPS 140-3 validation.
 | Primitive | Algorithm | Standard | Crate | Version | Status |
 |-----------|-----------|----------|-------|---------|--------|
 | KEM (classical) | X25519 ECDH | RFC 7748 | x25519-dalek | 2.x | Stable |
-| KEM (post-quantum) | ML-KEM-768 | NIST FIPS 203 | pqcrypto-mlkem | =0.1.1 | PQClean reference C |
+| KEM (post-quantum) | ML-KEM-768 | NIST FIPS 203 | ml-kem | =0.3.2 | RustCrypto pure Rust; not independently audited |
 | AEAD | AES-256-GCM | NIST SP 800-38D | aes-gcm | 0.10 | Stable |
 | KDF | HKDF-SHA256 | RFC 5869 | hkdf | 0.12 | Stable |
 | MAC (API auth) | HMAC-SHA256 | RFC 2104 | hmac | 0.12 | Stable |

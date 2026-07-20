@@ -48,14 +48,18 @@ pub struct KeyPolicy {
     pub auto_rotate: bool,
     /// Minimum number of old versions to retain before destruction.
     pub min_versions_retained: u32,
-    /// P005: Whether this policy enforces mandatory cryptoperiods (NIST SP 800-57 compliance).
-    /// When true, max_lifetime must be set and keys CANNOT be used past expiration.
+    /// P005: Whether this policy chooses strict operation-time cryptoperiod enforcement.
+    /// When true, `max_lifetime` must be set and both protection and processing
+    /// operations are denied after it elapses. NIST SP 800-57 permits some
+    /// deactivated keys to process previously protected data; deployments that
+    /// require that recipient-usage/archive behavior must leave this strict mode
+    /// disabled until a separately authorized archival-processing path is configured.
     #[serde(default)]
     pub enforce_cryptoperiod: bool,
 }
 
 impl KeyPolicy {
-    /// P005: Default policy for DEKs with NIST SP 800-57 cryptoperiod enforcement.
+    /// P005: Default DEK policy with optional strict cryptoperiod enforcement.
     /// - Rotation trigger: 90 days
     /// - Grace period: 7 days
     /// - Hard expiration: 97 days (rotation + grace)
@@ -79,7 +83,7 @@ impl KeyPolicy {
         }
     }
 
-    /// P005: Default policy for KEKs with NIST SP 800-57 cryptoperiod enforcement.
+    /// P005: Default KEK policy with optional strict cryptoperiod enforcement.
     /// - Rotation trigger: 365 days
     /// - Grace period: 30 days
     /// - Hard expiration: 395 days (rotation + grace)
@@ -103,7 +107,7 @@ impl KeyPolicy {
         }
     }
 
-    /// P005: Default policy for Root keys with NIST SP 800-57 cryptoperiod enforcement.
+    /// P005: Default Root policy with optional strict cryptoperiod enforcement.
     /// - Rotation trigger: 730 days (2 years)
     /// - Grace period: 90 days
     /// - Hard expiration: 820 days (rotation + grace)

@@ -34,6 +34,7 @@ use crate::audit::{AuditAction, AuditEvent, AuditSinkSync};
 use crate::error::*;
 use crate::policy::{self, KeyPolicy};
 use crate::replay_store::{MemoryReplayStore, ReplayStore};
+use crate::root_key_provider::{RootKeyError, RootKeyProvider};
 use crate::storage::StorageBackend;
 use crate::threat::{
     PolicyAdapter, SecurityMetrics, ThreatAssessor, ThreatConfig, ThreatEvent, ThreatEventKind,
@@ -106,6 +107,8 @@ pub struct Keystore {
     threat: Mutex<ThreatAssessor>,
     /// AES-256 master key for wrapping Root/Domain key material at rest.
     master_key: Option<Zeroizing<[u8; 32]>>,
+    /// Provider identifier used to obtain the process-resident root wrapping key.
+    root_key_provider_name: Option<&'static str>,
     /// Pluggable nonce deduplication store (P066 — fail-closed capable).
     replay_cache: Mutex<Box<dyn ReplayStore>>,
     /// P378 — Bound StateEnforcer for in-keystore capability token validation.
@@ -141,6 +144,9 @@ impl Keystore {
             envelope: Citadel::new(),
             threat: Mutex::new(ThreatAssessor::new(ThreatConfig::default()).with_audit(audit)),
             master_key,
+            root_key_provider_name: std::env::var("CITADEL_MASTER_KEY")
+                .ok()
+                .map(|_| "development-env-v1"),
             replay_cache: Mutex::new(Box::new(MemoryReplayStore::new(
                 Duration::from_secs(86400),
                 true,
@@ -166,6 +172,7 @@ impl Keystore {
             envelope: Citadel::new(),
             threat: Mutex::new(ThreatAssessor::new(ThreatConfig::default()).with_audit(audit)),
             master_key: Some(mk),
+            root_key_provider_name: Some("explicit-development-v1"),
             replay_cache: Mutex::new(Box::new(MemoryReplayStore::new(
                 Duration::from_secs(86400),
                 true,
@@ -174,6 +181,27 @@ impl Keystore {
         };
         ks.audit_plaintext_mode_if_active();
         ks
+    }
+
+    /// Create a keystore from an explicit custody provider.
+    ///
+    /// The provider controls acquisition and capability checks. The resulting
+    /// key remains process-resident in zeroizing memory because the existing
+    /// `enc:` wrapping format performs AES-GCM locally; this is not an HSM claim.
+    pub fn with_root_key_provider(
+        storage: Arc<dyn StorageBackend>,
+        audit: Arc<dyn AuditSinkSync>,
+        provider: &dyn RootKeyProvider,
+    ) -> Result<Self, RootKeyError> {
+        let master_key = provider.load_root_key()?;
+        let mut keystore = Self::with_master_key(storage, audit, *master_key);
+        keystore.root_key_provider_name = Some(provider.name());
+        Ok(keystore)
+    }
+
+    /// Provider identifier for audit and deployment diagnostics.
+    pub fn root_key_provider_name(&self) -> Option<&'static str> {
+        self.root_key_provider_name
     }
 
     /// Create with custom threat configuration.
@@ -190,6 +218,9 @@ impl Keystore {
             envelope: Citadel::new(),
             threat: Mutex::new(ThreatAssessor::new(threat_config).with_audit(audit)),
             master_key,
+            root_key_provider_name: std::env::var("CITADEL_MASTER_KEY")
+                .ok()
+                .map(|_| "development-env-v1"),
             replay_cache: Mutex::new(Box::new(MemoryReplayStore::new(
                 Duration::from_secs(86400),
                 true,
@@ -1749,6 +1780,38 @@ impl Keystore {
             return Err(DecryptError("operation failed".into()));
         }
 
+        // Enforced cryptoperiods are operation-time security boundaries. The
+        // background expiration sweep persists lifecycle state, but decrypt
+        // must not remain usable in the interval after max_lifetime elapses and
+        // before that sweep runs. Keep the public error opaque, matching every
+        // other decrypt rejection path.
+        if let Some(adapted) = self.effective_policy_for(&meta) {
+            if let policy::PolicyVerdict::Expired {
+                age_days,
+                limit_days,
+            } = policy::evaluate(&adapted, &meta)
+            {
+                self.audit.record(AuditEvent::key_event(
+                    &key_id,
+                    meta.key_type,
+                    meta.state,
+                    AuditAction::PolicyEvaluated {
+                        verdict: format!(
+                            "BLOCKED DECRYPT: expired age={}d limit={}d",
+                            age_days, limit_days
+                        ),
+                    },
+                ));
+                tracing::warn!(
+                    key_id = %key_id,
+                    age_days,
+                    limit_days,
+                    "decrypt: enforced cryptoperiod expired"
+                );
+                return Err(DecryptError("operation failed".into()));
+            }
+        }
+
         let key_version = meta
             .versions
             .iter()
@@ -1779,8 +1842,8 @@ impl Keystore {
         // P083: uses derive_replay_key() — canonical format, not hand-rolled concatenation.
         // P084: uses NONCE_OFFSET and AEAD_TAG_BYTES from wire.rs — no hardcoded offsets.
         // P224: Replay scoped by Domain to prevent cross-domain replay interference.
-        use citadel_envelope::wire::{AEAD_TAG_BYTES, NONCE_BYTES, NONCE_OFFSET};
-        if ciphertext.len() < NONCE_OFFSET + NONCE_BYTES + AEAD_TAG_BYTES {
+        use citadel_envelope::wire::{envelope_nonce, AEAD_TAG_BYTES};
+        if ciphertext.len() < AEAD_TAG_BYTES {
             tracing::warn!(
                 key_id = %key_id,
                 ciphertext_len = ciphertext.len(),
@@ -1798,7 +1861,10 @@ impl Keystore {
                 DecryptError("operation failed".into())
             })?;
 
-        let nonce_bytes = &ciphertext[NONCE_OFFSET..NONCE_OFFSET + NONCE_BYTES];
+        let nonce_bytes = envelope_nonce(&ciphertext).map_err(|_| {
+            tracing::warn!(key_id = %key_id, "decrypt: invalid envelope framing");
+            DecryptError("operation failed".into())
+        })?;
         // AEAD tag is the last 16 bytes of the full AEAD ciphertext+tag block.
         let aead_tag = &ciphertext[ciphertext.len() - AEAD_TAG_BYTES..];
         let cache_key = crate::replay_store::derive_replay_key(

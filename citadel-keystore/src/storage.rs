@@ -6,7 +6,7 @@ use crate::types::{KeyId, KeyMetadata, KeyState};
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::RwLock;
+use std::sync::{Mutex, RwLock};
 
 // ---------------------------------------------------------------------------
 // Storage trait
@@ -151,6 +151,10 @@ fn write_restricted(path: &Path, data: &[u8]) -> std::io::Result<()> {
 /// ```
 pub struct FileBackend {
     dir: PathBuf,
+    /// Serialize mutations to the filesystem backend. Atomic rename protects
+    /// readers from partial files, but a fixed `<key>.tmp` path is not safe when
+    /// concurrent requests update the same key metadata.
+    mutation_lock: Mutex<()>,
 }
 
 impl FileBackend {
@@ -192,7 +196,10 @@ impl FileBackend {
             }
         }
 
-        Ok(Self { dir })
+        Ok(Self {
+            dir,
+            mutation_lock: Mutex::new(()),
+        })
     }
 
     fn key_path(&self, id: &KeyId) -> PathBuf {
@@ -217,6 +224,10 @@ impl StorageBackend for FileBackend {
     }
 
     fn put(&self, meta: &KeyMetadata) -> Result<(), KeystoreError> {
+        let _guard = self
+            .mutation_lock
+            .lock()
+            .map_err(|_| KeystoreError::StorageError("mutation lock poisoned".into()))?;
         let path = self.key_path(&meta.id);
         let json = serde_json::to_string_pretty(meta)
             .map_err(|e| KeystoreError::StorageError(format!("serialize: {}", e)))?;
@@ -245,6 +256,10 @@ impl StorageBackend for FileBackend {
     }
 
     fn delete(&self, id: &KeyId) -> Result<(), KeystoreError> {
+        let _guard = self
+            .mutation_lock
+            .lock()
+            .map_err(|_| KeystoreError::StorageError("mutation lock poisoned".into()))?;
         let path = self.key_path(id);
         if path.exists() {
             std::fs::remove_file(&path)
@@ -284,6 +299,10 @@ impl StorageBackend for FileBackend {
     }
 
     fn overwrite_key_file(&self, id: &KeyId) -> Result<(), KeystoreError> {
+        let _guard = self
+            .mutation_lock
+            .lock()
+            .map_err(|_| KeystoreError::StorageError("mutation lock poisoned".into()))?;
         let path = self.key_path(id);
         if !path.exists() {
             return Ok(());
@@ -310,5 +329,61 @@ impl StorageBackend for FileBackend {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod file_backend_concurrency_tests {
+    use super::*;
+    use crate::types::KeyType;
+    use chrono::Utc;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Barrier};
+
+    fn metadata(usage_count: u64) -> KeyMetadata {
+        let now = Utc::now();
+        KeyMetadata {
+            id: KeyId::new("concurrent-put"),
+            name: "concurrent-put".into(),
+            key_type: KeyType::Root,
+            state: KeyState::Active,
+            policy_id: None,
+            parent_id: None,
+            created_at: now,
+            updated_at: now,
+            activated_at: Some(now),
+            rotated_at: None,
+            revoked_at: None,
+            destroyed_at: None,
+            versions: Vec::new(),
+            current_version: 1,
+            usage_count,
+            tags: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn concurrent_puts_to_same_key_are_atomic_and_error_free() {
+        const WRITERS: usize = 64;
+        let temp = tempfile::tempdir().unwrap();
+        let backend = Arc::new(FileBackend::new(temp.path()).unwrap());
+        let barrier = Arc::new(Barrier::new(WRITERS));
+        let handles: Vec<_> = (0..WRITERS)
+            .map(|index| {
+                let backend = Arc::clone(&backend);
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    backend.put(&metadata(index as u64))
+                })
+            })
+            .collect();
+
+        for handle in handles {
+            handle.join().unwrap().unwrap();
+        }
+        let stored = backend.get(&KeyId::new("concurrent-put")).unwrap().unwrap();
+        assert!(stored.usage_count < WRITERS as u64);
+        assert!(!temp.path().join("concurrent-put.tmp").exists());
     }
 }

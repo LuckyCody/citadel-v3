@@ -315,12 +315,10 @@ impl TimingDummy {
         let engine = citadel_envelope::Citadel::new();
         let aad = citadel_envelope::Aad::raw(b"timing-dummy-aad");
         let ctx = citadel_envelope::Context::raw(b"timing-dummy-ctx");
-        // Run the full decrypt three times so the fail path consistently costs MORE
-        // than the real path. black_box prevents the optimizer from eliding any of
-        // the iterations — without it, release builds can optimize away the discarded
-        // results and the timing gap reopens.
-        let _ = std::hint::black_box(engine.open(&self.sk, &self.ciphertext, &aad, &ctx));
-        let _ = std::hint::black_box(engine.open(&self.sk, &self.ciphertext, &aad, &ctx));
+        // Run exactly one full decrypt so an early failure path performs the same
+        // cryptographic operation count as a normal decrypt. Multiple dummy cycles
+        // made the pre-deadline workload distinguishable despite the response floor.
+        // black_box prevents the optimizer from eliding the discarded result.
         let _ = std::hint::black_box(engine.open(&self.sk, &self.ciphertext, &aad, &ctx));
     }
 }
@@ -576,6 +574,17 @@ fn shortest_repeating_period(bytes: &[u8]) -> Option<usize> {
 }
 
 fn hash_api_key(key: &str) -> [u8; 32] {
+    if std::env::var("CITADEL_PROFILE").as_deref() == Ok("local-pilot") {
+        let config = LocalPilotConfig::from_env()
+            .unwrap_or_else(|e| panic!("[FATAL] invalid local-pilot configuration: {e}"));
+        let provider = LinuxFileRootKeyProvider::open(&config.root_key_file)
+            .unwrap_or_else(|e| panic!("[FATAL] local-pilot root custody unavailable: {e}"));
+        let root_key = provider
+            .load_root_key()
+            .unwrap_or_else(|e| panic!("[FATAL] local-pilot root custody unavailable: {e}"));
+        return hmac_sha256(key, root_key.as_ref());
+    }
+
     // Use CITADEL_MASTER_KEY as HMAC key.
     // P002/P148: validate entropy of master key before use.
     let master_key_str = std::env::var("CITADEL_MASTER_KEY")
@@ -1885,19 +1894,8 @@ async fn encrypt_data(
         Ok(ctx) => ctx,
     };
 
-    // P316: Validate the capability token before execution — closes the capability loop.
-    // Checks: token was issued by THIS enforcer, context not expired (>60s).
-    if let Err(e) = authz_ctx.validate(&*state.enforcer.read().await) {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiError {
-                error: e,
-                request_id: Some(new_request_id()),
-            }),
-        )
-            .into_response();
-    }
-
+    // P316: encrypt_authorized atomically consumes the one-shot capability at
+    // the keystore execution boundary and rejects expired contexts.
     let aad = citadel_envelope::Aad::raw(req.aad.as_bytes());
     let ctx = citadel_envelope::Context::raw(req.context.as_bytes());
     match state
@@ -1934,13 +1932,13 @@ async fn decrypt_data(
     // burn provides real CPU work on error paths (prevents compiler elision), and
     // the floor clamps both paths to the same observable latency regardless of how
     // much actual work each path did.
-    let entry = std::time::Instant::now();
     // Release builds on this host put normal successful decrypts around 4.5ms
     // p95, with occasional scheduler spikes. A floor too close to that value is
     // still distinguishable under repeated probes, so keep the public response
     // floor comfortably above the observed success path rather than merely above
     // the fastest error path.
     const DECRYPT_FLOOR: std::time::Duration = std::time::Duration::from_millis(10);
+    let response_deadline = tokio::time::Instant::now() + DECRYPT_FLOOR;
 
     let response = match serde_json::from_slice::<serde_json::Value>(&body) {
         Ok(body) => decrypt_data_inner(&state, &auth, body).await,
@@ -1957,10 +1955,16 @@ async fn decrypt_data(
         }
     };
 
-    let elapsed = entry.elapsed();
-    if elapsed < DECRYPT_FLOOR {
-        tokio::time::sleep(DECRYPT_FLOOR - elapsed).await;
-    }
+    // Equalize the dominant work count at the public boundary. Normal and
+    // cryptographic-failure paths performed one real decrypt above; early exits
+    // performed one dummy decrypt inside their branch. One unconditional dummy
+    // cycle here makes both categories perform two full cryptographic cycles.
+    state.timing_dummy.burn();
+
+    // Register every path against the same absolute Tokio deadline. Computing a
+    // relative sleep after the work completed made timer-wheel placement depend
+    // slightly on how long that path spent before registering its timer.
+    tokio::time::sleep_until(response_deadline).await;
 
     response
 }
@@ -2017,18 +2021,6 @@ async fn decrypt_data_inner(
         }
         Ok(ctx) => ctx,
     };
-
-    if let Err(_e) = dec_authz_ctx.validate(&*state.enforcer.read().await) {
-        state.timing_dummy.burn();
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ApiError {
-                error: "operation failed".into(),
-                request_id: Some(new_request_id()),
-            }),
-        )
-            .into_response();
-    }
 
     let aad = citadel_envelope::Aad::raw(req.aad.as_bytes());
     let ctx = citadel_envelope::Context::raw(req.context.as_bytes());
@@ -2122,19 +2114,8 @@ async fn sign_data(
         Ok(ctx) => ctx,
     };
 
-    // P369: Validate capability token before execution — closes the capability loop.
-    if let Err(e) = authz_ctx.validate(&*state.enforcer.read().await) {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiError {
-                error: e,
-                request_id: Some(new_request_id()),
-            }),
-        )
-            .into_response();
-    }
-
-    // P369: sign_authorized — AuthorizedContext is carried through to keystore boundary.
+    // P369: sign_authorized atomically consumes the one-shot capability at the
+    // keystore execution boundary. AuthorizedContext is carried through intact.
     // Raw sign() is pub(crate) and unreachable from here.
     match state.keystore.sign_authorized(&authz_ctx, &payload).await {
         Ok(signed) => (StatusCode::OK, Json(signed)).into_response(),
@@ -2406,17 +2387,6 @@ async fn issue_assertion(
         }
         Ok(ctx) => ctx,
     };
-
-    if let Err(e) = authz_ctx.validate(&*state.enforcer.read().await) {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiError {
-                error: e,
-                request_id: Some(new_request_id()),
-            }),
-        )
-            .into_response();
-    }
 
     // sign_authorized — AuthorizedContext carried to keystore boundary (P369 + P378)
     let signed_payload = match state
@@ -2874,49 +2844,61 @@ fn create_keystore(data_dir: &str) -> Keystore {
     // Callers (main) do not need to perform any additional safety checks.
     //
     // ── Master key enforcement gate ───────────────────────────────────────────
-    match std::env::var("CITADEL_MASTER_KEY") {
-        Ok(val) => match hex::decode(val.trim()) {
-            Err(e) => {
-                eprintln!("[FATAL] CITADEL_MASTER_KEY is not valid hex: {}", e);
-                eprintln!("  Generate a valid key: openssl rand -hex 32");
-                std::process::exit(1);
-            }
-            Ok(bytes) if bytes.len() != 32 => {
-                eprintln!(
-                    "[FATAL] CITADEL_MASTER_KEY must decode to 32 bytes, got {}.",
-                    bytes.len()
+    let local_pilot = std::env::var("CITADEL_PROFILE").as_deref() == Ok("local-pilot");
+    let pilot_config = if local_pilot {
+        Some(LocalPilotConfig::from_env().unwrap_or_else(|e| {
+            eprintln!("[FATAL] Invalid local-pilot configuration: {e}");
+            std::process::exit(1);
+        }))
+    } else {
+        None
+    };
+
+    if !local_pilot {
+        match std::env::var("CITADEL_MASTER_KEY") {
+            Ok(val) => match hex::decode(val.trim()) {
+                Err(e) => {
+                    eprintln!("[FATAL] CITADEL_MASTER_KEY is not valid hex: {}", e);
+                    eprintln!("  Generate a valid key: openssl rand -hex 32");
+                    std::process::exit(1);
+                }
+                Ok(bytes) if bytes.len() != 32 => {
+                    eprintln!(
+                        "[FATAL] CITADEL_MASTER_KEY must decode to 32 bytes, got {}.",
+                        bytes.len()
+                    );
+                    eprintln!("  Generate a valid key: openssl rand -hex 32");
+                    std::process::exit(1);
+                }
+                Ok(_) => {
+                    tracing::info!("CITADEL_MASTER_KEY validated: 32-byte key material ready.");
+                }
+            },
+            Err(_) => {
+                if std::env::var("CITADEL_ALLOW_PLAINTEXT_KEYS").as_deref() != Ok("1") {
+                    eprintln!("[FATAL] CITADEL_MASTER_KEY is not set.");
+                    eprintln!("  Secret keys would be stored as plaintext on disk.");
+                    eprintln!("  Generate a key: openssl rand -hex 32");
+                    eprintln!("  export CITADEL_MASTER_KEY=<64-char hex output>");
+                    eprintln!("  For local dev only: export CITADEL_ALLOW_PLAINTEXT_KEYS=1");
+                    std::process::exit(1);
+                }
+                // Require CITADEL_ENV=development explicitly — not just "not production".
+                // This eliminates the "forgot to set CITADEL_ENV" trap where an operator
+                // deploying to staging/UAT/prod without setting CITADEL_ENV would get
+                // plaintext key storage with only a warning.
+                if std::env::var("CITADEL_ENV").as_deref() != Ok("development") {
+                    eprintln!("[FATAL] Plaintext key storage requires explicit dev mode.");
+                    eprintln!("  Both must be set:");
+                    eprintln!("    CITADEL_ALLOW_PLAINTEXT_KEYS=1");
+                    eprintln!("    CITADEL_ENV=development");
+                    eprintln!("  Set CITADEL_MASTER_KEY for any other environment.");
+                    std::process::exit(1);
+                }
+                tracing::warn!(
+                    "Dev mode active: CITADEL_ENV=development, plaintext key storage enabled."
                 );
-                eprintln!("  Generate a valid key: openssl rand -hex 32");
-                std::process::exit(1);
             }
-            Ok(_) => {
-                tracing::info!("CITADEL_MASTER_KEY validated: 32-byte key material ready.");
-            }
-        },
-        Err(_) => {
-            if std::env::var("CITADEL_ALLOW_PLAINTEXT_KEYS").as_deref() != Ok("1") {
-                eprintln!("[FATAL] CITADEL_MASTER_KEY is not set.");
-                eprintln!("  Secret keys would be stored as plaintext on disk.");
-                eprintln!("  Generate a key: openssl rand -hex 32");
-                eprintln!("  export CITADEL_MASTER_KEY=<64-char hex output>");
-                eprintln!("  For local dev only: export CITADEL_ALLOW_PLAINTEXT_KEYS=1");
-                std::process::exit(1);
-            }
-            // Require CITADEL_ENV=development explicitly — not just "not production".
-            // This eliminates the "forgot to set CITADEL_ENV" trap where an operator
-            // deploying to staging/UAT/prod without setting CITADEL_ENV would get
-            // plaintext key storage with only a warning.
-            if std::env::var("CITADEL_ENV").as_deref() != Ok("development") {
-                eprintln!("[FATAL] Plaintext key storage requires explicit dev mode.");
-                eprintln!("  Both must be set:");
-                eprintln!("    CITADEL_ALLOW_PLAINTEXT_KEYS=1");
-                eprintln!("    CITADEL_ENV=development");
-                eprintln!("  Set CITADEL_MASTER_KEY for any other environment.");
-                std::process::exit(1);
-            }
-            tracing::warn!(
-                "Dev mode active: CITADEL_ENV=development, plaintext key storage enabled."
-            );
         }
     }
     // ─────────────────────────────────────────────────────────────────────────
@@ -2927,7 +2909,25 @@ fn create_keystore(data_dir: &str) -> Keystore {
     let storage = Arc::new(FileBackend::new(&keys_dir).expect("failed to init file storage"));
     let file_sink: Arc<dyn AuditSinkSync> = Arc::new(FileAuditSink::new(&audit_path));
     let audit: Arc<dyn AuditSinkSync> = Arc::new(IntegrityChainSink::new(file_sink));
-    let mut ks = Keystore::new(storage, audit);
+    let mut ks = if let Some(config) = pilot_config {
+        let provider = LinuxFileRootKeyProvider::open(&config.root_key_file).unwrap_or_else(|e| {
+            eprintln!("[FATAL] Linux root-key provider failed: {e}");
+            std::process::exit(1);
+        });
+        let capabilities = provider.capabilities();
+        tracing::info!(
+            provider = capabilities.provider,
+            hardware_backed = capabilities.hardware_backed,
+            non_exportable = capabilities.non_exportable,
+            "Root custody provider capability check passed"
+        );
+        Keystore::with_root_key_provider(storage, audit, &provider).unwrap_or_else(|e| {
+            eprintln!("[FATAL] Root-key provider load failed: {e}");
+            std::process::exit(1);
+        })
+    } else {
+        Keystore::new(storage, audit)
+    };
 
     // P080 — Wire replay backend from environment so production is not memory-only.
     // CITADEL_REPLAY_STORE=file  → FileReplayStore (single-instance, restart-safe)

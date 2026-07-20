@@ -20,6 +20,7 @@
 //! - Plaintext secret key bytes (these would only appear in dev mode)
 
 use crate::types::KeyMetadata;
+use crate::{RootKeyError, RootKeyProvider};
 use aes_gcm::{
     aead::{Aead, KeyInit, Payload},
     Aes256Gcm, Nonce,
@@ -132,6 +133,38 @@ pub fn verify_backup(data: &[u8], master_key: &[u8; 32]) -> Result<(usize, DateT
 pub fn restore_backup(data: &[u8], master_key: &[u8; 32]) -> Result<Vec<KeyMetadata>, String> {
     let payload = decrypt_backup(data, master_key)?;
     Ok(payload.keys)
+}
+
+/// Create a backup using an explicit custody provider without exposing key
+/// bytes through the application call site.
+pub fn create_backup_with_provider(
+    keys: &[KeyMetadata],
+    provider: &dyn RootKeyProvider,
+) -> Result<Vec<u8>, String> {
+    let key = provider.load_root_key().map_err(root_provider_error)?;
+    create_backup(keys, &key)
+}
+
+/// Verify a backup using the configured custody provider.
+pub fn verify_backup_with_provider(
+    data: &[u8],
+    provider: &dyn RootKeyProvider,
+) -> Result<(usize, DateTime<Utc>), String> {
+    let key = provider.load_root_key().map_err(root_provider_error)?;
+    verify_backup(data, &key)
+}
+
+/// Restore a backup using the configured custody provider.
+pub fn restore_backup_with_provider(
+    data: &[u8],
+    provider: &dyn RootKeyProvider,
+) -> Result<Vec<KeyMetadata>, String> {
+    let key = provider.load_root_key().map_err(root_provider_error)?;
+    restore_backup(data, &key)
+}
+
+fn root_provider_error(error: RootKeyError) -> String {
+    format!("root-key provider unavailable: {error}")
 }
 
 // ---------------------------------------------------------------------------
