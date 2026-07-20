@@ -40,4 +40,4 @@ NOT yet suitable for:
 Recommended: Full security audit before production deployment.
 ```
 
-**Status:** OPEN
+**Status:** RESOLVED (2026-07-15) — current documents defer to `../../CLAIM_EVIDENCE_MATRIX.md`; historical self-audits carry superseded banners. Production readiness remains explicitly unproven.

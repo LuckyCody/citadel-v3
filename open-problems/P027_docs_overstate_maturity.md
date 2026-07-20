@@ -70,4 +70,4 @@ Rewrite all documentation to use bounded security language:
 - Proper operational procedures
 ```
 
-**Status:** OPEN
+**Status:** RESOLVED (2026-07-15) — historical convergence documents are marked superseded and the controlling matrix classifies Citadel as beta-stage and unaudited.

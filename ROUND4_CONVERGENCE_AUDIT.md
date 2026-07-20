@@ -1,5 +1,10 @@
 # CITADEL V3 - ROUND 4 CONVERGENCE AUDIT COMPLETE
 
+> **HISTORICAL SELF-AUDIT — SUPERSEDED.** This document records an internal review,
+> not an independent audit or current production-readiness decision. Its readiness and
+> convergence conclusions are superseded by `../../CLAIM_EVIDENCE_MATRIX.md`,
+> `SECURITY.md`, and the governed AQCMF evidence ledger.
+
 **Date**: Round 4 Security Review  
 **Protocol**: Arrow Convergence Loop  
 **Status**: ✅ **100% CONVERGENCE ACHIEVED**

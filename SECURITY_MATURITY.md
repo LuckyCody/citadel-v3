@@ -75,19 +75,19 @@
 
 ### 1. Authorization Semantics
 
-**Current Behavior**: AuthorizedContext is **reusable during TTL** (60 seconds)
+**Current Behavior**: AuthorizedContext is a **single-use execution capability**
 
 **Implication**: 
-- Same authorization can be used multiple times
-- Not a one-shot capability
-- Suitable for short-lived operations within TTL
+- The issuing enforcer atomically consumes the nonce on first execution validation
+- Repeated validation fails even before TTL expiry
+- TTL remains a maximum lifetime for unused capabilities
 
 **Trust Assumption**:
-- Caller won't abuse reusability
-- TTL is short enough (60s) to limit exposure
-- Nonce consumption not required for threat model
+- Keystore remains the sole capability-consumption boundary
+- API handlers must not pre-consume capabilities before passing them to Keystore
 
-**Future Enhancement**: Optional single-use mode with nonce tracking
+**Evidence boundary**: Narrow and core/Keystore Ubuntu tests pass; packet 002 and the
+complete two-run judge remain in progress.
 
 ---
 

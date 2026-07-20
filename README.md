@@ -4,7 +4,7 @@ Post-quantum hybrid encryption and key management server.
 
 Citadel combines X25519 + ML-KEM-768 for key encapsulation and AES-256-GCM for data encryption, following NIST's hybrid approach for the post-quantum transition. Applications encrypt and decrypt data through a REST API. Citadel manages the keys — generation, rotation, revocation, access control, and audit logging.
 
-**Status:** Working implementation. Unaudited. No production deployments. See [Security](#security) below.
+**Status:** Working beta-stage implementation. Unaudited. No production deployments. The controlling claim record is [`../../CLAIM_EVIDENCE_MATRIX.md`](../../CLAIM_EVIDENCE_MATRIX.md); see [Security](#security) below.
 
 ---
 
@@ -66,6 +66,19 @@ Requires Rust 1.81+.
 ```bash
 cargo build --release -p citadel-api
 CITADEL_API_KEY="your-secret-key" CITADEL_SEED_DEMO=true ./target/release/citadel-api
+```
+
+The default build/test graph excludes the comparison-only AWS-LC provider. Compile the
+standalone provider comparison explicitly with:
+
+```bash
+cargo check -p citadel-envelope --benches --features aws-lc-comparison --locked
+```
+
+Run the canonical Ubuntu judge (two unchanged-source runs plus JSON receipts) with:
+
+```bash
+bash scripts/test-citadel-ubuntu.sh
 ```
 
 ## Usage

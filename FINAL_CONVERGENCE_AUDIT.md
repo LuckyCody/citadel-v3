@@ -1,5 +1,10 @@
 # FINAL CONVERGENCE AUDIT
 
+> **HISTORICAL SELF-AUDIT — SUPERSEDED.** This document records an internal review,
+> not an independent audit or current production-readiness decision. Its readiness and
+> convergence conclusions are superseded by `../../CLAIM_EVIDENCE_MATRIX.md`,
+> `SECURITY.md`, and the governed AQCMF evidence ledger.
+
 **Date**: 2026-05-08  
 **Protocol**: Arrow Convergence Loop  
 **Auditor**: Security Review Process  
