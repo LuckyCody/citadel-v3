@@ -1,0 +1,24 @@
+=== Tier 2: cargo miri (UB detection) — 2026-07-20 (Ubuntu WSL2, nightly 1.99.0) ===
+Command: MIRIFLAGS="-Zmiri-disable-isolation" cargo +nightly miri test -p citadel-ffi
+
+running 13 tests
+test ffi_concurrent_keygen_is_safe ... ok
+test ffi_open_wrong_sk_len_returns_error ... ok
+test immediate_repeated_free_is_ignored ... ok
+test keygen_is_safe_under_concurrency ... ok
+test open_with_wrong_ct_len_returns_error ... ok
+test safety_tests::ffi_open_wrong_aad_returns_error ... ok
+test safety_tests::ffi_seal_open_roundtrip ... ok
+test safety_tests::free_null_is_safe ... ok
+test safety_tests::free_null_nonzero_len_is_safe ... ok
+test safety_tests::free_uses_allocator_owned_length_not_caller_length ... ok
+test safety_tests::free_zeros_before_dealloc ... ok
+test safety_tests::keygen_null_out_returns_error ... ok
+test safety_tests::keygen_produces_valid_lengths ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 438.21s
+
+VERDICT: 0 undefined behavior reported under Miri interpretation at the raw
+alloc/dealloc FFI boundary. Directly covers the packet-002 free() length-trust
+concern (free_uses_allocator_owned_length_not_caller_length), zeroize-before-
+dealloc, double-free / null-free safety, and concurrent keygen.

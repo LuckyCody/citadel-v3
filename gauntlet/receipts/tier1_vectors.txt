@@ -1,0 +1,91 @@
+   Compiling libc v0.2.186
+   Compiling generic-array v0.14.7
+   Compiling num-traits v0.2.19
+   Compiling rustix v1.1.4
+   Compiling zerocopy v0.8.54
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling curve25519-dalek v4.1.3
+   Compiling serde_json v1.0.151
+   Compiling serde v1.0.229
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling module-lattice v0.2.3
+   Compiling getrandom v0.2.17
+   Compiling getrandom v0.4.3
+   Compiling getrandom v0.3.4
+   Compiling wait-timeout v0.2.1
+   Compiling crypto-common v0.2.2
+   Compiling rand_core v0.6.4
+   Compiling rand_core v0.9.5
+   Compiling crypto-common v0.1.7
+   Compiling x25519-dalek v2.0.1
+   Compiling rand v0.9.5
+   Compiling rand_xorshift v0.4.0
+   Compiling digest v0.10.7
+   Compiling cipher v0.4.4
+   Compiling universal-hash v0.5.1
+   Compiling aead v0.5.2
+   Compiling tempfile v3.27.0
+   Compiling polyval v0.6.2
+   Compiling ctr v0.9.2
+   Compiling aes v0.8.4
+   Compiling hmac v0.12.1
+   Compiling sha3 v0.10.9
+   Compiling sha2 v0.10.9
+   Compiling digest v0.11.3
+   Compiling kem v0.3.0
+   Compiling ghash v0.5.1
+   Compiling rusty-fork v0.3.1
+   Compiling hkdf v0.12.4
+   Compiling sha3 v0.11.0
+   Compiling aes-gcm v0.10.3
+   Compiling wycheproof v0.6.0
+   Compiling ml-kem v0.3.2
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.9.0
+   Compiling proptest v1.11.0
+   Compiling citadel-envelope v0.2.0 (/mnt/c/Users/andre/Downloads/factory/citadel/src/citadel_v3/citadel-envelope)
+   Compiling citadel-gauntlet-tier1 v0.0.0 (/mnt/c/Users/andre/Downloads/factory/citadel/src/citadel_v3/gauntlet/tier1_vectors)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.38s
+     Running tests/adversarial_envelope.rs (target/debug/deps/adversarial_envelope-f6c83c623cc2a877)
+
+running 7 tests
+proptest: FileFailurePersistence::SourceParallel set, but failed to find lib.rs or main.rs
+proptest: FileFailurePersistence::SourceParallel set, but failed to find lib.rs or main.rs
+proptest: FileFailurePersistence::SourceParallel set, but failed to find lib.rs or main.rs
+proptest: FileFailurePersistence::SourceParallel set, but failed to find lib.rs or main.rs
+proptest: FileFailurePersistence::SourceParallel set, but failed to find lib.rs or main.rs
+proptest: FileFailurePersistence::SourceParallel set, but failed to find lib.rs or main.rs
+test no_silent_version_downgrade ... ok
+test truncation_fails ... ok
+test wrong_context_fails ... ok
+test wrong_aad_fails ... ok
+test single_bit_flip_always_fails ... ok
+test roundtrip_is_exact ... ok
+test wrong_key_fails ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.76s
+
+     Running tests/wycheproof_primitives.rs (target/debug/deps/wycheproof_primitives-0b8fb98dd105ad65)
+
+running 3 tests
+[wycheproof AES-256-GCM] pass=66 acceptable=0 skipped(other params)=250 failures=0
+
+thread 'wycheproof_aes_256_gcm' (57987) panicked at tests/wycheproof_primitives.rs:58:5:
+suspiciously few vectors executed (66); vector load likely broken
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test wycheproof_aes_256_gcm ... FAILED
+[wycheproof HKDF-SHA256] pass=86 acceptable=0 failures=0
+test wycheproof_hkdf_sha256 ... ok
+[wycheproof X25519] pass(valid)=265 informational(low-order/acceptable)=253 failures=0
+test wycheproof_x25519 ... ok
+
+failures:
+
+failures:
+    wycheproof_aes_256_gcm
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+error: test failed, to rerun pass `--test wycheproof_primitives`

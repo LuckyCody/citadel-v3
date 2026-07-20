@@ -1,0 +1,33 @@
+=== Tier 2b: supply-chain — 2026-07-20 (Ubuntu WSL2) ===
+Tools: cargo deny check, cargo audit, cargo vet   (condensed; re-run via run.sh tier2b)
+
+--- cargo audit: 3 vulnerabilities found (all HIGH, severity 8.2) ---
+RUSTSEC-2026-0212  libcrux-secrets 0.0.5  Incorrect CT swap/select on aarch64   -> fix >=0.0.6
+RUSTSEC-2026-0207  libcrux-sha3   0.0.9   Incorrect incremental SHAKE output    -> fix >=0.0.10
+RUSTSEC-2026-0208  libcrux-sha3   0.0.9   AVX2 SHAKE-256 potential panic        -> fix >=0.0.10
+
+Plus warnings (unmaintained): ansi_term, atty, proc-macro-error2 (all via dev tooling
+chains: dudect-bencher / hax-lib).
+
+--- KEY ANALYSIS: shipped vs test-only ---
+All three HIGH advisories arrive through:
+    libcrux-ml-kem 0.0.9  --> (dev)-dependency of citadel-envelope
+i.e. the libcrux DIFFERENTIAL-TEST ORACLE, NOT the production provider.
+Production ML-KEM provider is RustCrypto ml-kem 0.3.2 (clean).
+- RUSTSEC-2026-0207/0208 explicitly "does not impact the use in libcrux-ml-kem or ML-DSA".
+- RUSTSEC-2026-0212 is aarch64-only; dev/CI host is x86-64.
+=> No vulnerable code SHIPS in the production binary.
+
+--- cargo deny check ---
+advisories FAILED (same 3 + unmaintained), bans ok, licenses ok, sources ok.
+Numerous duplicate-crate warnings (block-buffer, cpufeatures, digest, getrandom,
+rand_core, sha3, tower) from the newer digest/rand ecosystem (ml-dsa/libcrux) coexisting
+with the older one — hygiene, not vulnerabilities.
+
+--- cargo vet ---
+Large unaudited backlog (~2.3M lines) — expected; importing mozilla/google/bytecode-
+alliance audit sets eliminates most. Config task, not a risk signal.
+
+REQUIRED ACTION (auditor optics): bump libcrux dev-dep >=0.0.10, OR scope dev-deps out
+of the advisory gate in deny.toml/audit config with written rationale. Nothing to fix in
+shipped code.

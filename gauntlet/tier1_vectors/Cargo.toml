@@ -1,0 +1,31 @@
+# Citadel Adversarial Gauntlet — Tier 1 (crypto vectors + composition)
+#
+# Standalone workspace: it has its OWN Cargo.lock and is NOT a member of the
+# citadel_v3 production workspace, so `cargo test --workspace --locked --offline`
+# in the parent stays pristine. This crate deliberately pulls online deps.
+#
+# The primitive crates below are pinned to the EXACT versions resolved in
+# citadel_v3/Cargo.lock, so Wycheproof validates the versions Citadel ships.
+[package]
+name = "citadel-gauntlet-tier1"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dev-dependencies]
+# Drives Citadel's real public SDK. legacy-envelope-v1 enables v1/v2 cross-tests.
+citadel-envelope = { path = "../../citadel-envelope", features = ["legacy-envelope-v1"] }
+
+# Known-attack test vectors (Google Project Wycheproof, bundled).
+wycheproof = "0.6"
+
+# EXACT pins matching citadel_v3/Cargo.lock — validates the shipped versions.
+aes-gcm = "=0.10.3"
+x25519-dalek = { version = "=2.0.1", features = ["static_secrets"] }
+hkdf = "=0.12.4"
+sha2 = "=0.10.9"
+
+hex = "0.4"
+proptest = "1"

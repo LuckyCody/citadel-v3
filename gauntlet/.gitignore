@@ -1,0 +1,8 @@
+# Build + fuzz artifacts — regenerable, never committed.
+tier1_vectors/target/
+target/
+corpus/
+artifacts/
+*.profraw
+
+# Keep: source, scripts, README, receipts/*.txt + SUMMARY.md (evidence).

@@ -1,0 +1,17 @@
+=== Tier 3 libFuzzer smoke (40s/target, ASan) ===
+--- decode_envelope_v2 (40s) ---
+#34183889	REDUCE cov: 61 ft: 67 corp: 15/13126b lim: 4096 exec/s: 1068246 rss: 939Mb L: 1161/1234 MS: 5 ChangeASCIIInt-PersAutoDict-CrossOver-CrossOver-EraseBytes- DE: "CTD2"-
+#34187839	REDUCE cov: 61 ft: 67 corp: 15/13095b lim: 4096 exec/s: 1068369 rss: 939Mb L: 1130/1234 MS: 5 EraseBytes-ShuffleBytes-CMP-InsertByte-InsertRepeatedBytes- DE: "\276\253\273\317"-
+#34190335	REDUCE cov: 61 ft: 67 corp: 15/13093b lim: 4096 exec/s: 1068447 rss: 939Mb L: 1128/1234 MS: 1 EraseBytes-
+#34297248	REDUCE cov: 61 ft: 67 corp: 15/13091b lim: 4096 exec/s: 1071789 rss: 939Mb L: 1126/1234 MS: 3 InsertRepeatedBytes-EraseBytes-CrossOver-
+#39892908	DONE   cov: 61 ft: 67 corp: 15/13091b lim: 4096 exec/s: 972997 rss: 939Mb
+Done 39892908 runs in 41 second(s)
+exit=0
+--- decrypt_full (40s) ---
+#2097152	pulse  cov: 350 ft: 354 corp: 7/28b lim: 4096 exec/s: 1048576 rss: 365Mb
+#4194304	pulse  cov: 350 ft: 354 corp: 7/28b lim: 4096 exec/s: 838860 rss: 660Mb
+#8388608	pulse  cov: 350 ft: 354 corp: 7/28b lim: 4096 exec/s: 762600 rss: 665Mb
+#16777216	pulse  cov: 350 ft: 354 corp: 7/28b lim: 4096 exec/s: 762600 rss: 665Mb
+#31164881	DONE   cov: 350 ft: 354 corp: 7/28b lim: 4096 exec/s: 760119 rss: 665Mb
+Done 31164881 runs in 41 second(s)
+exit=0
