@@ -11,9 +11,9 @@
 //   libcrux_same_key_control           — libcrux: same key, random class
 //   libcrux_same_key_two_pool_control  — libcrux: same key, two ct pools
 //   libcrux_key_a_vs_key_b             — libcrux: two keys, class = which key
-//   pqclean_same_key_control           — PQClean: same key, random class
-//   pqclean_same_key_two_pool_control  — PQClean: same key, two ct pools
-//   pqclean_key_a_vs_key_b             — PQClean: two keys, class = which key
+//   rustcrypto_same_key_control           — release provider: same key, random class
+//   rustcrypto_same_key_two_pool_control  — release provider: same key, two ct pools
+//   rustcrypto_key_a_vs_key_b             — release provider: two keys, class = which key
 //   awslc_same_key_control             — AWS-LC: same key, random class
 //   awslc_same_key_two_pool_control    — AWS-LC: same key, two ct pools
 //   awslc_key_a_vs_key_b               — AWS-LC: two keys, class = which key
@@ -37,13 +37,22 @@ use std::path::PathBuf;
 
 use libcrux_ml_kem::mlkem768;
 
-use pqcrypto_mlkem::mlkem768 as pq768;
-use pqcrypto_traits::kem::{
-    Ciphertext as PqCiphertext, PublicKey as PqPublicKey, SecretKey as PqSecretKey,
-    SharedSecret as PqSharedSecret,
+use ml_kem::{
+    kem::{Decapsulate, Encapsulate, Kem, KeyExport},
+    ml_kem_768::{
+        Ciphertext as RustCryptoCiphertext, DecapsulationKey as RustCryptoDecapsulationKey,
+        EncapsulationKey as RustCryptoEncapsulationKey,
+    },
+    MlKem768,
 };
+#[allow(deprecated)]
+use ml_kem::{ml_kem_768::ExpandedDecapsulationKey, ExpandedKeyEncoding};
 
 use aws_lc_rs::kem::{Ciphertext as AwsCiphertext, DecapsulationKey, ML_KEM_768};
+use fips203::{
+    ml_kem_768,
+    traits::{Decaps as FipsDecaps, Encaps as FipsEncaps, KeyGen as FipsKeyGen},
+};
 
 const MLKEM_SK_BYTES: usize = 2400;
 const MLKEM_CT_BYTES: usize = 1088;
@@ -83,33 +92,37 @@ fn libcrux_decapsulate_from_buffers(
 }
 
 // ---------------------------------------------------------------------------
-// PQClean helpers — raw ML-KEM-768, no Citadel wrapping
+// RustCrypto release-provider helpers — raw ML-KEM-768, no Citadel wrapping
 // ---------------------------------------------------------------------------
 
-fn pqclean_keygen() -> ([u8; MLKEM_SK_BYTES], Vec<u8>) {
-    let (pk, sk) = pq768::keypair();
-    let sk_bytes: [u8; MLKEM_SK_BYTES] = sk.as_bytes().try_into().unwrap();
-    (sk_bytes, pk.as_bytes().to_vec())
+#[allow(deprecated)]
+fn rustcrypto_keygen() -> ([u8; MLKEM_SK_BYTES], Vec<u8>) {
+    let (sk, pk) = MlKem768::generate_keypair();
+    let sk_bytes: [u8; MLKEM_SK_BYTES] = sk.to_expanded_bytes().into();
+    (sk_bytes, pk.to_bytes().as_slice().to_vec())
 }
 
-fn pqclean_encapsulate(pk_bytes: &[u8]) -> ([u8; MLKEM_CT_BYTES], [u8; 32]) {
-    let pk = pq768::PublicKey::from_bytes(pk_bytes).unwrap();
-    let (ss, ct) = pq768::encapsulate(&pk);
-    let ct_bytes: [u8; MLKEM_CT_BYTES] = ct.as_bytes().try_into().unwrap();
+fn rustcrypto_encapsulate(pk_bytes: &[u8]) -> ([u8; MLKEM_CT_BYTES], [u8; 32]) {
+    let pk_array: [u8; 1184] = pk_bytes.try_into().unwrap();
+    let pk = RustCryptoEncapsulationKey::new(&pk_array.into()).unwrap();
+    let (ct, ss) = pk.encapsulate();
+    let ct_bytes: [u8; MLKEM_CT_BYTES] = ct.into();
     let mut ss_bytes = [0u8; 32];
-    ss_bytes.copy_from_slice(ss.as_bytes());
+    ss_bytes.copy_from_slice(ss.as_ref());
     (ct_bytes, ss_bytes)
 }
 
-fn pqclean_decapsulate_from_buffers(
+#[allow(deprecated)]
+fn rustcrypto_decapsulate_from_buffers(
     sk_buf: &[u8; MLKEM_SK_BYTES],
     ct_buf: &[u8; MLKEM_CT_BYTES],
 ) -> [u8; 32] {
-    let sk = pq768::SecretKey::from_bytes(sk_buf).unwrap();
-    let ct = pq768::Ciphertext::from_bytes(ct_buf).unwrap();
-    let ss = pq768::decapsulate(&ct, &sk);
+    let encoded: ExpandedDecapsulationKey = (*sk_buf).into();
+    let sk = RustCryptoDecapsulationKey::from_expanded_bytes(&encoded).unwrap();
+    let ct: RustCryptoCiphertext = (*ct_buf).into();
+    let ss = sk.decapsulate(&ct);
     let mut out = [0u8; 32];
-    out.copy_from_slice(ss.as_bytes());
+    out.copy_from_slice(ss.as_ref());
     out
 }
 
@@ -211,15 +224,15 @@ fn libcrux_key_a_vs_key_b(runner: &mut CtRunner, rng: &mut BenchRng) {
 }
 
 // ---------------------------------------------------------------------------
-// PQClean benches
+// RustCrypto release-provider benches
 // ---------------------------------------------------------------------------
 
-fn pqclean_same_key_control(runner: &mut CtRunner, rng: &mut BenchRng) {
-    let (sk_bytes, pk_bytes) = pqclean_keygen();
+fn rustcrypto_same_key_control(runner: &mut CtRunner, rng: &mut BenchRng) {
+    let (sk_bytes, pk_bytes) = rustcrypto_keygen();
 
     let mut samples = Vec::new();
     for _ in 0..8192 {
-        let (ct_bytes, _) = pqclean_encapsulate(&pk_bytes);
+        let (ct_bytes, _) = rustcrypto_encapsulate(&pk_bytes);
         samples.push((sk_bytes, ct_bytes));
     }
 
@@ -238,7 +251,7 @@ fn pqclean_same_key_control(runner: &mut CtRunner, rng: &mut BenchRng) {
         shared_ct.copy_from_slice(&sample.1);
 
         runner.run_one(class, || {
-            let _ = black_box(pqclean_decapsulate_from_buffers(
+            let _ = black_box(rustcrypto_decapsulate_from_buffers(
                 black_box(&shared_sk),
                 black_box(&shared_ct),
             ));
@@ -246,15 +259,15 @@ fn pqclean_same_key_control(runner: &mut CtRunner, rng: &mut BenchRng) {
     }
 }
 
-fn pqclean_same_key_two_pool_control(runner: &mut CtRunner, rng: &mut BenchRng) {
-    let (sk_bytes, pk_bytes) = pqclean_keygen();
+fn rustcrypto_same_key_two_pool_control(runner: &mut CtRunner, rng: &mut BenchRng) {
+    let (sk_bytes, pk_bytes) = rustcrypto_keygen();
 
     let mut samples = Vec::new();
     for _ in 0..4096 {
-        let (ct_a, _) = pqclean_encapsulate(&pk_bytes);
+        let (ct_a, _) = rustcrypto_encapsulate(&pk_bytes);
         samples.push((Class::Left, sk_bytes, ct_a));
 
-        let (ct_b, _) = pqclean_encapsulate(&pk_bytes);
+        let (ct_b, _) = rustcrypto_encapsulate(&pk_bytes);
         samples.push((Class::Right, sk_bytes, ct_b));
     }
 
@@ -268,7 +281,7 @@ fn pqclean_same_key_two_pool_control(runner: &mut CtRunner, rng: &mut BenchRng) 
         shared_ct.copy_from_slice(&sample.2);
 
         runner.run_one(sample.0, || {
-            let _ = black_box(pqclean_decapsulate_from_buffers(
+            let _ = black_box(rustcrypto_decapsulate_from_buffers(
                 black_box(&shared_sk),
                 black_box(&shared_ct),
             ));
@@ -276,16 +289,16 @@ fn pqclean_same_key_two_pool_control(runner: &mut CtRunner, rng: &mut BenchRng) 
     }
 }
 
-fn pqclean_key_a_vs_key_b(runner: &mut CtRunner, rng: &mut BenchRng) {
-    let (sk_a_bytes, pk_a_bytes) = pqclean_keygen();
-    let (sk_b_bytes, pk_b_bytes) = pqclean_keygen();
+fn rustcrypto_key_a_vs_key_b(runner: &mut CtRunner, rng: &mut BenchRng) {
+    let (sk_a_bytes, pk_a_bytes) = rustcrypto_keygen();
+    let (sk_b_bytes, pk_b_bytes) = rustcrypto_keygen();
 
     let mut samples = Vec::new();
     for _ in 0..4096 {
-        let (ct_a, _) = pqclean_encapsulate(&pk_a_bytes);
+        let (ct_a, _) = rustcrypto_encapsulate(&pk_a_bytes);
         samples.push((Class::Left, sk_a_bytes, ct_a));
 
-        let (ct_b, _) = pqclean_encapsulate(&pk_b_bytes);
+        let (ct_b, _) = rustcrypto_encapsulate(&pk_b_bytes);
         samples.push((Class::Right, sk_b_bytes, ct_b));
     }
 
@@ -299,7 +312,7 @@ fn pqclean_key_a_vs_key_b(runner: &mut CtRunner, rng: &mut BenchRng) {
         shared_ct.copy_from_slice(&sample.2);
 
         runner.run_one(sample.0, || {
-            let _ = black_box(pqclean_decapsulate_from_buffers(
+            let _ = black_box(rustcrypto_decapsulate_from_buffers(
                 black_box(&shared_sk),
                 black_box(&shared_ct),
             ));
@@ -439,6 +452,53 @@ fn awslc_key_a_vs_key_b(runner: &mut CtRunner, rng: &mut BenchRng) {
 }
 
 // ---------------------------------------------------------------------------
+// fips203 screening benches — parsed keys, matching Citadel's actual key stage
+// ---------------------------------------------------------------------------
+
+fn fips203_same_key_control(runner: &mut CtRunner, rng: &mut BenchRng) {
+    let mut key_rng = rand::thread_rng();
+    let (pk, sk) = ml_kem_768::KG::try_keygen_with_rng(&mut key_rng).unwrap();
+    let mut ciphertexts = Vec::with_capacity(8192);
+    for _ in 0..8192 {
+        let (_, ct) = pk.try_encaps_with_rng(&mut key_rng).unwrap();
+        ciphertexts.push(ct);
+    }
+
+    for _ in 0..100_000 {
+        let ct = &ciphertexts[rng.gen_range(0..ciphertexts.len())];
+        let class = if rng.gen::<bool>() {
+            Class::Left
+        } else {
+            Class::Right
+        };
+        runner.run_one(class, || {
+            let _ = black_box(sk.try_decaps(black_box(ct)).unwrap());
+        });
+    }
+}
+
+fn fips203_key_a_vs_key_b(runner: &mut CtRunner, rng: &mut BenchRng) {
+    let mut key_rng = rand::thread_rng();
+    let (pk_a, sk_a) = ml_kem_768::KG::try_keygen_with_rng(&mut key_rng).unwrap();
+    let (pk_b, sk_b) = ml_kem_768::KG::try_keygen_with_rng(&mut key_rng).unwrap();
+    let mut samples = Vec::with_capacity(8192);
+    for _ in 0..4096 {
+        let (_, ct_a) = pk_a.try_encaps_with_rng(&mut key_rng).unwrap();
+        samples.push((Class::Left, false, ct_a));
+        let (_, ct_b) = pk_b.try_encaps_with_rng(&mut key_rng).unwrap();
+        samples.push((Class::Right, true, ct_b));
+    }
+
+    for _ in 0..100_000 {
+        let (class, use_b, ct) = &samples[rng.gen_range(0..samples.len())];
+        let sk = if *use_b { &sk_b } else { &sk_a };
+        runner.run_one(*class, || {
+            let _ = black_box(sk.try_decaps(black_box(ct)).unwrap());
+        });
+    }
+}
+
+// ---------------------------------------------------------------------------
 // main — custom CLI matching timing_sidechannel.rs
 // ---------------------------------------------------------------------------
 
@@ -489,19 +549,19 @@ fn main() {
             benchfn: libcrux_key_a_vs_key_b,
         },
         BenchMetadata {
-            name: BenchName("pqclean_same_key_control"),
+            name: BenchName("rustcrypto_same_key_control"),
             seed: None,
-            benchfn: pqclean_same_key_control,
+            benchfn: rustcrypto_same_key_control,
         },
         BenchMetadata {
-            name: BenchName("pqclean_same_key_two_pool_control"),
+            name: BenchName("rustcrypto_same_key_two_pool_control"),
             seed: None,
-            benchfn: pqclean_same_key_two_pool_control,
+            benchfn: rustcrypto_same_key_two_pool_control,
         },
         BenchMetadata {
-            name: BenchName("pqclean_key_a_vs_key_b"),
+            name: BenchName("rustcrypto_key_a_vs_key_b"),
             seed: None,
-            benchfn: pqclean_key_a_vs_key_b,
+            benchfn: rustcrypto_key_a_vs_key_b,
         },
         BenchMetadata {
             name: BenchName("awslc_same_key_control"),
@@ -517,6 +577,16 @@ fn main() {
             name: BenchName("awslc_key_a_vs_key_b"),
             seed: None,
             benchfn: awslc_key_a_vs_key_b,
+        },
+        BenchMetadata {
+            name: BenchName("fips203_same_key_control"),
+            seed: None,
+            benchfn: fips203_same_key_control,
+        },
+        BenchMetadata {
+            name: BenchName("fips203_key_a_vs_key_b"),
+            seed: None,
+            benchfn: fips203_key_a_vs_key_b,
         },
     ];
 
