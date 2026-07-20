@@ -16,7 +16,7 @@ jobs:
       run:
         working-directory: .
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain (stable + fmt + clippy)
         uses: dtolnay/rust-toolchain@stable
@@ -42,7 +42,7 @@ jobs:
     name: Stress Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
@@ -56,7 +56,7 @@ jobs:
     name: Security Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
@@ -83,7 +83,7 @@ jobs:
       CITADEL_RATE_LIMIT_RPS: "10000"
       CITADEL_RATE_LIMIT_BURST: "20000"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
@@ -147,7 +147,7 @@ jobs:
       CITADEL_RATE_LIMIT_RPS: "10000"
       CITADEL_RATE_LIMIT_BURST: "20000"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
