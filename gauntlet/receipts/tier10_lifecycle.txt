@@ -1,0 +1,25 @@
+=== Tier 10: key-lifecycle state-machine verification — 2026-07-21 ===
+Test: citadel-keystore/tests/lifecycle_transitions.rs (runs in CI, --test-threads=1)
+
+Drives the REAL keystore and uses its OWN declared state machine
+(KeyState::valid_transitions) as the oracle — closing the gap in the pre-existing
+lifecycle_statemachine.rs, which tracked its own model and so could miss a
+reactivation/resurrection bug.
+
+3 tests, all pass:
+  transitions_obey_declared_machine ... ok   (300 random op sequences, 5..40 ops)
+  hierarchy_escape_is_rejected ....... ok
+  revoked_and_destroyed_are_terminal . ok
+
+Invariants verified against the real code:
+1. TRANSITION LEGALITY — every observed state change b->a satisfies
+   b.can_transition_to(a); the code never makes an undeclared transition.
+2. TERMINAL: Destroyed stays Destroyed — no operation resurrects a destroyed key.
+3. NO REACTIVATION: a Revoked key is never observed Active again.
+4. HIERARCHY: generate() rejects every illegal parent/child pairing —
+   DEK-under-Root, Domain-with-no-parent, Root-with-a-parent, KEK-under-KEK —
+   while the valid Root->Domain->KEK->DEK chain succeeds.
+
+RESULT: the "can you use a revoked key? escape the hierarchy?" question is answered
+NO, verified by property test against the actual keystore state machine. Moves the
+key-lifecycle row from "partial" (a model-following proptest existed) to strong.

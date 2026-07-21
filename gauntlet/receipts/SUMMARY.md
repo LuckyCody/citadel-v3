@@ -16,6 +16,7 @@ Every result below is machine-checked external-tool output, not self-assessment.
 | **7** Sanitizers | **AddressSanitizer** on citadel-ffi | ✅ **PASS** | 13/13 under ASan (+leak detection), 0 sanitizer errors at the real allocator. Complements Miri. `receipts/tier7_asan.txt` |
 | **8** CT proof | ctgrind (valgrind memcheck) on ML-KEM decap | ✅ **EXECUTED — resolved** | Citadel's own code: **0 secret-dependent branches**. Residual localizes to ml-kem 0.3.2 `sample_poly_cbd` — a real secret-indexed lookup `ONES[val.0]`, but for ML-KEM-768 (η=2) the table is 32B/one cache line + index always in-range ⇒ **not practically exploitable** (matches TIMING.md). Dependency property, not Citadel code. `receipts/tier8_ct.txt`. |
 | **9** Design review | hybrid-KEM combiner IND-CCA2 soundness | ✅ **NO FLAW** | binds both ciphertexts + both secrets, unambiguous encoding, X25519 contributory check — sound under ROM per KEM-combiner literature. Analytical, not machine-checked. `tier9_design/HYBRID_COMBINER_ANALYSIS.md` |
+| **10** Key-lifecycle state machine | proptest vs the REAL keystore, oracle = declared `valid_transitions` | ✅ **VERIFIED** | 300 random op sequences: no illegal transition, no resurrection of Destroyed, no reactivation of Revoked; hierarchy escape (DEK-under-Root etc.) rejected. Runs in CI. `citadel-keystore/tests/lifecycle_transitions.rs` + `receipts/tier10_lifecycle.txt` |
 
 ## Verdict
 
