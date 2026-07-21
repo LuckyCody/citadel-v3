@@ -121,10 +121,13 @@ the ciphertext, and the ciphertext-variation classes pass.
 ### Required wording for grant and security materials
 
 > Citadel uses standardized FIPS 203 ML-KEM-768 in a hybrid construction with
-> X25519 and AES-256-GCM. The ML-KEM provider (PQClean reference C
-> implementation) follows source-level constant-time discipline: no
-> secret-dependent branches, no secret-dependent memory access, fixed-size
-> loops, constant-time comparison and conditional move. Our dudect-based timing
+> X25519 and AES-256-GCM. The production ML-KEM provider is RustCrypto `ml-kem`
+> 0.3.2 (pure Rust). It largely follows constant-time discipline; a ctgrind
+> (valgrind) analysis localized one secret-indexed table lookup (`Eta::ONES[val]`)
+> in the crate's CBD noise sampling. For the ML-KEM-768 parameter set that table
+> is 32 bytes — a single cache line, with an always-in-range index — so it is not
+> practically exploitable, though it remains a constant-time anti-pattern in the
+> dependency (see `gauntlet/tier8_ct/`). Our dudect-based timing
 > validation suite passes all attacker-controlled-input classes (ciphertext
 > variation, tag corruption, AAD corruption, KEM-byte corruption).
 >

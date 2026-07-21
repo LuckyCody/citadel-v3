@@ -36,7 +36,7 @@ replay protection.
 | Replay store deleted mid-run | Store recreates safely, in-memory state preserved | `file_store_recreates_after_deletion` |
 | Quantum attack on key exchange | ML-KEM-768 (NIST FIPS 203) — security holds even if X25519 broken | Hybrid KEM design |
 | Attacker-varied ciphertext timing | dudect passes all attacker-controlled classes | `timing_sidechannel` bench suite |
-| ACVP vector correctness for the libcrux test path | 60/60 NIST vectors byte-identical (keygen, encap, decap) | `acvp_libcrux_kat`; not evidence for the PQClean production provider |
+| ACVP vector correctness | 60/60 NIST vectors byte-identical through the RustCrypto production provider directly, plus a libcrux differential | `nist_acvp_kat` (production provider) + `acvp_libcrux_kat` (differential) |
 | Corrupted X25519 ephemeral | Authentication fails | `corrupted_x25519_ephemeral_rejected` |
 | Corrupted AEAD tag | Authentication fails | `corrupted_aead_tag_rejected` |
 
@@ -118,7 +118,7 @@ standards. Citadel itself has not undergone FIPS 140-3 validation.
 | AEAD | AES-256-GCM | NIST SP 800-38D | aes-gcm | 0.10 | Stable |
 | KDF | HKDF-SHA256 | RFC 5869 | hkdf | 0.12 | Stable |
 | MAC (API auth) | HMAC-SHA256 | RFC 2104 | hmac | 0.12 | Stable |
-| Signing (optional) | ML-DSA-65 | NIST FIPS 204 | pqcrypto-dilithium | — | PQClean reference C |
+| Signing (optional) | ML-DSA-65 | NIST FIPS 204 | ml-dsa | =0.1.0-rc.9 | RustCrypto (pure Rust) |
 
 **Hybrid security guarantee:** An attacker must break BOTH X25519 AND ML-KEM-768
 to recover the shared secret. If either primitive is compromised (by cryptanalysis
