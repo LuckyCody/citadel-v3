@@ -26,6 +26,8 @@ jobs:
         with:
           language: rust
           sanitizer: ${{ matrix.sanitizer }}
+          # Private repo: token authenticates ClusterFuzzLite's internal clone.
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           # Rebuild only changed code for fast PR feedback.
           bad-build-check: false
       - name: Run Fuzzers (${{ matrix.sanitizer }})
