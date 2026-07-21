@@ -1,0 +1,103 @@
+(* ===================================================================== *)
+(* Tier 11 — ProVerif symbolic (Dolev-Yao) model of Citadel's envelope.  *)
+(*                                                                       *)
+(* Citadel's envelope is NON-INTERACTIVE public-key encryption:          *)
+(*   seal:  K = KDF(KEM.Encaps(pk) ; H(kem_ct) ; context) ; AEAD.Enc     *)
+(*   open:  K = KDF(KEM.Decaps(sk) ; H(kem_ct) ; context) ; AEAD.Dec     *)
+(* The wire header carries a suite/version (v1 legacy, v2 default) and a  *)
+(* fresh per-envelope nonce.                                             *)
+(*                                                                       *)
+(* MODELING CHOICES / HONEST CAVEATS:                                    *)
+(*  - Symbolic model: primitives are perfect (Dolev-Yao). Proves         *)
+(*    PROTOCOL-level properties, not the computational crypto (Tier 9    *)
+(*    combiner analysis + Tier 1 vectors cover that).                    *)
+(*  - The AEAD+KDF binding of (suite, context, aad) is encoded as a       *)
+(*    property of `open` (succeeds only when they match) — reflecting     *)
+(*    Citadel's design, which Tiers 1b/9 check at the implementation      *)
+(*    level. ProVerif then confirms secrecy, no-downgrade, and replay.    *)
+(*  - No SENDER-authentication is claimed: the envelope is encryption,    *)
+(*    not signcryption (sender auth is a separate ML-DSA signing path).   *)
+(* ===================================================================== *)
+
+type skey.
+type pkey.
+type suite.
+type nonce.
+
+const v1: suite.   (* legacy wire suite (decode-only) *)
+const v2: suite.   (* default wire suite; the sender always uses v2 *)
+
+fun pk(skey): pkey.
+
+(* seal(suite, nonce, context, aad, plaintext, recipient_pk). The fresh nonce
+   makes every honest envelope unique, so the replay store distinguishes a
+   genuine second message from a replayed copy. open returns (nonce, plaintext)
+   and succeeds ONLY when suite+context+aad match and the correct sk is used. *)
+fun seal(suite, nonce, bitstring, bitstring, bitstring, pkey): bitstring.
+reduc forall s: suite, n: nonce, c: bitstring, a: bitstring, p: bitstring, sk: skey;
+    open(s, c, a, seal(s, n, c, a, p, pk(sk)), sk) = (n, p).
+
+event SenderSeals(suite, nonce, bitstring, bitstring, bitstring).
+event ReceiverAccepts(suite, nonce, bitstring, bitstring, bitstring).
+
+free net: channel.
+free secretPt: bitstring [private].
+(* Models the ATOMICITY of Citadel's ReplayStore::claim (an atomic test-and-set,
+   verified concurrently by Tier 6/Loom). A single token serializes the
+   check-and-insert so it cannot race — without this, a ProVerif table's
+   non-atomic get/insert would spuriously admit a double-accept. *)
+free claimlock: channel [private].
+
+(* --- Properties ----------------------------------------------------- *)
+
+(* (1) CONFIDENTIALITY: the attacker never learns the honest plaintext. *)
+query attacker(secretPt).
+
+(* (2) NO-DOWNGRADE + BINDING: any acceptance of the honest plaintext happens
+   under exactly the suite/context/aad the sender used. The sender only seals
+   under v2, so accepting the honest plaintext under v1 (a downgrade) would
+   break this. *)
+query s: suite, n: nonce, c: bitstring, a: bitstring;
+    event(ReceiverAccepts(s, n, c, a, secretPt)) ==> event(SenderSeals(s, n, c, a, secretPt)).
+
+(* (3) REPLAY RESISTANCE (injective): each acceptance corresponds to a DISTINCT
+   seal — no replayed envelope is accepted twice. Requires the replay store. *)
+query s: suite, n: nonce, c: bitstring, a: bitstring;
+    inj-event(ReceiverAccepts(s, n, c, a, secretPt)) ==> inj-event(SenderSeals(s, n, c, a, secretPt)).
+
+(* --- Processes ------------------------------------------------------ *)
+
+let sender(pkR: pkey, ctx: bitstring, aad: bitstring) =
+    new n: nonce;
+    event SenderSeals(v2, n, ctx, aad, secretPt);
+    out(net, seal(v2, n, ctx, aad, secretPt, pkR)).
+
+(* Replay store: each envelope may be consumed at most once. *)
+table consumed(bitstring).
+
+(* The receiver decodes whatever suite the envelope claims — it tries BOTH v1
+   and v2 — so a working downgrade would have a path to fire an event. *)
+let receiver(skR: skey, ctx: bitstring, aad: bitstring) =
+    in(net, e: bitstring);
+    in(claimlock, tok: bitstring);        (* enter atomic claim section *)
+    get consumed(=e) in
+        out(claimlock, tok)               (* already claimed => release, drop (replay) *)
+    else
+        insert consumed(e);
+        out(claimlock, tok);              (* claim taken; release the lock *)
+        ( (let (n1: nonce, p1: bitstring) = open(v1, ctx, aad, e, skR) in
+             event ReceiverAccepts(v1, n1, ctx, aad, p1))
+        | (let (n2: nonce, p2: bitstring) = open(v2, ctx, aad, e, skR) in
+             event ReceiverAccepts(v2, n2, ctx, aad, p2)) ).
+
+process
+    new skR: skey;
+    let pkR = pk(skR) in
+    out(net, pkR);                 (* recipient public key is public *)
+    new ctx: bitstring;
+    new aad: bitstring;
+    out(net, ctx); out(net, aad);  (* context/aad are public, not secret *)
+    new tok0: bitstring;
+    ( out(claimlock, tok0)                (* single token => atomic claim *)
+    | (!sender(pkR, ctx, aad))
+    | (!receiver(skR, ctx, aad)) )

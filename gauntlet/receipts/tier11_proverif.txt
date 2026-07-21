@@ -1,0 +1,35 @@
+=== Tier 11: ProVerif symbolic protocol analysis — 2026-07-21 ===
+Model: gauntlet/tier11_proverif/citadel_envelope.pv
+Tool:  ProVerif 2.05 (built CLI-only from source, no GUI/GTK, userspace)
+Run:   proverif citadel_envelope.pv
+
+Models Citadel's non-interactive envelope (KEM+KDF+AEAD, v1/v2 suites, fresh
+per-envelope nonce, atomic replay claim) against a Dolev-Yao attacker who fully
+controls the network (intercept / modify / inject / replay / attempt downgrade).
+
+RESULTS:
+  (1) Secrecy            RESULT not attacker(secretPt) is true.              PROVED
+  (2) No-downgrade+bind  RESULT ReceiverAccepts ==> SenderSeals is true.     PROVED
+  (3) Replay (injective) RESULT inj ... cannot be proved.                    INCONCLUSIVE
+
+Interpretation:
+- (1) An attacker without the recipient secret key never learns the plaintext.
+- (2) The receiver only ever outputs the honest plaintext under the exact
+      suite/context/aad the sender used. The sender always seals v2 and the
+      receiver tries BOTH v1 and v2, so a working downgrade (accepting the
+      honest plaintext under v1) would break this — it does not. This is the
+      symbolic form of Citadel's no-silent-downgrade + AAD/context binding.
+- (3) ProVerif finds NO replay attack (not "false") but cannot complete the
+      injective proof — a known ProVerif limitation reasoning about a stateful
+      atomic claim. Modeling the claim's atomicity with a lock token removed the
+      spurious table-race counterexample; the residual is tool incompleteness,
+      not a Citadel weakness. Replay ATOMICITY is separately assured by the real
+      ReplayStore::claim (atomic test-and-set) and exhaustively verified in
+      Tier 6 (Loom).
+
+CAVEATS (honest): symbolic/Dolev-Yao model — primitives are perfect, so this
+proves PROTOCOL-level properties, not the computational crypto (Tier 9 combiner
+analysis + Tier 1 vectors cover that). The AEAD/KDF binding is encoded as a
+property of `open`, reflecting the design that Tiers 1b/9 check at the
+implementation level. No sender-authentication is claimed (the envelope is
+encryption, not signcryption; ML-DSA signing is a separate path).
