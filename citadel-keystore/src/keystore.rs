@@ -1144,6 +1144,10 @@ impl Keystore {
         authz
             .require_decrypt_for(&blob.key_id)
             .map_err(DecryptError)?;
+        // P217: keystore-side cross-domain rejection (defense in depth).
+        self.enforce_authorized_domain(authz.domain(), &KeyId::new(&blob.key_id))
+            .await
+            .map_err(DecryptError)?;
         self.decrypt(blob, aad, context).await
     }
 
@@ -1739,6 +1743,37 @@ impl Keystore {
         }
     }
 
+    /// P217 — keystore-side cross-domain rejection (defense in depth).
+    ///
+    /// If the authorization is domain-scoped, independently resolve the target
+    /// key's Domain from the hierarchy and reject if it differs from the
+    /// authorized domain. The keystore does NOT trust the authorizer's domain
+    /// claim: even if the StateEnforcer's domain map were wrong or bypassed, a
+    /// cross-domain operation is refused here. A non-domain-scoped authorization
+    /// (domain = None) is unaffected (single-tenant deployments).
+    async fn enforce_authorized_domain(
+        &self,
+        authz_domain: Option<&str>,
+        key_id: &KeyId,
+    ) -> Result<(), String> {
+        let dom = match authz_domain {
+            Some(d) => d,
+            None => return Ok(()),
+        };
+        let resolved = self
+            .resolve_domain_for_key(key_id)
+            .await
+            .map_err(|e| format!("domain resolution failed for {}: {}", key_id, e))?;
+        if resolved.to_string() != dom {
+            return Err(format!(
+                "P217 cross-domain operation rejected: key {} is in domain {}, \
+                 not authorized domain {}",
+                key_id, resolved, dom
+            ));
+        }
+        Ok(())
+    }
+
     pub async fn encrypt_authorized(
         &self,
         authz: &citadel_core::AuthorizedContext,
@@ -1752,6 +1787,10 @@ impl Keystore {
         // Cross-check: the context must authorize THIS specific key for encrypt.
         authz
             .require_encrypt_for(authz.key_id())
+            .map_err(EncryptError)?;
+        // P217: keystore-side cross-domain rejection (defense in depth).
+        self.enforce_authorized_domain(authz.domain(), &key_id)
+            .await
             .map_err(EncryptError)?;
         self.encrypt(&key_id, plaintext, aad, context).await
     }
