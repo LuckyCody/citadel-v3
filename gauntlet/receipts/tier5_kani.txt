@@ -1,0 +1,17 @@
+=== Tier 5: Kani bounded model checking — 2026-07-20, Ubuntu WSL2 ===
+cargo kani  (tier5_kani/) — kani 0.67.0, CBMC backend
+
+Checking harness proofs::inspect_never_panics...        VERIFICATION: SUCCESSFUL
+Checking harness proofs::decode_wire_v1_never_panics... VERIFICATION: SUCCESSFUL
+cargo kani exit=0
+
+VERDICT: For EVERY input of length <= 40 bytes, Citadel's public parse functions
+are proven (not sampled) panic-free with no undefined behavior — no out-of-bounds
+slice, no arithmetic overflow, no unreachable. Kani's check list confirms it also
+discharged the slice-index/assertion checks inside the internally-reached
+wire_v2::decode, wire::decode_wire_raw, and decode_stream_header.
+
+BOUND NOTE: 40 bytes exhaustively covers the short/truncated-input guard region —
+the bug-prone zone for length-checked parsers. Full-length inputs (>1KB) are
+covered by coverage-guided fuzzing (Tier 3); raising the Kani bound toward the
+MIN_* lengths is future work (CBMC cost grows with symbolic input size).

@@ -1,0 +1,11 @@
+=== Tier 6: Loom exhaustive interleaving check — 2026-07-20 ===
+RUSTFLAGS="--cfg loom" cargo test --release  (tier6_loom/)
+
+test one_shot_nonce_no_double_spend ... ok
+test concurrent_issue_and_validate_distinct ... ok
+test result: ok. 2 passed; 0 failed
+
+VERDICT: The one-shot capability-nonce design (Mutex-guarded issued set, remove-on-
+validate) holds under EVERY thread interleaving Loom explored: exactly one validator
+consumes a token (no double-spend), no lost tokens, no deadlock. Exhaustive, not
+probabilistic (cf. the stress tests).

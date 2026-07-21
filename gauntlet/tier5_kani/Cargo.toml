@@ -1,0 +1,13 @@
+# Tier 5 — Kani (AWS bounded model checker) proof harnesses.
+# Standalone workspace: own Cargo.lock, not a member of the production workspace.
+# Run with:  cargo kani   (from this directory)
+[package]
+name = "citadel-gauntlet-kani"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+citadel-envelope = { path = "../../citadel-envelope" }

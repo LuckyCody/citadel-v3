@@ -1,0 +1,12 @@
+# Tier 6 — Loom exhaustive concurrency model checking.
+# Standalone workspace. Run with:  RUSTFLAGS="--cfg loom" cargo test --release
+[package]
+name = "citadel-gauntlet-loom"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dev-dependencies]
+loom = "0.7"

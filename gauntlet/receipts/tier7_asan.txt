@@ -1,0 +1,10 @@
+=== Tier 7: AddressSanitizer on citadel-ffi — 2026-07-20, Ubuntu WSL2 ===
+RUSTFLAGS="-Zsanitizer=address" ASAN_OPTIONS="detect_leaks=1" \
+  cargo +nightly test -p citadel-ffi -Zbuild-std --target x86_64-unknown-linux-gnu
+
+running 13 tests
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+VERDICT: 0 AddressSanitizer errors — no heap-use-after-free, double-free, or
+leaks at the real allocator on the raw alloc/dealloc FFI boundary. Complements
+Tier 2 (Miri, 0 UB, interpreter-level) with runtime instrumentation.

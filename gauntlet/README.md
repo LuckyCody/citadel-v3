@@ -28,15 +28,28 @@ what tooling is present and get an install hint per missing tool.
 | **2b** | Supply chain | **cargo-deny**, **cargo-audit**, **cargo-vet**, osv-scanner on SBOM | 0 *shipped* advisories; every finding explained (shipped vs test-only) |
 | **3**  | Parser / decoder robustness, sustained | **cargo-fuzz** (libFuzzer) + **AFL++** second engine, ASan-instrumented | 0 crashes over a sustained run; coverage tracked |
 | **4**  | Constant-time / side-channel | **dudect** (have) + **DATA**/**MicroWalk** binary trace analysis | attacker-controlled-input classes pass; key-material effect localized or bounded |
+| **5**  | *Proof* of parser panic/UB-freedom | **Kani** bounded model checking on the wire parsers | VERIFICATION SUCCESSFUL for all inputs ≤ bound |
+| **6**  | *Exhaustive* concurrency correctness | **Loom** — every thread interleaving of the one-shot nonce | invariants hold under all schedules; no deadlock |
+| **7**  | Runtime memory safety | **AddressSanitizer** (+leak) on the FFI | 0 sanitizer errors |
+| **8**  | Constant-time as a *proof* | **ctgrind** / **DATA** / **haybale-pitchfork** on ML-KEM decap | CT proven, or leak located (needs valgrind/LLVM install) |
+| **9**  | Cryptographic *design* soundness | hand review vs the KEM-combiner literature | combiner is IND-CCA2-robust or a flaw is named |
 
-Tier 1/1b live in [`tier1_vectors/`](tier1_vectors/) as a **standalone-workspace**
-crate — its own `Cargo.lock`, excluded from the production workspace, so
-`cargo test --workspace --locked --offline` in the parent stays pristine. Its
-primitive deps are pinned to the exact versions in `citadel_v3/Cargo.lock`, so
-Tier 1 validates the versions Citadel actually ships.
+**Depth ladder.** Tiers 1–4 are the sampling/measurement layer (vectors, property
+tests, fuzz smoke, statistical timing). Tiers 5–9 are the *proof/exhaustive/design*
+layer that a serious audit reaches for: Kani **proves** (not samples), Loom is
+**exhaustive** (not probabilistic), Tier 9 is human **design** reasoning no tool
+produces. Passing 1–9 is still necessary-but-not-sufficient for a paid audit — Tier 9
+is analytical, not a machine-checked crypto proof, and no free tool supplies a named
+cryptographer's liability-bearing signoff.
 
-Tiers 2/2b/3/4 operate on the production workspace directly and are invoked by
-`run.sh` — no new crate.
+Tier 1/1b, 5 (`tier5_kani/`), and 6 (`tier6_loom/`) live as **standalone-workspace**
+crates — own `Cargo.lock`, excluded from the production workspace, so
+`cargo test --workspace --locked --offline` stays pristine. Tier 1's primitive deps
+are pinned to the exact versions in `citadel_v3/Cargo.lock`.
+
+Tiers 2/2b/3/4/7 operate on the production workspace directly (invoked by `run.sh`).
+Tier 8 is specified in [`tier8_ct/CONSTANT_TIME_PLAN.md`](tier8_ct/CONSTANT_TIME_PLAN.md);
+Tier 9 is [`tier9_design/HYBRID_COMBINER_ANALYSIS.md`](tier9_design/HYBRID_COMBINER_ANALYSIS.md).
 
 ## Running
 
