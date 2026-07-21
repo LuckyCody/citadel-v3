@@ -1,0 +1,22 @@
+=== Tier 8: constant-time (ctgrind) — 2026-07-21, Ubuntu WSL2 ===
+Goal: run ML-KEM decapsulation with the secret key marked "undefined" under
+valgrind/memcheck; any secret-dependent branch/address = a CT violation.
+
+DONE (all rootless, no sudo):
+- valgrind 3.24.0 built from source into ~/.local  (valgrind --version OK)
+- ctgrind harness built (ctgrind_harness/): C shim over memcheck client requests
+  via the `cc` crate (no crabgrind/bindgen/libclang). Marks sk_bytes[32..] undefined,
+  calls timing_diagnostics::mlkem_decapsulate_from_key_bytes.
+- glibc debug symbols fetched rootless: `apt-get download libc6-dbg` (no root) +
+  dpkg-deb -x into ~/.local/dbgsym.
+
+BLOCKED at execution: valgrind's mandatory ld-linux `strcmp` redirection needs the
+glibc debug symbols in its default /usr/lib/debug search path; --extra-debuginfo-path
+did not resolve it. Placing them there needs root.
+
+UNBLOCK (one of):
+  sudo apt-get install -y libc6-dbg
+  sudo cp -r ~/.local/dbgsym/usr/lib/debug/* /usr/lib/debug/
+Then: ~/.local/bin/valgrind --error-exitcode=1 --track-origins=yes \
+        gauntlet/tier8_ct/ctgrind_harness/target/debug/ctgrind_harness
+Clean run (0 errors) = no secret-dependent branch on the decap path.

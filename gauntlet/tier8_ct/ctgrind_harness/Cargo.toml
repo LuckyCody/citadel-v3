@@ -1,0 +1,27 @@
+# Tier 8 — ctgrind harness. Marks Citadel's ML-KEM secret key "undefined" via a
+# tiny C shim over valgrind's memcheck client requests (no crabgrind/bindgen/
+# libclang — only gcc + valgrind headers). memcheck then reports any branch or
+# memory access that depends on a secret byte = a constant-time violation.
+#
+# Build:  VALGRIND_INCLUDE=$HOME/.local/include cargo build
+# Run:    ~/.local/bin/valgrind --error-exitcode=1 --track-origins=yes \
+#           ./target/debug/ctgrind_harness
+[package]
+name = "ctgrind_harness"
+version = "0.0.0"
+edition = "2021"
+publish = false
+build = "build.rs"
+
+[workspace]
+
+[dependencies]
+citadel-envelope = { path = "../../../citadel-envelope" }
+
+[build-dependencies]
+cc = "1"
+
+# No opt + debug info so memcheck maps traces to source and does not fold branches.
+[profile.dev]
+opt-level = 0
+debug = true

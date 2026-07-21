@@ -11,10 +11,10 @@ Every result below is machine-checked external-tool output, not self-assessment.
 | **2b** Supply chain | cargo-deny + cargo-audit + cargo-vet | ✅ **PASS (0 vulns)** | 3 HIGH **fixed** by bumping the libcrux **dev**-oracle 0.0.9→0.0.10 (patched code swapped in). `cargo audit` 0 vulns; 4 dev-only unmaintained/unsound warnings kept **visible** (not ignored) + documented in `SUPPLY_CHAIN.md`. `cargo deny` advisories ok. `receipts/tier2b_supplychain.txt` |
 | **3** Extended fuzzing | cargo-fuzz (libFuzzer, nightly+ASan) smoke | ✅ **PASS (smoke)** | ~71M execs across decode_envelope_v2 (39.9M) + decrypt_full (31.2M), **0 crashes / 0 leaks**; sustained + AFL++ + OSS-Fuzz = follow-on. `receipts/tier3_fuzz_smoke.txt` |
 | **4** Constant-time | dudect (+DATA/MicroWalk follow-on) | prior evidence in `../TIMING.md` | attacker-controlled-input classes pass; key-material effect documented, binary CT analysis pending |
-| **5** Formal (proof) | **Kani** bounded model checking on wire parsers | ✅ **PROVEN** | `inspect` + `decode_wire` panic-free / no-UB for ALL inputs ≤40B (incl. internal wire_v2::decode, decode_wire_raw). Proof, not sample. `receipts/tier5_kani.txt` |
+| **5** Formal (proof) | **Kani** bounded model checking on wire parsers | ✅ **PROVEN** | `inspect` + `decode_wire` panic-free / no-UB for ALL inputs ≤**256B** (incl. internal wire_v2::decode, decode_wire_raw). Proof, not sample. `receipts/tier5_kani.txt` |
 | **6** Concurrency | **Loom** exhaustive interleaving | ✅ **PASS** | one-shot capability nonce: exactly-one-consumer under EVERY schedule, no double-spend / lost token / deadlock. `receipts/tier6_loom.txt` |
 | **7** Sanitizers | **AddressSanitizer** on citadel-ffi | ✅ **PASS** | 13/13 under ASan (+leak detection), 0 sanitizer errors at the real allocator. Complements Miri. `receipts/tier7_asan.txt` |
-| **8** CT proof | ctgrind / DATA / haybale-pitchfork | ⛔ **BLOCKED** | needs `sudo apt install valgrind` (+LLVM/boolector) — sudo needs a password here. Fully specified in `tier8_ct/CONSTANT_TIME_PLAN.md`. |
+| **8** CT proof | ctgrind (valgrind memcheck) on ML-KEM decap | 🟡 **HARNESS READY** | valgrind built rootless, harness+C-shim compile, glibc dbg fetched rootless — one root install from running (`sudo apt install libc6-dbg`). `tier8_ct/` + `receipts/tier8_ct.txt`. |
 | **9** Design review | hybrid-KEM combiner IND-CCA2 soundness | ✅ **NO FLAW** | binds both ciphertexts + both secrets, unambiguous encoding, X25519 contributory check — sound under ROM per KEM-combiner literature. Analytical, not machine-checked. `tier9_design/HYBRID_COMBINER_ANALYSIS.md` |
 
 ## Verdict
@@ -38,7 +38,9 @@ now clears a substantially higher bar than measurement-only tooling.
    (fixes RUSTSEC-2026-0207/0208/0212 with patched code). 4 residual dev-only
    unmaintained/unsound warnings kept **visible** in `cargo audit` (no per-ID
    ignore) and documented in `SUPPLY_CHAIN.md`. Suite unchanged at 353/0/8.
-2. **Tier 3 sustained**: OSS-Fuzz onboarding (AGPL-eligible, free perpetual fuzzing) +
-   AFL++ second engine; run each target hours, track coverage.
-3. **Tier 4 binary CT**: run DATA/MicroWalk on the ML-KEM decapsulation path to localize
-   or bound the documented key-material timing effect.
+2. **Tier 3 sustained**: continuous-fuzzing config is WRITTEN in `oss-fuzz/`
+   (ClusterFuzzLite recommended — self-hosted in Citadel's own CI, no acceptance gate;
+   OSS-Fuzz as the optional Google-hosted path). Drop `.clusterfuzzlite/` + the workflow
+   and each target fuzzes for hours with an accumulating corpus.
+3. **Tier 8 CT**: one root install (`sudo apt install libc6-dbg`) runs the ready ctgrind
+   harness; then DATA/haybale for deeper coverage.

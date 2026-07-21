@@ -17,7 +17,7 @@ mod proofs {
     use citadel_envelope::{inspect, wire};
 
     // Raise gradually toward MIN_* as long as CBMC still terminates.
-    const MAX: usize = 40;
+    const MAX: usize = 256;
 
     /// v1 wire decoder: panic-free / no-UB for all inputs of length ≤ MAX.
     #[kani::proof]

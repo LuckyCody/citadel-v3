@@ -1,9 +1,27 @@
 # Tier 8 — Constant-Time as a Proof (not a measurement)
 
-**Status: BLOCKED on a one-line system install (needs root).** Everything is
-specified and ready to run; the tools require `sudo apt` / LLVM packages, and
-sudo in this WSL needs a password. Unblock with **`sudo apt-get install -y valgrind`**
-(and optionally the LLVM/boolector stack below), then run the commands here.
+**Status: harness COMPLETE and built; execution blocked on one root install.**
+Done rootless (no sudo): valgrind 3.24.0 built into `~/.local`; the ctgrind harness
+(`ctgrind_harness/`, a C shim over memcheck client requests — no crabgrind/bindgen/
+libclang) compiles; glibc debug symbols fetched via `apt-get download libc6-dbg`
+and extracted to `~/.local/dbgsym`. The ONE remaining blocker: valgrind's mandatory
+`ld-linux` `strcmp` redirection needs those debug symbols in its default
+`/usr/lib/debug` search path, and `--extra-debuginfo-path` did not resolve it —
+placing them there needs root.
+
+**Unblock (either):**
+- `sudo apt-get install -y libc6-dbg` (puts glibc debuginfo where valgrind looks), OR
+- `sudo cp -r ~/.local/dbgsym/usr/lib/debug/* /usr/lib/debug/`
+
+**Then run (harness is ready):**
+```bash
+cd gauntlet/tier8_ct/ctgrind_harness
+VALGRIND_INCLUDE=$HOME/.local/include cargo build
+~/.local/bin/valgrind --error-exitcode=1 --track-origins=yes ./target/debug/ctgrind_harness
+```
+A clean run (ERROR SUMMARY: 0 errors) = no secret-dependent branch/addressing on the
+ML-KEM decap path for that input. Any "Conditional jump ... depends on uninitialised
+value" pinpoints the leaking instruction.
 
 ## Why this tier exists
 

@@ -1,0 +1,12 @@
+homepage: "https://github.com/mrcord77/citadel-v3"
+language: rust
+primary_contact: "andre.cordero36@gmail.com"
+main_repo: "https://github.com/mrcord77/citadel-v3"
+# Citadel is AGPL-3.0 open source — eligible for OSS-Fuzz continuous fuzzing.
+fuzzing_engines:
+  - libfuzzer
+sanitizers:
+  - address
+# Note: Rust on OSS-Fuzz supports the AddressSanitizer build. UBSan/MSan coverage
+# for Rust is limited upstream; address is the standard, and matches our local
+# Tier 3 (cargo-fuzz + ASan) and Tier 7 (ASan) runs.
