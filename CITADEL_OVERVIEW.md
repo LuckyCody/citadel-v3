@@ -55,7 +55,19 @@ The four-level hierarchy `Root → Domain → KEK → DEK` is structurally enfor
 
 Root's role is access-control separation and hierarchy validation, not runtime key unwrapping. This is consistent with NIST SP 800-57 guidance on offline root keys and key custodian separation.
 
-**Domain policy enforcement (P217):** Domain currently provides structural hierarchy only. Runtime policy enforcement (replay scoping per Domain, API key→Domain binding, cross-domain operation rejection) is required for multi-tenant deployments but not yet implemented. Context parameter is user-defined and not validated against Domain boundaries.
+**Domain policy enforcement (P217):** Runtime multi-tenant domain enforcement is
+implemented at three layers: (1) **API** — API keys are bound to domains
+(`allowed_domains`) and a central `authorize_domain_access` gate resolves the
+target key's Domain and rejects out-of-domain operations on every crypto/key
+endpoint (P221–P223, P233), with cross-domain exploit tests; (2) **replay** — the
+replay-claim key is domain-scoped, `SHA256(domain_id ‖ key_id ‖ version ‖ nonce ‖
+tag)`, so a claim in one Domain cannot interfere with another (P224); (3)
+**keystore/crypto** — `encrypt_authorized`/`decrypt_authorized` independently
+resolve the key's Domain from the hierarchy and refuse a mismatched authorization
+(defense in depth), verified by `tests/domain_isolation.rs`. The application-level
+`context` parameter remains an opaque caller tag and is not itself a domain
+boundary — domain isolation does not depend on it and is enforced by the three
+mechanisms above.
 
 ## Deployment
 
@@ -121,7 +133,13 @@ Citadel maps to 34 controls in NIST SP 800-57: 26 satisfied, 7 partially satisfi
 
 ## What Independent Audit Would Cover
 
-A lightweight audit (~$20-40K, firms like NCC Group or Trail of Bits) would review:
+A comprehensive independent audit from a brand-name firm (Trail of Bits, NCC
+Group) realistically runs **$75K–$150K+** (priced by engineer-weeks). A **scoped**
+review of just the core crypto (hybrid-KEM combiner, KDF binding, wire format) by
+an independent cryptographer or an academic group can land in the **$20–40K** range
+or lower — and the extensive free self-validation below (see `gauntlet/`) is
+designed to make that scoped review cheaper by clearing the mechanical findings
+first. An audit would review:
 
 1. Hybrid KEM composition correctness
 2. KDF domain separation and binding

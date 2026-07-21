@@ -95,7 +95,6 @@ Citadel depends on:
 | Crate | Purpose | Version | Maintainer |
 |-------|---------|---------|-----------|
 | `ml-kem` | Post-quantum KEM (ML-KEM-768) | =0.3.2 | RustCrypto |
-| `pqcrypto-traits` | PQClean type traits | =0.3.5 | PQClean project |
 | `ml-dsa` | Post-quantum signatures (ML-DSA-65) | =0.1.0-rc.9 | RustCrypto |
 | `x25519-dalek` | Classical ECDH | 2.x | Dalek |
 | `aes-gcm` | Symmetric encryption | 0.10 | RustCrypto |
@@ -106,7 +105,7 @@ Citadel depends on:
 
 All cryptographic dependencies are exact-pinned; any upgrade is an explicit, reviewed decision.
 
-### ML-KEM provider: PQClean
+### ML-KEM provider: RustCrypto `ml-kem 0.3.2`
 
 The production ML-KEM-768 provider is RustCrypto `ml-kem 0.3.2`, pinned exactly with zeroization enabled. It passes the checked-in 25 keygen, 25 encapsulation, and 10 decapsulation final FIPS 203 vectors directly through Citadel's selected provider, a 10,000-round-trip release test, negative key/import tests, and differential checks against libcrux. The replaced PQClean chain and its RUSTSEC-2026-0161 through -0163 advisories are absent from the production lockfile. RustCrypto explicitly states that this crate has not been independently audited; local conformance tests do not erase that limitation. See `PROVIDER_BAKEOFF_2026.md` and `PROVIDER_DECISION_LOG.md`.
 
@@ -126,7 +125,9 @@ release path and a maintained-provider assurance decision remain open under
 
 **Minimum build toolchain: Rust / Cargo 1.74+**
 
-A C compiler is required for the PQClean ML-KEM-768 provider (`cc` crate).
+No C compiler is required: the production cryptographic providers (RustCrypto
+`ml-kem`, `ml-dsa`, `aes-gcm`, `x25519-dalek`, `hkdf`) are pure Rust. (The retired
+PQClean chain, which needed a `cc` C compiler, is no longer in the tree.)
 
 ## Timing Validation
 
@@ -175,16 +176,25 @@ The wire format includes suite identifiers to support future algorithms:
 
 ## Audit Status
 
-| Component | Last Review | Reviewer |
-|-----------|-------------|----------|
-| Wire format | Internal | — |
-| KDF construction | Internal | — |
-| Error handling | Internal | — |
-| Timing validation | Internal (dudect) | — |
-| ACVP KAT vectors | Automated (60/60 through libcrux only) | Does not validate current PQClean production provider |
-| Fuzz testing | Ongoing | libFuzzer |
+| Component | Method | Status |
+|-----------|--------|--------|
+| ACVP KAT vectors | 60/60 through the RustCrypto production provider directly, + byte-for-byte libcrux differential | Internal, automated |
+| Primitive conformance | Google Wycheproof vectors through the exact pinned aes-gcm / x25519 / hkdf | Internal, 0 failures |
+| Envelope composition | proptest vs the real `Citadel::seal/open` (tamper, wrong-key, AAD/context binding, no-downgrade) | Internal |
+| Memory safety | `cargo miri` (UB) + AddressSanitizer on the FFI | Internal, 0 findings |
+| Parser panic/UB-freedom | Kani bounded model checking (proof, not sample) | Internal, verified ≤256B |
+| Key-lifecycle & domain isolation | proptest vs the real keystore state machine + cross-domain isolation tests | Internal |
+| Concurrency | Loom exhaustive interleaving (one-shot capability nonce) | Internal |
+| Constant-time | dudect + ctgrind (valgrind) localized to the ml-kem dependency | Internal |
+| Protocol | ProVerif symbolic model (secrecy + no-downgrade proved) | Internal |
+| Fuzz testing | cargo-fuzz + continuous ClusterFuzzLite (daily, persistent corpus) | Ongoing |
+| Combiner design | analytical review vs the KEM-combiner literature | Internal, no flaw found |
 
-**No independent audit has been conducted.**
+See `gauntlet/` and `gauntlet/receipts/SUMMARY.md` for the full free-validation
+battery and machine-readable receipts.
+
+**No independent audit has been conducted.** All rows above are internal
+self-validation (external tools, but not an independent auditor's sign-off).
 
 ## Contact
 
