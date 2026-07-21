@@ -25,6 +25,9 @@ jobs:
           sanitizer: ${{ matrix.sanitizer }}
           # Private repo: token authenticates ClusterFuzzLite's internal clone.
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Persistent corpus store (seed the build with accumulated corpus).
+          storage-repo: https://${{ secrets.CFLITE_STORAGE_TOKEN }}@github.com/mrcord77/citadel-v3-corpus.git
+          storage-repo-branch: main
       - name: Run Fuzzers (${{ matrix.sanitizer }})
         uses: google/clusterfuzzlite/actions/run_fuzzers@v1
         with:
@@ -32,3 +35,6 @@ jobs:
           fuzz-seconds: 1800
           mode: 'batch'
           sanitizer: ${{ matrix.sanitizer }}
+          # Commit newly-discovered corpus + any crashes back to the store.
+          storage-repo: https://${{ secrets.CFLITE_STORAGE_TOKEN }}@github.com/mrcord77/citadel-v3-corpus.git
+          storage-repo-branch: main
