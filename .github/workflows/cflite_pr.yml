@@ -15,6 +15,11 @@ jobs:
       matrix:
         sanitizer: [address]
     steps:
+      # Private repo: check out here so ClusterFuzzLite uses the workspace instead
+      # of an unauthenticated internal `git clone` (which fails on private repos).
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - name: Build Fuzzers (${{ matrix.sanitizer }})
         id: build
         uses: google/clusterfuzzlite/actions/build_fuzzers@v1
