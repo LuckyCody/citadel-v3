@@ -1,0 +1,5 @@
+# Keep the ClusterFuzzLite/OSS-Fuzz build context lean — target dirs are rebuilt.
+**/target/
+gauntlet/**/target/
+*.deb
+*.tar.bz2
