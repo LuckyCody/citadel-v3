@@ -21,7 +21,13 @@ citadel-envelope = { path = "../../../citadel-envelope" }
 [build-dependencies]
 cc = "1"
 
-# No opt + debug info so memcheck maps traces to source and does not fold branches.
-[profile.dev]
-opt-level = 0
+# CT analysis MUST run on optimized code (what ships). A debug build adds
+# integer-overflow-check and bounds-check branches on every arithmetic op, which
+# memcheck reports as secret-dependent — false positives that have nothing to do
+# with the algorithm. Release: no overflow checks, but keep debug symbols so
+# memcheck maps any REAL finding to source.
+[profile.release]
+opt-level = 3
 debug = true
+overflow-checks = false
+debug-assertions = false

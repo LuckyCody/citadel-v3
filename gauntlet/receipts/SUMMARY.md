@@ -14,7 +14,7 @@ Every result below is machine-checked external-tool output, not self-assessment.
 | **5** Formal (proof) | **Kani** bounded model checking on wire parsers | ✅ **PROVEN** | `inspect` + `decode_wire` panic-free / no-UB for ALL inputs ≤**256B** (incl. internal wire_v2::decode, decode_wire_raw). Proof, not sample. `receipts/tier5_kani.txt` |
 | **6** Concurrency | **Loom** exhaustive interleaving | ✅ **PASS** | one-shot capability nonce: exactly-one-consumer under EVERY schedule, no double-spend / lost token / deadlock. `receipts/tier6_loom.txt` |
 | **7** Sanitizers | **AddressSanitizer** on citadel-ffi | ✅ **PASS** | 13/13 under ASan (+leak detection), 0 sanitizer errors at the real allocator. Complements Miri. `receipts/tier7_asan.txt` |
-| **8** CT proof | ctgrind (valgrind memcheck) on ML-KEM decap | 🟡 **HARNESS READY** | valgrind built rootless, harness+C-shim compile, glibc dbg fetched rootless — one root install from running (`sudo apt install libc6-dbg`). `tier8_ct/` + `receipts/tier8_ct.txt`. |
+| **8** CT proof | ctgrind (valgrind memcheck) on ML-KEM decap | ✅ **EXECUTED — localized** | Citadel's own envelope/KDF/AEAD/wire code: **0 secret-dependent branches**. Residual 14 all localize to the RustCrypto **ml-kem 0.3.2** dep (`sample_poly_cbd`, algebra.rs:114-125) — localizes the TIMING.md dudect effect to one dependency function; leak-vs-artifact needs ml-kem source review. `receipts/tier8_ct.txt`. |
 | **9** Design review | hybrid-KEM combiner IND-CCA2 soundness | ✅ **NO FLAW** | binds both ciphertexts + both secrets, unambiguous encoding, X25519 contributory check — sound under ROM per KEM-combiner literature. Analytical, not machine-checked. `tier9_design/HYBRID_COMBINER_ANALYSIS.md` |
 
 ## Verdict

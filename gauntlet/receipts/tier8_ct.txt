@@ -1,22 +1,33 @@
 === Tier 8: constant-time (ctgrind) — 2026-07-21, Ubuntu WSL2 ===
-Goal: run ML-KEM decapsulation with the secret key marked "undefined" under
-valgrind/memcheck; any secret-dependent branch/address = a CT violation.
+valgrind 3.24.0 (rootless build) + libc6-dbg (installed) + ctgrind harness.
+Method: mark ML-KEM secret bytes "undefined" via valgrind memcheck client requests,
+run decapsulation; any conditional jump on a secret byte = a CT violation.
+Build: RELEASE (opt-level=3, overflow-checks OFF). CT analysis must use shipping
+code — a debug build adds overflow/bounds-check branches that are false positives.
 
-DONE (all rootless, no sudo):
-- valgrind 3.24.0 built from source into ~/.local  (valgrind --version OK)
-- ctgrind harness built (ctgrind_harness/): C shim over memcheck client requests
-  via the `cc` crate (no crabgrind/bindgen/libclang). Marks sk_bytes[32..] undefined,
-  calls timing_diagnostics::mlkem_decapsulate_from_key_bytes.
-- glibc debug symbols fetched rootless: `apt-get download libc6-dbg` (no root) +
-  dpkg-deb -x into ~/.local/dbgsym.
+--- Iteration 1: whole expanded key marked secret (WRONG) ---
+43 conditional-jump contexts, dominated by FALSE POSITIVES on the key's PUBLIC
+components: sample_ntt rejection sampling [matrix A regenerated from the public seed
+inside ek] and a bcmp key-import hash check on H(ek). Both public -> not leaks.
 
-BLOCKED at execution: valgrind's mandatory ld-linux `strcmp` redirection needs the
-glibc debug symbols in its default /usr/lib/debug search path; --extra-debuginfo-path
-did not resolve it. Placing them there needs root.
+--- Iteration 2: only TRUE secret marked; ek/H(ek) left public ---
+Marked dk_PKE [sk_bytes 32..1184] + z [2400..2432]; left ek + H(ek) defined.
+Result: 14 conditional-jump contexts, ERROR SUMMARY 3584 errors / 28 contexts.
+ALL residual branches localize to:
+    ml_kem::algebra::sample_poly_cbd   (algebra.rs:114, 122, 125)
+i.e. the CBD noise sampling inside the FO-transform re-encryption, operating on
+secret-derived coins. ZERO flagged branches in Citadel's own code
+(envelope / kdf / aead / wire) — every residual is in the RustCrypto ml-kem 0.3.2
+dependency.
 
-UNBLOCK (one of):
-  sudo apt-get install -y libc6-dbg
-  sudo cp -r ~/.local/dbgsym/usr/lib/debug/* /usr/lib/debug/
-Then: ~/.local/bin/valgrind --error-exitcode=1 --track-origins=yes \
-        gauntlet/tier8_ct/ctgrind_harness/target/debug/ctgrind_harness
-Clean run (0 errors) = no secret-dependent branch on the decap path.
+FINDING (honest):
+- Citadel's OWN envelope/KDF/AEAD/wire code shows NO secret-dependent branches.
+- The residual secret-dependent branches are entirely in ml-kem 0.3.2's CBD sampling.
+  This LOCALIZES the key-material timing effect dudect measured (TIMING.md) to a
+  specific dependency function, not just "a wobble exists somewhere".
+- Leak vs. artifact: the flagged op is a slice bounds-check reached from
+  sample_poly_cbd. CBD indexing normally uses PUBLIC loop counters, which would make
+  this a memcheck artifact; a genuine secret-indexed access would be a real leak.
+  Definitive call needs ml-kem algebra.rs:114-125 source review — the concrete next
+  step. Either way it is a property of the ml-kem dependency, consistent with
+  RustCrypto's documented "unaudited, not guaranteed constant-time" status.

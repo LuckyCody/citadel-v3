@@ -28,11 +28,17 @@ fn main() {
     let mut ct = [0u8; KEM_CIPHERTEXT_BYTES];
     ct.copy_from_slice(&ct_vec);
 
-    // Mark the ML-KEM secret-key region (bytes 32..) as UNDEFINED = "secret".
-    // The X25519 half (first 32 B) is left defined; this isolates the ML-KEM path.
-    let mlkem_secret = &sk_bytes[32..];
+    // Mark ONLY the genuinely-secret regions undefined. The ML-KEM-768 expanded
+    // decapsulation key (FIPS 203) is dk_PKE(1152) || ek(1184) || H(ek)(32) || z(32);
+    // ek and H(ek) are PUBLIC. Marking the whole key confounds the result — the
+    // matrix regeneration (rejection sampling from ek's seed) and the key-import
+    // hash check operate on public data and would flag as false positives.
+    // sk_bytes = x25519(32) || dk(2400), so within the 2432-byte buffer:
+    //   [32 .. 1184)  dk_PKE  (SECRET)   [1184 .. 2368) ek       (public)
+    //   [2368 .. 2400) H(ek)  (public)   [2400 .. 2432) z        (SECRET)
     unsafe {
-        ct_mark_undefined(mlkem_secret.as_ptr() as *mut c_void, mlkem_secret.len());
+        ct_mark_undefined(sk_bytes[32..1184].as_ptr() as *mut c_void, 1152); // dk_PKE
+        ct_mark_undefined(sk_bytes[2400..2432].as_ptr() as *mut c_void, 32); // z
     }
 
     // Operation under test. Do NOT branch on the (secret-derived) result.
