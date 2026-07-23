@@ -66,6 +66,22 @@ pub const CITADEL_ERR_SEAL: i32 = 2;
 pub const CITADEL_ERR_OPEN: i32 = 3;
 pub const CITADEL_ERR_KEY: i32 = 4;
 pub const CITADEL_ERR_ALLOC: i32 = 5;
+/// A panic was caught at the FFI boundary (defense-in-depth; the bodies are
+/// panic-safe, so this should never occur in practice).
+pub const CITADEL_ERR_PANIC: i32 = 6;
+
+/// Run an FFI body, converting any panic into `CITADEL_ERR_PANIC` instead of
+/// unwinding across the `extern "C"` boundary — which, under `panic = "unwind"`,
+/// would abort the host process. Defense-in-depth: the bodies are already
+/// panic-safe; this ensures an unforeseen panic degrades to an error code.
+fn ffi_guard(body: impl FnOnce() -> i32) -> i32 {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)).unwrap_or(CITADEL_ERR_PANIC)
+}
+
+/// Void-returning variant of [`ffi_guard`] for `citadel_free`.
+fn ffi_guard_void(body: impl FnOnce()) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body));
+}
 
 fn allocations() -> &'static Mutex<HashMap<usize, usize>> {
     static ALLOCATIONS: OnceLock<Mutex<HashMap<usize, usize>>> = OnceLock::new();
@@ -137,6 +153,15 @@ pub unsafe extern "C" fn citadel_keygen(
     sk_out: *mut *mut u8,
     sk_len: *mut usize,
 ) -> i32 {
+    ffi_guard(|| unsafe { citadel_keygen_impl(pk_out, pk_len, sk_out, sk_len) })
+}
+
+unsafe fn citadel_keygen_impl(
+    pk_out: *mut *mut u8,
+    pk_len: *mut usize,
+    sk_out: *mut *mut u8,
+    sk_len: *mut usize,
+) -> i32 {
     if pk_out.is_null() || pk_len.is_null() || sk_out.is_null() || sk_len.is_null() {
         return CITADEL_ERR_NULL;
     }
@@ -158,6 +183,26 @@ pub unsafe extern "C" fn citadel_keygen(
 /// `aad_ptr` and `ctx_ptr` may be null (treated as empty).
 #[no_mangle]
 pub unsafe extern "C" fn citadel_seal(
+    pk_ptr: *const u8,
+    pk_len: usize,
+    pt_ptr: *const u8,
+    pt_len: usize,
+    aad_ptr: *const u8,
+    aad_len: usize,
+    ctx_ptr: *const u8,
+    ctx_len: usize,
+    ct_out: *mut *mut u8,
+    ct_len_out: *mut usize,
+) -> i32 {
+    ffi_guard(|| unsafe {
+        citadel_seal_impl(
+            pk_ptr, pk_len, pt_ptr, pt_len, aad_ptr, aad_len, ctx_ptr, ctx_len, ct_out, ct_len_out,
+        )
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe fn citadel_seal_impl(
     pk_ptr: *const u8,
     pk_len: usize,
     pt_ptr: *const u8,
@@ -221,6 +266,26 @@ pub unsafe extern "C" fn citadel_open(
     pt_out: *mut *mut u8,
     pt_len_out: *mut usize,
 ) -> i32 {
+    ffi_guard(|| unsafe {
+        citadel_open_impl(
+            sk_ptr, sk_len, ct_ptr, ct_len, aad_ptr, aad_len, ctx_ptr, ctx_len, pt_out, pt_len_out,
+        )
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe fn citadel_open_impl(
+    sk_ptr: *const u8,
+    sk_len: usize,
+    ct_ptr: *const u8,
+    ct_len: usize,
+    aad_ptr: *const u8,
+    aad_len: usize,
+    ctx_ptr: *const u8,
+    ctx_len: usize,
+    pt_out: *mut *mut u8,
+    pt_len_out: *mut usize,
+) -> i32 {
     if sk_ptr.is_null() || ct_ptr.is_null() || pt_out.is_null() || pt_len_out.is_null() {
         return CITADEL_ERR_NULL;
     }
@@ -269,6 +334,10 @@ pub unsafe extern "C" fn citadel_open(
 /// do not linger in heap memory after the caller is done with them.
 #[no_mangle]
 pub unsafe extern "C" fn citadel_free(ptr: *mut u8, _len: usize) {
+    ffi_guard_void(|| unsafe { citadel_free_impl(ptr, _len) })
+}
+
+unsafe fn citadel_free_impl(ptr: *mut u8, _len: usize) {
     if ptr.is_null() {
         return;
     }
@@ -301,6 +370,7 @@ pub extern "C" fn citadel_error_string(code: i32) -> *const u8 {
         CITADEL_ERR_OPEN => b"decryption failed\0".as_ptr(),
         CITADEL_ERR_KEY => b"invalid key\0".as_ptr(),
         CITADEL_ERR_ALLOC => b"memory allocation failed\0".as_ptr(),
+        CITADEL_ERR_PANIC => b"internal panic caught at FFI boundary\0".as_ptr(),
         _ => b"unknown error\0".as_ptr(),
     }
 }
@@ -723,4 +793,24 @@ fn ffi_concurrent_keygen_is_safe() {
         pks.len(),
         "concurrent keygen must produce distinct keypairs"
     );
+}
+
+// P160: the FFI boundary guard (used by every extern "C" fn) must convert an
+// unforeseen panic into CITADEL_ERR_PANIC rather than unwinding across the C ABI
+// (which would abort the host process under panic = "unwind").
+#[test]
+fn ffi_guard_converts_panic_to_error_code() {
+    let rc = ffi_guard(|| panic!("induced FFI-body panic"));
+    assert_eq!(
+        rc, CITADEL_ERR_PANIC,
+        "ffi_guard must catch a panic and return CITADEL_ERR_PANIC"
+    );
+    // A non-panicking body passes its return value through unchanged.
+    assert_eq!(ffi_guard(|| CITADEL_OK), CITADEL_OK);
+    assert_eq!(ffi_guard(|| CITADEL_ERR_SEAL), CITADEL_ERR_SEAL);
+    // The void variant must swallow a panic without unwinding out.
+    ffi_guard_void(|| panic!("induced free-body panic"));
+    // citadel_error_string must describe the new code.
+    let s = citadel_error_string(CITADEL_ERR_PANIC);
+    assert!(!s.is_null());
 }
