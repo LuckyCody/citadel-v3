@@ -83,6 +83,7 @@ pub(crate) type CitadelEngine =
     crate::kem_engine::Citadel<crate::kem::HybridX25519MlKem768Provider>;
 
 #[doc(hidden)]
+#[cfg(feature = "timing-diagnostics")]
 pub mod timing_diagnostics {
     use alloc::vec::Vec;
     use zeroize::Zeroizing;

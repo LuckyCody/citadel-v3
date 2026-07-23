@@ -70,6 +70,11 @@ kat = ["ml-kem/hazmat"]
 bench = []
 # Explicit opt-in for the AWS-LC comparison path. Never selected by default.
 aws-lc-comparison = ["dep:aws-lc-rs"]
+# Diagnostic/timing helpers (raw component decapsulation for side-channel benches).
+# NOT compiled into default/production builds: these expose unguarded intermediate
+# KEM material (e.g. raw X25519 output without the contributory check) purely for
+# timing isolation. Never enable in production. (020-R hardening.)
+timing-diagnostics = []
 # Compatibility-only V2 streaming API. New integrations must use stream_v3.
 legacy-stream-v2 = []
 # Compatibility-only creation of historical envelope v1 fixtures. Default
@@ -105,6 +110,7 @@ harness = false
 [[bench]]
 name = "timing_sidechannel"
 harness = false
+required-features = ["timing-diagnostics"]
 
 [[bench]]
 name = "mlkem_standalone"

@@ -178,10 +178,19 @@ impl SecretKey {
 }
 
 // ---------------------------------------------------------------------------
-// Diagnostic helpers (used by timing benches)
+// Diagnostic helpers (used by timing benches ONLY)
+//
+// Feature-gated behind `timing-diagnostics` so they are NOT compiled into
+// default/production builds (020-R hardening). These return raw intermediate KEM
+// material for timing isolation and deliberately SKIP production checks (e.g. the
+// X25519 contributory guard) — never call them outside a benchmark.
 // ---------------------------------------------------------------------------
 
+/// TIMING-DIAGNOSTIC ONLY. Returns the raw X25519 shared secret WITHOUT the
+/// `was_contributory()` guard that production encapsulate/decapsulate enforce.
+/// Not for production use; feature-gated out of default builds.
 #[doc(hidden)]
+#[cfg(feature = "timing-diagnostics")]
 pub fn diagnostic_x25519_decapsulate_only(
     sk: &SecretKey,
     ct: &[u8],
@@ -202,6 +211,7 @@ pub fn diagnostic_x25519_decapsulate_only(
 }
 
 #[doc(hidden)]
+#[cfg(feature = "timing-diagnostics")]
 pub fn diagnostic_mlkem_decapsulate_only(
     sk: &SecretKey,
     ct: &[u8],
@@ -221,6 +231,7 @@ pub fn diagnostic_mlkem_decapsulate_only(
 }
 
 #[doc(hidden)]
+#[cfg(feature = "timing-diagnostics")]
 pub fn diagnostic_mlkem_decapsulate_from_key_bytes(
     sk_bytes: &[u8; KEM_SECRET_KEY_BYTES],
     ct: &[u8; KEM_CIPHERTEXT_BYTES],
