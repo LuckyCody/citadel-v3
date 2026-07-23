@@ -684,3 +684,64 @@ fn decryption_never_panics_on_garbage() {
         );
     }
 }
+
+#[test]
+fn parsers_never_panic_on_boundary_or_garbage_inputs() {
+    // Both public parsers that accept fully attacker-controlled bytes — open() and
+    // inspect() — must return Err, never panic (a panic on adversarial input is a
+    // remote DoS). Hammer them across garbage content AND every length near a format
+    // boundary (v1 header 6, v2 header 98, kem 1120/1218, stream 1126, v1 min 1154,
+    // v3 header 1162, v2 min 1234), where an off-by-one slice would fire, with leading
+    // bytes that drive each dispatch branch.
+    use citadel_envelope::inspect;
+    use std::collections::BTreeSet;
+
+    let (cit, _pk, sk) = setup();
+    let aad = Aad::raw(b"aad");
+    let ctx = Context::raw(b"ctx");
+
+    let mut lengths: BTreeSet<usize> = (0..12).collect();
+    for base in [6usize, 98, 1120, 1126, 1154, 1162, 1218, 1234, 2048] {
+        for delta in -2i64..=2 {
+            let n = base as i64 + delta;
+            if n >= 0 {
+                lengths.insert(n as usize);
+            }
+        }
+    }
+
+    // Leading bytes that route into each decoder branch of inspect()/open().
+    let prefixes: &[&[u8]] = &[
+        b"",     // pure fill
+        b"CTD2", // envelope v2 (wire_v2::decode)
+        &[0x01], // v1 envelope (decode_wire_raw)
+        &[0x02], // v2 stream (decode_stream_header)
+        b"CTDL", // v3 stream magic
+    ];
+
+    for &len in &lengths {
+        for fill in [0x00u8, 0xFF, 0xA3] {
+            for prefix in prefixes {
+                let mut buf = vec![fill; len];
+                let p = prefix.len().min(len);
+                buf[..p].copy_from_slice(&prefix[..p]);
+
+                let opened = std::panic::catch_unwind(|| {
+                    let _ = cit.open(&sk, &buf, &aad, &ctx);
+                });
+                assert!(
+                    opened.is_ok(),
+                    "open() panicked: len={len} fill={fill:#x} prefix={prefix:?}"
+                );
+
+                let inspected = std::panic::catch_unwind(|| {
+                    let _ = inspect(&buf);
+                });
+                assert!(
+                    inspected.is_ok(),
+                    "inspect() panicked: len={len} fill={fill:#x} prefix={prefix:?}"
+                );
+            }
+        }
+    }
+}
