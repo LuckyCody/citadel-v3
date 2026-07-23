@@ -161,13 +161,15 @@ fn corrupted_kem_ciphertext_rejected() {
         .seal(&pk, b"test", &Aad::empty(), &Context::empty())
         .unwrap();
 
-    // Corrupt the ML-KEM ciphertext portion (bytes 38..38+1088)
+    // Corrupt the ML-KEM ciphertext component. CTD2 layout: header[0..98],
+    // KEM[98..1218] = X25519_eph[98..130] || ML-KEM_ct[130..1218]. Flip a byte
+    // well inside the ML-KEM ciphertext.
     let mut ct_bad = ct.clone();
-    ct_bad[40] ^= 0xFF; // inside KEM ciphertext
+    ct_bad[200] ^= 0xFF; // inside ML-KEM ciphertext (130..1218)
     assert!(
         cit.open(&sk, &ct_bad, &Aad::empty(), &Context::empty())
             .is_err(),
-        "corrupted KEM ciphertext must be rejected"
+        "corrupted ML-KEM ciphertext must be rejected"
     );
 }
 
@@ -180,9 +182,10 @@ fn corrupted_x25519_ephemeral_rejected() {
         .seal(&pk, b"test", &Aad::empty(), &Context::empty())
         .unwrap();
 
-    // Corrupt the X25519 ephemeral public key (bytes 6..38)
+    // Corrupt the X25519 ephemeral public key component. CTD2 layout: the
+    // X25519 ephemeral occupies KEM bytes [98..130]. Flip a byte inside it.
     let mut ct_bad = ct.clone();
-    ct_bad[6] ^= 0xFF;
+    ct_bad[100] ^= 0xFF; // inside X25519 ephemeral (98..130)
     assert!(
         cit.open(&sk, &ct_bad, &Aad::empty(), &Context::empty())
             .is_err(),
