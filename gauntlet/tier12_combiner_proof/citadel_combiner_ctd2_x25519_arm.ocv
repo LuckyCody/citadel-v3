@@ -1,0 +1,119 @@
+(* Citadel hybrid combiner — X25519 arm, ACTIVE CTD2 construction (packet 021-R,
+   corrected per 021-R-JUDGE R1: production COMPONENT ORDER is now X25519-first).
+
+   Surviving component = X25519 (modeled as a DHKEM; `dh_*`). Broken component =
+   ML-KEM: the adversary supplies its secret (`ss_mlkem`, a bitstring) and its
+   ciphertext (`ct_mlkem`). Models the DEFAULT production KDF in wire_v2.rs.
+
+   PRODUCTION ORDER (kem.rs:379-386, wire_v2.rs:91-107): both the combined IKM
+   (x25519_ss || mlkem_ss) and the bound kem_ct (x25519_eph_pk || mlkem_ct) put the
+   X25519 component FIRST. This file binds them in that exact order:
+     ikm-order    : kdf(hk, ss_x25519, ss_mlkem, transcript)         (X25519 first)
+     transcript   : ctd2_transcript(header, ct_x25519, ct_mlkem, context)  (X25519 first)
+   (The prior version was a mechanical ml_->dh_ relabel that reversed this order;
+   the theorem held but the modeled construction was not the shipped one.)
+
+   Theorem: if X25519-DHKEM is IND-CCA2, the CTD2 combiner key K is secret under full
+   hybrid-ciphertext CCA even if ML-KEM-768 is fully broken (adversary CHOOSES the
+   ML-KEM secret, the ML-KEM challenge ciphertext, and the header). ROM model of HKDF;
+   ciphertext bound DIRECTLY (length-delimited/injective), no SHA3 term. *)
+
+type dh_keyseed    [fixed, large].
+type dh_pkey       [bounded].
+type dh_skey       [bounded].
+type dh_encapseed  [bounded].
+type dh_secret     [fixed, large].
+type dh_ciphertext [bounded].
+type dh_output     [bounded].
+
+proba P_dh_indcca2.
+proba P_dh_keycoll.
+proba P_dh_ctcoll.
+
+expand KEM_all_args(
+  dh_keyseed, dh_pkey, dh_skey, dh_encapseed, dh_secret,
+  dh_ciphertext, dh_output,
+  dh_pkgen, dh_skgen, dh_encap, dh_encap_r, dh_pair, dh_decap,
+  dh_injbot, P_dh_keycoll, P_dh_ctcoll).
+
+param N_keys, N_enc, N_dec.
+table DH_challenge(N_keys, dh_ciphertext, dh_secret).
+
+equiv(dhkem_indcca2_assumption)
+  foreach i <= N_keys do seed <-R dh_keyseed; (
+    PublicKey() := return(dh_pkgen(seed))
+  | foreach id <= N_dec do
+      Decap(c: dh_ciphertext) := return(dh_decap(c, dh_skgen(seed))) )
+  | foreach ie <= N_enc do
+      Encaps(pk: dh_pkey) := r <-R dh_encapseed; return(dh_encap_r(pk, r)) [all]
+  <=(P_dh_indcca2(time, N_keys, #Encaps, #Decap))=>
+  foreach i <= N_keys do seed <-R dh_keyseed; (
+    PublicKey() := return(dh_pkgen(seed))
+  | foreach id <= N_dec do
+      Decap(c: dh_ciphertext) :=
+        get DH_challenge(=i, =c, s) in return(dh_injbot(s))
+        else return(dh_decap(c, dh_skgen(seed))) )
+  | foreach ie <= N_enc do
+      Encaps(pk: dh_pkey) :=
+        find i2 <= N_keys suchthat defined(seed[i2]) && pk = dh_pkgen(seed[i2]) then (
+          r <-R dh_encapseed;
+          let dh_pair(junk, c) = dh_encap_r(pk, r) in
+          s <-R dh_secret;
+          insert DH_challenge(i2, c, s);
+          return(dh_pair(s, c)) )
+        else ( r <-R dh_encapseed; return(dh_encap_r(pk, r)) ).
+
+(* CTD2 length-delimited transcript, PRODUCTION ORDER: X25519 ciphertext first,
+   ML-KEM ciphertext second. Injective [data] constructor models the unambiguous
+   length-prefixed parsing of wire_v2::kdf_transcript over the full kem_ct. *)
+type mlkem_ct_t [fixed].            (* broken ML-KEM ciphertext component *)
+type header_t   [fixed].
+fun ctd2_transcript(header_t, dh_ciphertext, mlkem_ct_t, bitstring): bitstring [data].
+
+(* Combiner KDF (HKDF-SHA256, fixed salt) as a random oracle over
+   (ikm = ss_x25519 || ss_mlkem, info = transcript). X25519 secret first. *)
+type hashkey [fixed].
+type kdfkey  [fixed, large].
+expand ROM_hash_3(hashkey, dh_secret, bitstring, bitstring, kdfkey, kdf, kdf_oracle, N_kdf).
+
+query secret K.
+
+proof {
+  crypto dhkem_indcca2_assumption;
+  crypto rom(kdf);
+  simplify;
+  success
+}
+
+process
+  Ostart(ct_mlkem_star: mlkem_ct_t, hdrstar: header_t) :=
+    hk  <-R hashkey;
+    seed <-R dh_keyseed;
+    let pk = dh_pkgen(seed) in
+    r <-R dh_encapseed;
+    let dh_pair(ss_x25519: dh_secret, ct_x25519: dh_ciphertext) = dh_encap_r(pk, r) in
+    (* ML-KEM fully broken: the ADVERSARY supplies the ML-KEM challenge ciphertext
+       ct_mlkem_star and the header hdrstar, committed at setup. *)
+    return(pk, ct_x25519, ct_mlkem_star, hdrstar);
+  (
+    (run kdf_oracle(hk))
+  | (* Full hybrid-ciphertext CCA decapsulation over the CTD2 transcript. The
+       adversary submits (header, X25519 ct, ML-KEM ct, ML-KEM secret, context).
+       Rejects ONLY the exact challenge X25519 ciphertext (the surviving KEM's
+       challenge); permits everything else, answering via the X25519-first KDF. *)
+    (foreach id <= N_dec do
+      ODecap(hdrq: header_t, cx: dh_ciphertext, ss_mlkem_q: bitstring,
+             ct_mlkem_q: mlkem_ct_t, ctxq: bitstring) :=
+        if cx = ct_x25519 && ct_mlkem_q = ct_mlkem_star then yield else
+        let dh_injbot(ss_x25519_q: dh_secret) = dh_decap(cx, dh_skgen(seed)) in (
+          let tq: bitstring = ctd2_transcript(hdrq, cx, ct_mlkem_q, ctxq) in
+          return(kdf(hk, ss_x25519_q, ss_mlkem_q, tq))
+        ) else yield)
+  | (* One challenge: adversary supplies the broken ML-KEM secret ss_mlkem and the
+       context; the CTD2 transcript binds header + X25519 ct (first) + ML-KEM ct
+       (second) + context. Adversary gets ct_x25519 (published), never K. *)
+    (OChal(ss_mlkem: bitstring, context: bitstring) :=
+      let t: bitstring = ctd2_transcript(hdrstar, ct_x25519, ct_mlkem_star, context) in
+      let K: kdfkey = kdf(hk, ss_x25519, ss_mlkem, t) in
+      yield)
+  )

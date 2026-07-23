@@ -1,0 +1,107 @@
+(* Citadel hybrid combiner — packet 016, corrected goal.
+   ML-KEM ARM of IND-CCA2 robustness (the non-vacuous theorem):
+
+     IF ML-KEM-768 is IND-CCA2, THEN the KDF-derived key K is secret from the
+     adversary EVEN IF X25519 is fully broken (the adversary chooses ss1).
+
+   Modeled with the KDF (HKDF over ss1 || ss2 || H(kem_ct)) as a random oracle.
+   Under the ML-KEM IND-CCA2 assumption, the challenge ciphertext's ss2 is random
+   and unknown to the adversary, so the ROM output K is random -> secret.
+
+   NOTE (vs citadel_hybrid_combiner.ocv): that file asked CryptoVerif to prove the
+   ML-KEM assumption from itself (vacuous), which is why it stalled. This proves the
+   combiner instead. *)
+
+(* Guided proof: name the hops explicitly instead of the automatic search, which
+   stalls on the ROM collision elimination. Same shape as the verified
+   examples/hpke/hpke.base.indcca2.ocv proof block. *)
+proof {
+  crypto mlkem_indcca2_assumption;
+  crypto rom(kdf);
+  simplify;
+  success
+}
+
+type ml_keyseed    [fixed, large].
+type ml_pkey       [bounded].
+type ml_skey       [bounded].
+type ml_encapseed  [bounded].
+type ml_secret     [fixed, large].
+type ml_ciphertext [bounded].
+type ml_output     [bounded].
+
+proba P_ml_indcca2.
+proba P_ml_keycoll.
+proba P_ml_ctcoll.
+
+expand KEM_all_args(
+  ml_keyseed, ml_pkey, ml_skey, ml_encapseed, ml_secret,
+  ml_ciphertext, ml_output,
+  ml_pkgen, ml_skgen, ml_encap, ml_encap_r, ml_pair, ml_decap,
+  ml_injbot, P_ml_keycoll, P_ml_ctcoll).
+
+(* ML-KEM-768 IND-CCA2 assumption (standard KEM CCA2 form). *)
+param N_keys, N_enc, N_dec.
+table ML_challenge(N_keys, ml_ciphertext, ml_secret).
+
+equiv(mlkem_indcca2_assumption)
+  foreach i <= N_keys do seed <-R ml_keyseed; (
+    PublicKey() := return(ml_pkgen(seed))
+  | foreach id <= N_dec do
+      Decap(c: ml_ciphertext) := return(ml_decap(c, ml_skgen(seed))) )
+  | foreach ie <= N_enc do
+      Encaps(pk: ml_pkey) := r <-R ml_encapseed; return(ml_encap_r(pk, r)) [all]
+  <=(P_ml_indcca2(time, N_keys, #Encaps, #Decap))=>
+  foreach i <= N_keys do seed <-R ml_keyseed; (
+    PublicKey() := return(ml_pkgen(seed))
+  | foreach id <= N_dec do
+      Decap(c: ml_ciphertext) :=
+        get ML_challenge(=i, =c, s) in return(ml_injbot(s))
+        else return(ml_decap(c, ml_skgen(seed))) )
+  | foreach ie <= N_enc do
+      Encaps(pk: ml_pkey) :=
+        find i2 <= N_keys suchthat defined(seed[i2]) && pk = ml_pkgen(seed[i2]) then (
+          r <-R ml_encapseed;
+          let ml_pair(junk, c) = ml_encap_r(pk, r) in
+          s <-R ml_secret;
+          insert ML_challenge(i2, c, s);
+          return(ml_pair(s, c)) )
+        else ( r <-R ml_encapseed; return(ml_encap_r(pk, r)) ).
+
+(* KDF as a random oracle: input is (ss1 || ss2 || H(kem_ct)), abstracted as the
+   pair of the (adversary-chosen) X25519 secret and the ML-KEM secret, plus the
+   ciphertext binding. *)
+type hashkey [fixed].
+type kdfkey  [fixed, large].
+expand ROM_hash_2(hashkey, bitstring, ml_secret, kdfkey, kdf, kdf_oracle, N_kdf).
+
+(* The derived key we want secret. *)
+query secret K.
+
+process
+  Ostart() :=
+    hk <-R hashkey;
+    seed <-R ml_keyseed;
+    let pk = ml_pkgen(seed) in
+    (* Honest challenge encapsulation is fixed at setup; ct depends only on pk
+       and fresh randomness, not on the adversary's ss1, so it is safe to
+       publish ct before OChal supplies ss1. *)
+    r <-R ml_encapseed;
+    let ml_pair(ss2: ml_secret, ct: ml_ciphertext) = ml_encap_r(pk, r) in
+    return(pk, ct);
+  (
+    (run kdf_oracle(hk))
+  | (* Decapsulation oracle (attacker-accessible; CCA2). The challenge
+       ciphertext ct is refused — the CCA2 game forbids decapsulating the exact
+       challenge, matching a network adversary who cannot make the honest
+       receiver hand back the challenge shared secret. *)
+    (foreach id <= N_dec do
+      ODecap(c: ml_ciphertext) :=
+        if c = ct then yield else
+        return(ml_decap(c, ml_skgen(seed))))
+  | (* One challenge: X25519 broken => adversary supplies ss1; K derived from
+       (ss1, ss2). Adversary gets ct (published above), never K. *)
+    (OChal(ss1: bitstring) :=
+      let K: kdfkey = kdf(hk, ss1, ss2) in
+      yield)
+  )

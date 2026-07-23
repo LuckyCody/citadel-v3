@@ -1,0 +1,132 @@
+(* Citadel hybrid combiner — packet 017, Option B (raw Gap-DH grounding).
+   X25519 arm proved DIRECTLY from Gap-DH + ROM, no KEM abstraction.
+
+   ==================================================================================
+   STATUS: PARKED (design input, NOT a claimed result). 2026-07-22.
+   This is an ABSTRACT prime-order-group DH model. It does NOT faithfully model
+   Citadel's real X25519 = Curve25519 (cofactor 8, low-order points, all-zero /
+   non-contributory shared-secret rejection). Per Codex 018R, closing this abstract
+   script would prove a property of an idealized DH-KEM, not of Citadel's actual
+   curve. Continuing to tune the proof script (exp'/exp pinning, SArename, occ
+   alignment) was polishing a test model with a KNOWN fidelity gap — abandoned to
+   avoid drifting away from Citadel.
+   REAL PATHS: (1) the X25519 arm is already VERIFIED under the cited, published
+   X25519-DHKEM IND-CCA2 premise (citadel_combiner_x25519_arm.ocv, Option A); (2) if
+   raw-DH grounding is wanted, build the FAITHFUL Curve25519 model (DH_subgroup +
+   low-order/all-zero rejection, per 018R_solution.md §"Curve25519 claim boundary"),
+   not this abstract one. Kept only as the honest engineering trail.
+   ==================================================================================
+
+   Formulation: real-or-random IND-CCA2 of the combiner's X25519 half, in the
+   EQUIVALENCE style of examples/hpke/dhkem.base.indcca2-lr.m4.ocv. The left game
+   returns the real derived key K = kdf(H(DH), ss_mlkem); the right game returns a
+   uniformly random key for honest encapsulations and keeps decapsulation
+   consistent via a KEM-correctness table E. If the two games are
+   indistinguishable, K is real-or-random secret under Gap-DH + ROM even when the
+   adversary controls the (broken) ML-KEM secret ss_mlkem.
+
+   Citadel feeds the RAW DH group element into the single combiner KDF, so the KDF
+   random-oracle takes the group element as a DIRECT typed argument — the nested
+   eae_input `insert` decomposition that dhkem.base needs is unnecessary here.
+
+   NOTE: history of the query-secret formulation (which cannot close this: the
+   challenge key is itself a ROM output, so "adversary queries ROM at gab" is
+   irreducible without the real-or-random table) is in citadel/eem/017_attempt_*.md. *)
+
+type Z [large, bounded].
+type G [large, bounded].
+
+proba pGDH.
+proba pDistRerandom.
+proba pCollKey1.
+proba pCollKey2.
+
+expand DH_basic(G, Z, g, exp, exp', mult).
+expand DH_proba_collision(G, Z, g, exp, exp', mult, pCollKey1, pCollKey2).
+expand GDH(G, Z, g, exp, exp', mult, pGDH, pDistRerandom).
+
+type hashkey [fixed].
+type kdfkey  [fixed, large].
+expand ROM_hash_2(hashkey, G, bitstring, kdfkey, kdf, kdf_oracle, N_kdf).
+
+param N_enc, N_dec.
+table E(G, bitstring, kdfkey).
+
+proof {
+  allowed_collisions default^4/large;
+  (* Shared decap/non-honest terms are pinned to exp' in the model so the GDH hop on
+     the left does not desync them from the right. Anchors (pk, ct, honest-test) stay
+     exp so GDH can bind a=sR, b=eE. *)
+  crypto rom(kdf);
+  crypto gdh(exp) [variables: sR -> a, eE -> b];
+  (* Normalize the left honest key `let kr = <rom-result>` to a plain random draw so
+     it matches the right's `kr <-R kdfkey` (Codex 018R fallback). *)
+  SArename kr;
+  remove_assign binder kr;
+  all_simplify;
+  start_from_other_end;
+  crypto rom(kdf);
+  all_simplify;
+  success
+}
+
+(* The two games are STRUCTURALLY IDENTICAL except for the single honest-encap key:
+   LEFT computes it as the real KDF of the DH secret; RIGHT draws it uniformly.
+   Both record the key in E and both decapsulate recorded ciphertexts from E, so
+   KEM-correctness/consistency is identical on both sides and the only difference
+   the prover must bridge is "ROM(g^(sR*eE), ss) ~ random", which is exactly
+   GDH + ROM. Identical structure makes the left/right alignment automatic. *)
+equivalence
+  (* LEFT — real key. *)
+  Ostart() :=
+    hk <-R hashkey;
+    return();
+    (
+      Osetup() := sR <-R Z; return();
+      (
+        ( foreach id <= N_dec do
+          ODecap(ct2: G, ss2d: bitstring) :=
+            get E(=ct2, =ss2d, kk) in return(kk)
+            else return(kdf(hk, exp'(ct2, sR), ss2d)) )
+      | ( Opk() := return(exp(g, sR)) )
+      )
+    | ( foreach ie <= N_enc do
+        OEncap(pkR: G, ss2e: bitstring) :=
+          eE <-R Z;
+          let ct: G = exp(g, eE) in
+          if pkR = exp(g, sR) then (
+            let kr: kdfkey = kdf(hk, exp(pkR, eE), ss2e) in
+            insert E(ct, ss2e, kr);
+            return(ct, kr)
+          ) else (
+            return(ct, kdf(hk, exp'(pkR, eE), ss2e))
+          ) )
+    | run kdf_oracle(hk)
+    )
+
+  (* RIGHT — random key for the honest encapsulation. *)
+  Ostart() :=
+    hk <-R hashkey;
+    return();
+    (
+      Osetup() := sR <-R Z; return();
+      (
+        ( foreach id <= N_dec do
+          ODecap(ct2: G, ss2d: bitstring) :=
+            get E(=ct2, =ss2d, kk) in return(kk)
+            else return(kdf(hk, exp'(ct2, sR), ss2d)) )
+      | ( Opk() := return(exp(g, sR)) )
+      )
+    | ( foreach ie <= N_enc do
+        OEncap(pkR: G, ss2e: bitstring) :=
+          eE <-R Z;
+          let ct: G = exp(g, eE) in
+          if pkR = exp(g, sR) then (
+            kr <-R kdfkey;
+            insert E(ct, ss2e, kr);
+            return(ct, kr)
+          ) else (
+            return(ct, kdf(hk, exp'(pkR, eE), ss2e))
+          ) )
+    | run kdf_oracle(hk)
+    )

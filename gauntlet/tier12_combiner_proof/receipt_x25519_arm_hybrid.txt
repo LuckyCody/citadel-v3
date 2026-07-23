@@ -1,0 +1,875 @@
+Doing expand get, insert and prove unique annotations... No change.
+Doing simplify (non-expanded game)... No change.
+Doing expand... Done.
+Doing remove assignments of findcond... No change.
+Doing simplify... Run simplify 1 time(s). Fixpoint reached.
+No change.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proof of (one-session) secrecy of K failed:
+  K is not defined only by restrictions or assignments.
+Trying equivalence dhkem_indcca2_assumption... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... Done.
+Doing merge branches... No change.
+Trying equivalence rom(kdf)... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Applied collision forall x, y: hybrid_ciphertext, cx, cy: bitstring; return((kdf_info(sha3_256(x), cx) = kdf_info(sha3_256(y), cy))) <=(P_sha3_coll)=> return(((x = y) && (cx = cy))) Probability: P_sha3_coll
+Done.
+Doing expand... Applied collision forall x, y: hybrid_ciphertext, cx, cy: bitstring; return((kdf_info(sha3_256(x), cx) = kdf_info(sha3_256(y), cy))) <=(P_sha3_coll)=> return(((x = y) && (cx = cy))) Probability: P_sha3_coll
+Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on s_1 inside simplify... Done. Restarting simplify
+Eliminated collisions between s_1 and x2 Probability: N_kdf / |dh_secret|
+(s_1 collides with a value independent of s_1[...] with probability at most 1 / |dh_secret|;
+ x2 does not depend on s_1[...])
+Applied collision forall x, y: hybrid_ciphertext, cx, cy: bitstring; return((kdf_info(sha3_256(x), cx) = kdf_info(sha3_256(y), cy))) <=(P_sha3_coll)=> return(((x = y) && (cx = cy))) Probability: P_sha3_coll
+Applied collision forall x, y: hybrid_ciphertext, cx, cy: bitstring; return((kdf_info(sha3_256(x), cx) = kdf_info(sha3_256(y), cy))) <=(P_sha3_coll)=> return(((x = y) && (cx = cy))) Probability: P_sha3_coll
+Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... Done.
+Doing SA rename new without array accesses and remove assignments of findcond... Done.
+Doing merge branches... No change.
+Doing simplify... Run simplify 1 time(s). Fixpoint reached.
+No change.
+Proved one-session secrecy of K
+Proved secrecy of K
+===================== Proof starts =======================
+Initial state
+Game 1 is
+     Ostart(ct1star: x_ciphertext) :=
+     hk <-R hashkey;
+     seed <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed);
+     r <-R dh_encapseed;
+  {8}let dh_pair(ss2: dh_secret, ct: dh_ciphertext) = dh_encap_r(pk, r) in
+     return(pk, ct, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       return(kdf(hk, x1, x2, x3))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = ct) then
+         yield
+       else
+         let dh_injbot(ss2q: dh_secret) = dh_decap(c, dh_skgen(seed)) in
+         ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+         infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+         return(kdf(hk, ss1q, ss2q, infoq))
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, ct);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+       K: kdfkey <- kdf(hk, ss1, ss2, info)
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Simplify pattern dh_pair(ss2: dh_secret, ct: dh_ciphertext) (bijective tuple expanded) at 8
+yields
+
+Game 2 is
+     Ostart(ct1star: x_ciphertext) :=
+     hk <-R hashkey;
+     seed <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed);
+     r <-R dh_encapseed;
+     v_3: dh_output <- dh_encap_r(pk, r);
+     ct: dh_ciphertext <- 2-proj-dh_pair(v_3);
+     ss2: dh_secret <- 1-proj-dh_pair(v_3);
+     return(pk, ct, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       return(kdf(hk, x1, x2, x3))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = ct) then
+         yield
+       else
+         let dh_injbot(ss2q: dh_secret) = dh_decap(c, dh_skgen(seed)) in
+         ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+         infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+         return(kdf(hk, ss1q, ss2q, infoq))
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, ct);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+       K: kdfkey <- kdf(hk, ss1, ss2, info)
+     ))
+
+
+Applying equivalence dhkem_indcca2_assumption [probability P_dh_indcca2(time_1, 1, 1, N_dec)]
+  - Equivalence dhkem_indcca2_assumption with variables: r -> r, seed -> seed
+yields
+
+Game 3 is
+     Ostart(ct1star: x_ciphertext) :=
+     hk <-R hashkey;
+     seed_1 <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed_1);
+     r_1 <-R dh_encapseed;
+     s_1 <-R dh_secret;
+     v_3: dh_output <- (pk_1: dh_pkey <- pk; if {13}(pk_1 = dh_pkgen(seed_1)) then encoded_i2: encoded_N_keys_t <- encode_idx_seed(); v_4: dh_output <- dh_encap_r(pk_1, r_1); c_1: dh_ciphertext <- 2-proj-dh_pair(v_4); s: dh_secret <- cst_dh_secret; dh_pair(s_1, c_1) else dh_encap_r(pk_1, r_1));
+     ct: dh_ciphertext <- 2-proj-dh_pair(v_3);
+     ss2: dh_secret <- 1-proj-dh_pair(v_3);
+     return(pk, ct, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       return(kdf(hk, x1, x2, x3))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = ct) then
+         yield
+       else
+         let dh_injbot(ss2q: dh_secret) = (c_2: dh_ciphertext <- c; if defined(s, c_1, encoded_i2) && (encoded_i2 = encode_idx_seed()) && (c_1 = c_2) then dh_injbot(s_1) else dh_decap(c_2, dh_skgen(seed_1))) in
+         ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+         infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+         return(kdf(hk, ss1q, ss2q, infoq))
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, ct);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+       K: kdfkey <- kdf(hk, ss1, ss2, info)
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Replaced (pk_1 = dh_pkgen(seed_1)) with true at 13
+yields
+
+Game 4 is
+     Ostart(ct1star: x_ciphertext) :=
+     hk <-R hashkey;
+     seed_1 <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed_1);
+     r_1 <-R dh_encapseed;
+     s_1 <-R dh_secret;
+     v_3: dh_output <- (pk_1: dh_pkey <- pk; {12}if true then encoded_i2: encoded_N_keys_t <- encode_idx_seed(); v_4: dh_output <- dh_encap_r(pk_1, r_1); c_1: dh_ciphertext <- 2-proj-dh_pair(v_4); s: dh_secret <- cst_dh_secret; dh_pair(s_1, c_1) else dh_encap_r(pk_1, r_1));
+     ct: dh_ciphertext <- 2-proj-dh_pair(v_3);
+     ss2: dh_secret <- 1-proj-dh_pair(v_3);
+     return(pk, ct, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       return(kdf(hk, x1, x2, x3))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = ct) then
+         yield
+       else
+ {68}    let dh_injbot(ss2q: dh_secret) = (c_2: dh_ciphertext <- c; if defined(s, c_1, encoded_i2) && (encoded_i2 = encode_idx_seed()) && (c_1 = c_2) then dh_injbot(s_1) else dh_decap(c_2, dh_skgen(seed_1))) in
+         ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+         infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+         return(kdf(hk, ss1q, ss2q, infoq))
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, ct);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+       K: kdfkey <- kdf(hk, ss1, ss2, info)
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Transformed find at 12 into a test
+    - Test at 12 always true
+    - Simplify pattern dh_injbot(ss2q: dh_secret) (tuple expanded) at 68
+yields
+
+Game 5 is
+     Ostart(ct1star: x_ciphertext) :=
+     hk <-R hashkey;
+     seed_1 <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed_1);
+     r_1 <-R dh_encapseed;
+     s_1 <-R dh_secret;
+     pk_1: dh_pkey <- pk;
+     encoded_i2: encoded_N_keys_t <- encode_idx_seed();
+     v_4: dh_output <- dh_encap_r(pk_1, r_1);
+     c_1: dh_ciphertext <- 2-proj-dh_pair(v_4);
+     s: dh_secret <- cst_dh_secret;
+     v_3: dh_output <- dh_pair(s_1, c_1);
+     ct: dh_ciphertext <- 2-proj-dh_pair(v_3);
+     ss2: dh_secret <- 1-proj-dh_pair(v_3);
+     return(pk, ct, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       return(kdf(hk, x1, x2, x3))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = ct) then
+         yield
+       else
+         c_2: dh_ciphertext <- c;
+         if defined(s, c_1, encoded_i2) && (encoded_i2 = encode_idx_seed()) && (c_1 = c_2) then
+           ss2q: dh_secret <- s_1;
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           return(kdf(hk, ss1q, ss2q, infoq))
+         else
+           let dh_injbot(ss2q: dh_secret) = dh_decap(c_2, dh_skgen(seed_1)) in
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           return(kdf(hk, ss1q, ss2q, infoq))
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, ct);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+       K: kdfkey <- kdf(hk, ss1, ss2, info)
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on pk_1 (definition removed, all usages removed)
+  - Remove assignments on s (definition removed, all usages removed)
+  - Remove assignments on c_2 (definition removed, all usages removed)
+  - Remove assignments on ss2q (definition removed, all usages removed)
+yields
+
+Game 6 is
+     Ostart(ct1star: x_ciphertext) :=
+     hk <-R hashkey;
+     seed_1 <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed_1);
+     r_1 <-R dh_encapseed;
+     s_1 <-R dh_secret;
+     encoded_i2: encoded_N_keys_t <- encode_idx_seed();
+     v_4: dh_output <- dh_encap_r(pk, r_1);
+     c_1: dh_ciphertext <- 2-proj-dh_pair(v_4);
+     v_3: dh_output <- dh_pair(s_1, c_1);
+     ct: dh_ciphertext <- {23}2-proj-dh_pair(v_3);
+     ss2: dh_secret <- {26}1-proj-dh_pair(v_3);
+     return(pk, ct, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       return(kdf(hk, x1, x2, x3))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = ct) then
+         yield
+       else
+ {59}    if defined(c_1, encoded_i2) && {60}((encoded_i2 = encode_idx_seed()) && (c_1 = c)) then
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           return(kdf(hk, ss1q, s_1, infoq))
+         else
+           let dh_injbot(ss2q: dh_secret) = dh_decap(c, dh_skgen(seed_1)) in
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           return(kdf(hk, ss1q, ss2q, infoq))
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, ct);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+       K: kdfkey <- kdf(hk, ss1, ss2, info)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced 2-proj-dh_pair(v_3) with c_1 at 23
+    - Replaced 1-proj-dh_pair(v_3) with s_1 at 26
+    - Transformed find at 59 into a test
+    - Replaced ((encoded_i2 = encode_idx_seed()) && (c_1 = c)) with (c_1 = c) at 60
+yields
+
+Game 7 is
+     Ostart(ct1star: x_ciphertext) :=
+     hk <-R hashkey;
+     seed_1 <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed_1);
+     r_1 <-R dh_encapseed;
+     s_1 <-R dh_secret;
+     encoded_i2: encoded_N_keys_t <- encode_idx_seed();
+     v_4: dh_output <- dh_encap_r(pk, r_1);
+     c_1: dh_ciphertext <- 2-proj-dh_pair(v_4);
+     v_3: dh_output <- dh_pair(s_1, c_1);
+     ct: dh_ciphertext <- c_1;
+     ss2: dh_secret <- s_1;
+     return(pk, ct, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       return(kdf(hk, x1, x2, x3))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = ct) then
+         yield
+       else
+         if c_1 = c then
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           return(kdf(hk, ss1q, s_1, infoq))
+         else
+           let dh_injbot(ss2q: dh_secret) = dh_decap(c, dh_skgen(seed_1)) in
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           return(kdf(hk, ss1q, ss2q, infoq))
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, ct);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+       K: kdfkey <- kdf(hk, ss1, ss2, info)
+     ))
+
+
+Applying SA rename new without array accesses and remove assignments of findcond
+  - Remove assignments on encoded_i2 (definition removed, all usages removed)
+  - Remove assignments on v_3 (definition removed, all usages removed)
+  - Remove assignments on ct (definition removed, all usages removed)
+  - Remove assignments on ss2 (definition removed, all usages removed)
+yields
+
+Game 8 is
+     Ostart(ct1star: x_ciphertext) :=
+     hk <-R hashkey;
+     seed_1 <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed_1);
+     r_1 <-R dh_encapseed;
+     s_1 <-R dh_secret;
+     v_4: dh_output <- dh_encap_r(pk, r_1);
+     c_1: dh_ciphertext <- 2-proj-dh_pair(v_4);
+     return(pk, c_1, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       return(kdf(hk, x1, x2, x3))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = c_1) then
+         yield
+       else
+         if c_1 = c then
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           return(kdf(hk, ss1q, s_1, infoq))
+         else
+           let dh_injbot(ss2q: dh_secret) = dh_decap(c, dh_skgen(seed_1)) in
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           return(kdf(hk, ss1q, ss2q, infoq))
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, c_1);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+       K: kdfkey <- kdf(hk, ss1, s_1, info)
+     ))
+
+
+Applying equivalence rom(kdf)
+  - Equivalence rom(kdf) with variables: hk -> hk_1
+yields
+
+Game 9 is
+     Ostart(ct1star: x_ciphertext) :=
+     seed_1 <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed_1);
+     r_1 <-R dh_encapseed;
+     s_1 <-R dh_secret;
+     v_4: dh_output <- dh_encap_r(pk, r_1);
+     c_1: dh_ciphertext <- 2-proj-dh_pair(v_4);
+     return(pk, c_1, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       return((x_O_2: bitstring <- x1; x_O_1: dh_secret <- x2; x_O: bitstring <- x3; find [unique] u_11 = ri_11 <= N_kdf suchthat defined(x_O_2[ri_11], x_O_1[ri_11], x_O[ri_11], r_2[ri_11]) && (x_O_2 = x_O_2[ri_11]) && (x_O_1 = x_O_1[ri_11]) && (x_O = x_O[ri_11]) then r_2[u_11] orfind u_10 = ri_10 <= N_dec suchthat defined(x_O_5[ri_10], x_O_4[ri_10], x_O_3[ri_10], r_3[ri_10]) && (x_O_2 = x_O_5[ri_10]) && (x_O_1 = x_O_4[ri_10]) && (x_O = x_O_3[ri_10]) then r_3[u_10] orfind u_9 = ri_9 <= N_dec suchthat defined(x_O_8[ri_9], x_O_7[ri_9], x_O_6[ri_9], r_4[ri_9]) && (x_O_2 = x_O_8[ri_9]) && (x_O_1 = x_O_7[ri_9]) && (x_O = x_O_6[ri_9]) then r_4[u_9] orfind  suchthat defined(x_O_11, x_O_10, x_O_9, r_5) && (x_O_2 = x_O_11) && (x_O_1 = x_O_10) && (x_O = x_O_9) then r_5 else r_2 <-R kdfkey; r_2))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = c_1) then
+         yield
+       else
+         if c_1 = c then
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           return((x_O_5: bitstring <- ss1q; x_O_4: dh_secret <- s_1; x_O_3: bitstring <- infoq; {165}find [unique] u_8 = ri_8 <= N_kdf suchthat defined(x_O_2[ri_8], x_O_1[ri_8], x_O[ri_8], r_2[ri_8]) && (x_O_5 = x_O_2[ri_8]) && (x_O_4 = x_O_1[ri_8]) && (x_O_3 = x_O[ri_8]) then r_2[u_8] orfind u_7 = ri_7 <= N_dec suchthat defined(x_O_5[ri_7], x_O_4[ri_7], x_O_3[ri_7], r_3[ri_7]) && (x_O_5 = x_O_5[ri_7]) && (x_O_4 = x_O_4[ri_7]) && (x_O_3 = x_O_3[ri_7]) then r_3[u_7] orfind u_6 = ri_6 <= N_dec suchthat defined(x_O_8[ri_6], x_O_7[ri_6], x_O_6[ri_6], r_4[ri_6]) && {218}((x_O_5 = x_O_8[ri_6]) && (x_O_4 = x_O_7[ri_6]) && (x_O_3 = x_O_6[ri_6])) then r_4[u_6] orfind  suchthat defined(x_O_11, x_O_10, x_O_9, r_5) && {238}((x_O_5 = x_O_11) && (x_O_4 = x_O_10) && (x_O_3 = x_O_9)) then r_5 else r_3 <-R kdfkey; r_3))
+         else
+           let dh_injbot(ss2q: dh_secret) = dh_decap(c, dh_skgen(seed_1)) in
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           return((x_O_8: bitstring <- ss1q; x_O_7: dh_secret <- ss2q; x_O_6: bitstring <- infoq; {288}find [unique] u_5 = ri_5 <= N_kdf suchthat defined(x_O_2[ri_5], x_O_1[ri_5], x_O[ri_5], r_2[ri_5]) && (x_O_8 = x_O_2[ri_5]) && (x_O_7 = x_O_1[ri_5]) && (x_O_6 = x_O[ri_5]) then r_2[u_5] orfind u_4 = ri_4 <= N_dec suchthat defined(x_O_5[ri_4], x_O_4[ri_4], x_O_3[ri_4], r_3[ri_4]) && {317}((x_O_8 = x_O_5[ri_4]) && (x_O_7 = x_O_4[ri_4]) && (x_O_6 = x_O_3[ri_4])) then r_3[u_4] orfind u_3 = ri_3 <= N_dec suchthat defined(x_O_8[ri_3], x_O_7[ri_3], x_O_6[ri_3], r_4[ri_3]) && (x_O_8 = x_O_8[ri_3]) && (x_O_7 = x_O_7[ri_3]) && (x_O_6 = x_O_6[ri_3]) then r_4[u_3] orfind  suchthat defined(x_O_11, x_O_10, x_O_9, r_5) && {361}((x_O_8 = x_O_11) && (x_O_7 = x_O_10) && (x_O_6 = x_O_9)) then r_5 else r_4 <-R kdfkey; r_4))
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, c_1);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+       K: kdfkey <- (x_O_11: bitstring <- ss1; x_O_10: dh_secret <- s_1; x_O_9: bitstring <- info; {400}find [unique] u_2 = ri_2 <= N_kdf suchthat defined(x_O_2[ri_2], x_O_1[ri_2], x_O[ri_2], r_2[ri_2]) && (x_O_11 = x_O_2[ri_2]) && (x_O_10 = x_O_1[ri_2]) && (x_O_9 = x_O[ri_2]) then r_2[u_2] orfind u_1 = ri_1 <= N_dec suchthat defined(x_O_5[ri_1], x_O_4[ri_1], x_O_3[ri_1], r_3[ri_1]) && {425}((x_O_11 = x_O_5[ri_1]) && (x_O_10 = x_O_4[ri_1]) && (x_O_9 = x_O_3[ri_1])) then r_3[u_1] orfind u = ri <= N_dec suchthat defined(x_O_8[ri], x_O_7[ri], x_O_6[ri], r_4[ri]) && {445}((x_O_11 = x_O_8[ri]) && (x_O_10 = x_O_7[ri]) && (x_O_9 = x_O_6[ri])) then r_4[u] else r_5 <-R kdfkey; r_5)
+     ))
+
+
+Applying simplify (non-expanded game) [probability P_sha3_coll]
+  - Simplification pass
+    - Replaced ((x_O_5 = x_O_11) && (x_O_4 = x_O_10) && (x_O_3 = x_O_9)) with false at 238
+    - Remove branch 4 in find at 165
+    - Replaced ((x_O_5 = x_O_8[ri_6]) && (x_O_4 = x_O_7[ri_6]) && (x_O_3 = x_O_6[ri_6])) with false at 218
+    - Remove branch 3 in find at 165
+    - Replaced ((x_O_8 = x_O_11) && (x_O_7 = x_O_10) && (x_O_6 = x_O_9)) with false at 361
+    - Remove branch 4 in find at 288
+    - Replaced ((x_O_8 = x_O_5[ri_4]) && (x_O_7 = x_O_4[ri_4]) && (x_O_6 = x_O_3[ri_4])) with false at 317
+    - Remove branch 2 in find at 288
+    - Replaced ((x_O_11 = x_O_8[ri]) && (x_O_10 = x_O_7[ri]) && (x_O_9 = x_O_6[ri])) with false at 445
+    - Remove branch 3 in find at 400
+    - Replaced ((x_O_11 = x_O_5[ri_1]) && (x_O_10 = x_O_4[ri_1]) && (x_O_9 = x_O_3[ri_1])) with false at 425
+    - Remove branch 2 in find at 400
+yields
+
+Game 10 is
+     Ostart(ct1star: x_ciphertext) :=
+     seed_1 <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed_1);
+     r_1 <-R dh_encapseed;
+     s_1 <-R dh_secret;
+     v_4: dh_output <- dh_encap_r(pk, r_1);
+     c_1: dh_ciphertext <- 2-proj-dh_pair(v_4);
+     return(pk, c_1, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       return((x_O_2: bitstring <- x1; x_O_1: dh_secret <- x2; x_O: bitstring <- x3; find [unique] u_11 = ri_11 <= N_kdf suchthat defined(x_O_2[ri_11], x_O_1[ri_11], x_O[ri_11], r_2[ri_11]) && (x_O_2 = x_O_2[ri_11]) && (x_O_1 = x_O_1[ri_11]) && (x_O = x_O[ri_11]) then r_2[u_11] orfind u_10 = ri_10 <= N_dec suchthat defined(x_O_5[ri_10], x_O_4[ri_10], x_O_3[ri_10], r_3[ri_10]) && (x_O_2 = x_O_5[ri_10]) && (x_O_1 = x_O_4[ri_10]) && (x_O = x_O_3[ri_10]) then r_3[u_10] orfind u_9 = ri_9 <= N_dec suchthat defined(x_O_8[ri_9], x_O_7[ri_9], x_O_6[ri_9], r_4[ri_9]) && (x_O_2 = x_O_8[ri_9]) && (x_O_1 = x_O_7[ri_9]) && (x_O = x_O_6[ri_9]) then r_4[u_9] orfind  suchthat defined(x_O_11, x_O_10, x_O_9, r_5) && (x_O_2 = x_O_11) && (x_O_1 = x_O_10) && (x_O = x_O_9) then r_5 else r_2 <-R kdfkey; r_2))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = c_1) then
+         yield
+       else
+         if c_1 = c then
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           return((x_O_5: bitstring <- ss1q; x_O_4: dh_secret <- s_1; x_O_3: bitstring <- infoq; find [unique] u_8 = ri_8 <= N_kdf suchthat defined(x_O_2[ri_8], x_O_1[ri_8], x_O[ri_8], r_2[ri_8]) && (x_O_5 = x_O_2[ri_8]) && (x_O_4 = x_O_1[ri_8]) && (x_O_3 = x_O[ri_8]) then r_2[u_8] orfind u_7 = ri_7 <= N_dec suchthat defined(x_O_5[ri_7], x_O_4[ri_7], x_O_3[ri_7], r_3[ri_7]) && (x_O_5 = x_O_5[ri_7]) && (x_O_4 = x_O_4[ri_7]) && (x_O_3 = x_O_3[ri_7]) then r_3[u_7] else r_3 <-R kdfkey; r_3))
+         else
+           let dh_injbot(ss2q: dh_secret) = dh_decap(c, dh_skgen(seed_1)) in
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           return((x_O_8: bitstring <- ss1q; x_O_7: dh_secret <- ss2q; x_O_6: bitstring <- infoq; find [unique] u_5 = ri_5 <= N_kdf suchthat defined(x_O_2[ri_5], x_O_1[ri_5], x_O[ri_5], r_2[ri_5]) && (x_O_8 = x_O_2[ri_5]) && (x_O_7 = x_O_1[ri_5]) && (x_O_6 = x_O[ri_5]) then r_2[u_5] orfind u_3 = ri_3 <= N_dec suchthat defined(x_O_8[ri_3], x_O_7[ri_3], x_O_6[ri_3], r_4[ri_3]) && (x_O_8 = x_O_8[ri_3]) && (x_O_7 = x_O_7[ri_3]) && (x_O_6 = x_O_6[ri_3]) then r_4[u_3] else r_4 <-R kdfkey; r_4))
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, c_1);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+       K: kdfkey <- (x_O_11: bitstring <- ss1; x_O_10: dh_secret <- s_1; x_O_9: bitstring <- info; find [unique] u_2 = ri_2 <= N_kdf suchthat defined(x_O_2[ri_2], x_O_1[ri_2], x_O[ri_2], r_2[ri_2]) && (x_O_11 = x_O_2[ri_2]) && (x_O_10 = x_O_1[ri_2]) && (x_O_9 = x_O[ri_2]) then r_2[u_2] else r_5 <-R kdfkey; r_5)
+     ))
+
+
+Applying expand [probability P_sha3_coll]
+  - Expand if/find/let
+yields
+
+Game 11 is
+     Ostart(ct1star: x_ciphertext) :=
+     seed_1 <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed_1);
+     r_1 <-R dh_encapseed;
+     s_1 <-R dh_secret;
+     v_4: dh_output <- dh_encap_r(pk, r_1);
+     c_1: dh_ciphertext <- 2-proj-dh_pair(v_4);
+     return(pk, c_1, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       x_O_2: bitstring <- x1;
+       x_O_1: dh_secret <- x2;
+       x_O: bitstring <- x3;
+       find [unique] u_11 = ri_11 <= N_kdf suchthat defined(x_O_2[ri_11], x_O_1[ri_11], x_O[ri_11], r_2[ri_11]) && (x_O_2 = x_O_2[ri_11]) && (x_O_1 = x_O_1[ri_11]) && (x_O = x_O[ri_11]) then
+         return(r_2[u_11])
+       orfind u_10 = ri_10 <= N_dec suchthat defined(x_O_5[ri_10], x_O_4[ri_10], x_O_3[ri_10], r_3[ri_10]) && (x_O_2 = x_O_5[ri_10]) && (x_O_1 = x_O_4[ri_10]) && (x_O = x_O_3[ri_10]) then
+         return(r_3[u_10])
+       orfind u_9 = ri_9 <= N_dec suchthat defined(x_O_8[ri_9], x_O_7[ri_9], x_O_6[ri_9], r_4[ri_9]) && (x_O_2 = x_O_8[ri_9]) && (x_O_1 = x_O_7[ri_9]) && (x_O = x_O_6[ri_9]) then
+         return(r_4[u_9])
+       orfind  suchthat defined(x_O_11, x_O_10, x_O_9, r_5) && (x_O_2 = x_O_11) && (x_O_1 = x_O_10) && (x_O = x_O_9) then
+         return(r_5)
+       else
+         r_2 <-R kdfkey;
+         return(r_2)
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = c_1) then
+         yield
+       else
+         if c_1 = c then
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           x_O_5: bitstring <- ss1q;
+           x_O_4: dh_secret <- s_1;
+           x_O_3: bitstring <- infoq;
+           find [unique] u_8 = ri_8 <= N_kdf suchthat defined(x_O_2[ri_8], x_O_1[ri_8], x_O[ri_8], r_2[ri_8]) && (x_O_5 = x_O_2[ri_8]) && (x_O_4 = x_O_1[ri_8]) && (x_O_3 = x_O[ri_8]) then
+             return(r_2[u_8])
+           orfind u_7 = ri_7 <= N_dec suchthat defined(x_O_5[ri_7], x_O_4[ri_7], x_O_3[ri_7], r_3[ri_7]) && (x_O_5 = x_O_5[ri_7]) && (x_O_4 = x_O_4[ri_7]) && (x_O_3 = x_O_3[ri_7]) then
+             return(r_3[u_7])
+           else
+             r_3 <-R kdfkey;
+             return(r_3)
+         else
+           let dh_injbot(ss2q: dh_secret) = dh_decap(c, dh_skgen(seed_1)) in
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           x_O_8: bitstring <- ss1q;
+           x_O_7: dh_secret <- ss2q;
+           x_O_6: bitstring <- infoq;
+           find [unique] u_5 = ri_5 <= N_kdf suchthat defined(x_O_2[ri_5], x_O_1[ri_5], x_O[ri_5], r_2[ri_5]) && (x_O_8 = x_O_2[ri_5]) && (x_O_7 = x_O_1[ri_5]) && (x_O_6 = x_O[ri_5]) then
+             return(r_2[u_5])
+           orfind u_3 = ri_3 <= N_dec suchthat defined(x_O_8[ri_3], x_O_7[ri_3], x_O_6[ri_3], r_4[ri_3]) && (x_O_8 = x_O_8[ri_3]) && (x_O_7 = x_O_7[ri_3]) && (x_O_6 = x_O_6[ri_3]) then
+             return(r_4[u_3])
+           else
+             r_4 <-R kdfkey;
+             return(r_4)
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, c_1);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+       x_O_11: bitstring <- ss1;
+       x_O_10: dh_secret <- s_1;
+       x_O_9: bitstring <- info;
+       find [unique] u_2 = ri_2 <= N_kdf suchthat defined(x_O_2[ri_2], x_O_1[ri_2], x_O[ri_2], r_2[ri_2]) && (x_O_11 = x_O_2[ri_2]) && (x_O_10 = x_O_1[ri_2]) && (x_O_9 = x_O[ri_2]) then
+         K: kdfkey <- r_2[u_2]
+       else
+         r_5 <-R kdfkey;
+         K: kdfkey <- r_5
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x_O_11 (definition removed, all usages removed)
+  - Remove assignments on x_O_10 (definition removed, all usages removed)
+  - Remove assignments on x_O_9 (definition removed, all usages removed)
+  - Remove assignments on x_O_8 (definition point kept, all usages removed)
+  - Remove assignments on x_O_7 (definition removed, all usages removed)
+  - Remove assignments on x_O_6 (definition removed, all usages removed)
+  - Remove assignments on x_O_5 (definition point kept, all usages removed)
+  - Remove assignments on x_O_4 (definition removed, all usages removed)
+  - Remove assignments on x_O_3 (definition removed, all usages removed)
+  - Remove assignments on x_O_2 (definition point kept, all usages removed)
+  - Remove assignments on x_O_1 (definition removed, all usages removed)
+  - Remove assignments on x_O (definition removed, all usages removed)
+yields
+
+Game 12 is
+     Ostart(ct1star: x_ciphertext) :=
+     seed_1 <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed_1);
+     r_1 <-R dh_encapseed;
+     s_1 <-R dh_secret;
+     v_4: dh_output <- dh_encap_r(pk, r_1);
+     c_1: dh_ciphertext <- 2-proj-dh_pair(v_4);
+     return(pk, c_1, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       x_O_2: bitstring <- cst_bitstring;
+       find [unique] u_11 = ri_11 <= N_kdf suchthat defined(x1[ri_11], x2[ri_11], x3[ri_11], x_O_2[ri_11], r_2[ri_11]) && (x1 = x1[ri_11]) && (x2 = x2[ri_11]) && (x3 = x3[ri_11]) then
+         return(r_2[u_11])
+       orfind u_10 = ri_10 <= N_dec suchthat defined(ss1q[ri_10], s_1, infoq[ri_10], x_O_5[ri_10], r_3[ri_10]) && (x1 = ss1q[ri_10]) && (x2 = s_1) && (x3 = infoq[ri_10]) then
+         return(r_3[u_10])
+       orfind u_9 = ri_9 <= N_dec suchthat defined(ss1q[ri_9], ss2q[ri_9], infoq[ri_9], x_O_8[ri_9], r_4[ri_9]) && (x1 = ss1q[ri_9]) && (x2 = ss2q[ri_9]) && (x3 = infoq[ri_9]) then
+         return(r_4[u_9])
+       orfind  suchthat defined(ss1, s_1, info, r_5) && (x1 = ss1) && (x2 = s_1) && (x3 = info) then
+         return(r_5)
+       else
+         r_2 <-R kdfkey;
+         return(r_2)
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = c_1) then
+         yield
+       else
+         if c_1 = c then
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           x_O_5: bitstring <- cst_bitstring;
+           find [unique] u_8 = ri_8 <= N_kdf suchthat defined(x1[ri_8], x2[ri_8], x3[ri_8], x_O_2[ri_8], r_2[ri_8]) && (ss1q = x1[ri_8]) && (s_1 = x2[ri_8]) && (infoq = x3[ri_8]) then
+             return(r_2[u_8])
+           orfind u_7 = ri_7 <= N_dec suchthat defined(ss1q[ri_7], s_1, infoq[ri_7], x_O_5[ri_7], r_3[ri_7]) && (ss1q = ss1q[ri_7]) && (s_1 = s_1) && (infoq = infoq[ri_7]) then
+             return(r_3[u_7])
+           else
+             r_3 <-R kdfkey;
+             return(r_3)
+         else
+           let dh_injbot(ss2q: dh_secret) = dh_decap(c, dh_skgen(seed_1)) in
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           x_O_8: bitstring <- cst_bitstring;
+           find [unique] u_5 = ri_5 <= N_kdf suchthat defined(x1[ri_5], x2[ri_5], x3[ri_5], x_O_2[ri_5], r_2[ri_5]) && (ss1q = x1[ri_5]) && (ss2q = x2[ri_5]) && (infoq = x3[ri_5]) then
+             return(r_2[u_5])
+           orfind u_3 = ri_3 <= N_dec suchthat defined(ss1q[ri_3], ss2q[ri_3], infoq[ri_3], x_O_8[ri_3], r_4[ri_3]) && (ss1q = ss1q[ri_3]) && (ss2q = ss2q[ri_3]) && (infoq = infoq[ri_3]) then
+             return(r_4[u_3])
+           else
+             r_4 <-R kdfkey;
+             return(r_4)
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, c_1);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+       find [unique] u_2 = ri_2 <= N_kdf suchthat defined(x1[ri_2], x2[ri_2], x3[ri_2], x_O_2[ri_2], r_2[ri_2]) && (ss1 = x1[ri_2]) && (s_1 = x2[ri_2]) && (info = x3[ri_2]) then
+         K: kdfkey <- r_2[u_2]
+       else
+         r_5 <-R kdfkey;
+         K: kdfkey <- r_5
+     ))
+
+
+Applying simplify [probability P_sha3_coll + N_kdf / |dh_secret|]
+  - Global dependency analysis on s_1
+yields
+
+Game 13 is
+     Ostart(ct1star: x_ciphertext) :=
+     seed_1 <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed_1);
+     r_1 <-R dh_encapseed;
+  {7}s_1 <-R dh_secret;
+     v_4: dh_output <- dh_encap_r(pk, r_1);
+     c_1: dh_ciphertext <- 2-proj-dh_pair(v_4);
+     return(pk, c_1, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       x_O_2: bitstring <- cst_bitstring;
+ {25}  find [unique] u_11 = ri_11 <= N_kdf suchthat defined(x1[ri_11], x2[ri_11], x3[ri_11], x_O_2[ri_11], r_2[ri_11]) && (x1 = x1[ri_11]) && (x2 = x2[ri_11]) && (x3 = x3[ri_11]) then
+         return(r_2[u_11])
+       orfind u_9 = ri_9 <= N_dec suchthat defined(ss1q[ri_9], ss2q[ri_9], infoq[ri_9], x_O_8[ri_9], r_4[ri_9]) && (x1 = ss1q[ri_9]) && (x2 = ss2q[ri_9]) && (x3 = infoq[ri_9]) then
+         return(r_4[u_9])
+       else
+         r_2 <-R kdfkey;
+         return(r_2)
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = c_1) then
+         yield
+       else
+         if c_1 = c then
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           x_O_5: bitstring <- cst_bitstring;
+           find [unique] u_7 = ri_7 <= N_dec suchthat defined(r_3[ri_7], ctxq[ri_7], ct1q[ri_7], ss1q[ri_7]) && (ss1q = ss1q[ri_7]) && (ct1q = ct1q[ri_7]) && (ctxq = ctxq[ri_7]) then
+             return(r_3[u_7])
+           else
+             r_3 <-R kdfkey;
+             return(r_3)
+         else
+           let dh_injbot(ss2q: dh_secret) = dh_decap(c, dh_skgen(seed_1)) in
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           x_O_8: bitstring <- cst_bitstring;
+{175}      find [unique] u_5 = ri_5 <= N_kdf suchthat defined(x1[ri_5], x2[ri_5], x3[ri_5], x_O_2[ri_5], r_2[ri_5]) && (ss1q = x1[ri_5]) && (ss2q = x2[ri_5]) && (infoq = x3[ri_5]) then
+             return(r_2[u_5])
+           orfind u_3 = ri_3 <= N_dec suchthat defined(ss1q[ri_3], ss2q[ri_3], infoq[ri_3], x_O_8[ri_3], r_4[ri_3]) && {208}((ss1q = ss1q[ri_3]) && (ss2q = ss2q[ri_3]) && (infoq = infoq[ri_3])) then
+             return(r_4[u_3])
+           else
+             r_4 <-R kdfkey;
+             return(r_4)
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, c_1);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+{249}  find [unique] 
+       else
+         r_5 <-R kdfkey;
+         K: kdfkey <- r_5
+     ))
+
+
+Applying simplify [probability P_sha3_coll]
+  - Simplification pass
+    - Find at 249 removed (else branch kept if any)
+    - Replaced ((ss1q = ss1q[ri_3]) && (ss2q = ss2q[ri_3]) && (infoq = infoq[ri_3])) with ((ss1q = ss1q[ri_3]) && (ct1q = ct1q[ri_3]) && (c = c[ri_3]) && (ctxq = ctxq[ri_3])) at 208
+    - Replaced defined condition ss1q[ri_3], ss2q[ri_3], infoq[ri_3], x_O_8[ri_3], r_4[ri_3] with r_4[ri_3], ctxq[ri_3], c[ri_3], ct1q[ri_3], ss1q[ri_3] in find at 175
+    - Replaced defined condition x1[ri_5], x2[ri_5], x3[ri_5], x_O_2[ri_5], r_2[ri_5] with r_2[ri_5], x3[ri_5], x2[ri_5], x1[ri_5] in find at 175
+    - Replaced defined condition ss1q[ri_9], ss2q[ri_9], infoq[ri_9], x_O_8[ri_9], r_4[ri_9] with r_4[ri_9], infoq[ri_9], ss2q[ri_9], ss1q[ri_9] in find at 25
+    - Replaced defined condition x1[ri_11], x2[ri_11], x3[ri_11], x_O_2[ri_11], r_2[ri_11] with r_2[ri_11], x3[ri_11], x2[ri_11], x1[ri_11] in find at 25
+    - Remove random number generation at 7
+yields
+
+Game 14 is
+     Ostart(ct1star: x_ciphertext) :=
+     seed_1 <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed_1);
+     r_1 <-R dh_encapseed;
+     v_4: dh_output <- dh_encap_r(pk, r_1);
+     c_1: dh_ciphertext <- 2-proj-dh_pair(v_4);
+     return(pk, c_1, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       x_O_2: bitstring <- cst_bitstring;
+       find [unique] u_11 = ri_11 <= N_kdf suchthat defined(r_2[ri_11], x3[ri_11], x2[ri_11], x1[ri_11]) && (x1 = x1[ri_11]) && (x2 = x2[ri_11]) && (x3 = x3[ri_11]) then
+         return(r_2[u_11])
+       orfind u_9 = ri_9 <= N_dec suchthat defined(r_4[ri_9], infoq[ri_9], ss2q[ri_9], ss1q[ri_9]) && (x1 = ss1q[ri_9]) && (x2 = ss2q[ri_9]) && (x3 = infoq[ri_9]) then
+         return(r_4[u_9])
+       else
+         r_2 <-R kdfkey;
+         return(r_2)
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = c_1) then
+         yield
+       else
+         if c_1 = c then
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           x_O_5: bitstring <- cst_bitstring;
+           find [unique] u_7 = ri_7 <= N_dec suchthat defined(r_3[ri_7], ctxq[ri_7], ct1q[ri_7], ss1q[ri_7]) && (ss1q = ss1q[ri_7]) && (ct1q = ct1q[ri_7]) && (ctxq = ctxq[ri_7]) then
+             return(r_3[u_7])
+           else
+             r_3 <-R kdfkey;
+             return(r_3)
+         else
+           let dh_injbot(ss2q: dh_secret) = dh_decap(c, dh_skgen(seed_1)) in
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           x_O_8: bitstring <- cst_bitstring;
+           find [unique] u_5 = ri_5 <= N_kdf suchthat defined(r_2[ri_5], x3[ri_5], x2[ri_5], x1[ri_5]) && (ss1q = x1[ri_5]) && (ss2q = x2[ri_5]) && (infoq = x3[ri_5]) then
+             return(r_2[u_5])
+           orfind u_3 = ri_3 <= N_dec suchthat defined(r_4[ri_3], ctxq[ri_3], c[ri_3], ct1q[ri_3], ss1q[ri_3]) && (ss1q = ss1q[ri_3]) && (ct1q = ct1q[ri_3]) && (c = c[ri_3]) && (ctxq = ctxq[ri_3]) then
+             return(r_4[u_3])
+           else
+             r_4 <-R kdfkey;
+             return(r_4)
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, c_1);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+       r_5 <-R kdfkey;
+       K: kdfkey <- r_5
+     ))
+
+
+Applying move all binders
+  - Move assignment to x_O_8
+  - Move assignment to x_O_5
+  - Move assignment to x_O_2
+yields
+
+Game 15 is
+     Ostart(ct1star: x_ciphertext) :=
+     seed_1 <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed_1);
+     r_1 <-R dh_encapseed;
+     v_4: dh_output <- dh_encap_r(pk, r_1);
+     c_1: dh_ciphertext <- 2-proj-dh_pair(v_4);
+     return(pk, c_1, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       find [unique] u_11 = ri_11 <= N_kdf suchthat defined(r_2[ri_11], x3[ri_11], x2[ri_11], x1[ri_11]) && (x1 = x1[ri_11]) && (x2 = x2[ri_11]) && (x3 = x3[ri_11]) then
+         return(r_2[u_11])
+       orfind u_9 = ri_9 <= N_dec suchthat defined(r_4[ri_9], infoq[ri_9], ss2q[ri_9], ss1q[ri_9]) && (x1 = ss1q[ri_9]) && (x2 = ss2q[ri_9]) && (x3 = infoq[ri_9]) then
+         return(r_4[u_9])
+       else
+         r_2 <-R kdfkey;
+         return(r_2)
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = c_1) then
+         yield
+       else
+         if c_1 = c then
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           find [unique] u_7 = ri_7 <= N_dec suchthat defined(r_3[ri_7], ctxq[ri_7], ct1q[ri_7], ss1q[ri_7]) && (ss1q = ss1q[ri_7]) && (ct1q = ct1q[ri_7]) && (ctxq = ctxq[ri_7]) then
+             return(r_3[u_7])
+           else
+             r_3 <-R kdfkey;
+             return(r_3)
+         else
+           let dh_injbot(ss2q: dh_secret) = dh_decap(c, dh_skgen(seed_1)) in
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           find [unique] u_5 = ri_5 <= N_kdf suchthat defined(r_2[ri_5], x3[ri_5], x2[ri_5], x1[ri_5]) && (ss1q = x1[ri_5]) && (ss2q = x2[ri_5]) && (infoq = x3[ri_5]) then
+             return(r_2[u_5])
+           orfind u_3 = ri_3 <= N_dec suchthat defined(r_4[ri_3], ctxq[ri_3], c[ri_3], ct1q[ri_3], ss1q[ri_3]) && (ss1q = ss1q[ri_3]) && (ct1q = ct1q[ri_3]) && (c = c[ri_3]) && (ctxq = ctxq[ri_3]) then
+             return(r_4[u_3])
+           else
+             r_4 <-R kdfkey;
+             return(r_4)
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       ctstar: hybrid_ciphertext <- hybrid_ct(ct1star, c_1);
+       info: bitstring <- kdf_info(sha3_256(ctstar), context);
+       r_5 <-R kdfkey;
+       K: kdfkey <- r_5
+     ))
+
+
+Applying SA rename new without array accesses and remove assignments of findcond
+  - Remove assignments on info (definition removed, all usages removed)
+  - Remove assignments on ctstar (definition removed, all usages removed)
+yields
+
+Game 16 is
+     Ostart(ct1star: x_ciphertext) :=
+     seed_1 <-R dh_keyseed;
+     pk: dh_pkey <- dh_pkgen(seed_1);
+     r_1 <-R dh_encapseed;
+     v_4: dh_output <- dh_encap_r(pk, r_1);
+     c_1: dh_ciphertext <- 2-proj-dh_pair(v_4);
+     return(pk, c_1, ct1star);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: dh_secret, x3: bitstring) :=
+       find [unique] u_11 = ri_11 <= N_kdf suchthat defined(r_2[ri_11], x3[ri_11], x2[ri_11], x1[ri_11]) && (x1 = x1[ri_11]) && (x2 = x2[ri_11]) && (x3 = x3[ri_11]) then
+         return(r_2[u_11])
+       orfind u_9 = ri_9 <= N_dec suchthat defined(r_4[ri_9], infoq[ri_9], ss2q[ri_9], ss1q[ri_9]) && (x1 = ss1q[ri_9]) && (x2 = ss2q[ri_9]) && (x3 = infoq[ri_9]) then
+         return(r_4[u_9])
+       else
+         r_2 <-R kdfkey;
+         return(r_2)
+     ) | (
+       foreach id <= N_dec do
+       ODecap(ct1q: x_ciphertext, ss1q: bitstring, c: dh_ciphertext, ctxq: bitstring) :=
+       if (ct1q = ct1star) && (c = c_1) then
+         yield
+       else
+         if c_1 = c then
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           find [unique] u_7 = ri_7 <= N_dec suchthat defined(r_3[ri_7], ctxq[ri_7], ct1q[ri_7], ss1q[ri_7]) && (ss1q = ss1q[ri_7]) && (ct1q = ct1q[ri_7]) && (ctxq = ctxq[ri_7]) then
+             return(r_3[u_7])
+           else
+             r_3 <-R kdfkey;
+             return(r_3)
+         else
+           let dh_injbot(ss2q: dh_secret) = dh_decap(c, dh_skgen(seed_1)) in
+           ctq: hybrid_ciphertext <- hybrid_ct(ct1q, c);
+           infoq: bitstring <- kdf_info(sha3_256(ctq), ctxq);
+           find [unique] u_5 = ri_5 <= N_kdf suchthat defined(r_2[ri_5], x3[ri_5], x2[ri_5], x1[ri_5]) && (ss1q = x1[ri_5]) && (ss2q = x2[ri_5]) && (infoq = x3[ri_5]) then
+             return(r_2[u_5])
+           orfind u_3 = ri_3 <= N_dec suchthat defined(r_4[ri_3], ctxq[ri_3], c[ri_3], ct1q[ri_3], ss1q[ri_3]) && (ss1q = ss1q[ri_3]) && (ct1q = ct1q[ri_3]) && (c = c[ri_3]) && (ctxq = ctxq[ri_3]) then
+             return(r_4[u_3])
+           else
+             r_4 <-R kdfkey;
+             return(r_4)
+     ) | (
+       OChal(ss1: bitstring, context: bitstring) :=
+       r_5 <-R kdfkey;
+       K: kdfkey <- r_5
+     ))
+
+
+Proved secrecy of K in game 16
+Adv[Game 1: secrecy of K] <= 2 * N_kdf / |dh_secret| + 8 * P_sha3_coll + 2 * P_dh_indcca2(time_1, 1, 1, N_dec) + Adv[Game 16: secrecy of K]
+Adv[Game 16: secrecy of K] <= 0
+RESULT Proved secrecy of K up to probability 2 * N_kdf / |dh_secret| + 8 * P_sha3_coll + 2 * P_dh_indcca2(time_1, 1, 1, N_dec)
+RESULT time_1 = time + time(context for game 2) = time(2-proj-dh_pair) + time(1-proj-dh_pair) + N_kdf * time(kdf, maxlength(game 2: x1), maxlength(game 2: x3)) + N_dec * time(let dh_injbot) + (N_dec + 1) * time(hybrid_ct) + N_dec * time(kdf_info, maxlength(game 2: ctxq)) + (N_dec + 1) * time(sha3_256) + N_dec * time(kdf, maxlength(game 2: ss1q), maxlength(game 2: infoq)) + time(kdf_info, maxlength(game 2: context)) + time(kdf, maxlength(game 2: ss1), maxlength(game 2: info)) + time
+All queries proved.

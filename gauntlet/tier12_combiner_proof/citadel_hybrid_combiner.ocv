@@ -1,0 +1,107 @@
+(* Citadel hybrid combiner — packet 016.
+   Verifying partial, stage 1: ML-KEM-only IND-CCA2 arm.
+
+   The cryptographic premise is the explicitly named equivalence
+   mlkem_indcca2_assumption below.  CryptoVerif checks that the real KEM game
+   reaches the programmed ideal game with exactly that assumption and reports
+   the concrete advantage term.  No gap-closing command is used. *)
+
+type ml_keyseed    [fixed, large].
+type ml_pkey       [bounded].
+type ml_skey       [bounded].
+type ml_encapseed  [bounded].
+type ml_secret     [fixed, large].
+type ml_ciphertext [bounded].
+type ml_output     [bounded].
+
+proba P_ml_indcca2.
+proba P_ml_keycoll.
+proba P_ml_ctcoll.
+
+expand KEM_all_args(
+  ml_keyseed, ml_pkey, ml_skey, ml_encapseed, ml_secret,
+  ml_ciphertext, ml_output,
+  ml_pkgen, ml_skgen, ml_encap, ml_encap_r, ml_pair, ml_decap,
+  ml_injbot, P_ml_keycoll, P_ml_ctcoll).
+
+alias ml_pkgen_ideal  = ml_pkgen.
+alias ml_skgen_ideal  = ml_skgen.
+alias ml_encap_r_ideal = ml_encap_r.
+alias ml_decap_ideal  = ml_decap.
+
+param N_keys, N_enc, N_dec.
+table ML_challenge(N_keys, ml_ciphertext, ml_secret).
+
+(* Exact ML-KEM-768 IND-CCA2 premise.  P_ml_indcca2(t,Nk,Ne,Nd) is
+   the component KEM advantage.  The ideal game programs decapsulation on
+   each challenge ciphertext, which is the CCA2 load-bearing condition. *)
+equiv(mlkem_indcca2_assumption)
+  foreach i <= N_keys do seed <-R ml_keyseed; (
+    PublicKey() := return(ml_pkgen(seed))
+    |
+    foreach id <= N_dec do
+      Decap(c: ml_ciphertext) := return(ml_decap(c, ml_skgen(seed)))
+  )
+  |
+  foreach ie <= N_enc do
+    Encaps(pk: ml_pkey) := r <-R ml_encapseed;
+                            return(ml_encap_r(pk, r)) [all]
+  <=(P_ml_indcca2(time, N_keys, #Encaps, #Decap))=>
+  foreach i <= N_keys do seed <-R ml_keyseed; (
+    PublicKey() := return(ml_pkgen_ideal(seed))
+    |
+    foreach id <= N_dec do
+      Decap(c: ml_ciphertext) :=
+        get ML_challenge(=i, =c, s) in return(ml_injbot(s))
+        else return(ml_decap_ideal(c, ml_skgen_ideal(seed)))
+  )
+  |
+  foreach ie <= N_enc do
+    Encaps(pk: ml_pkey) :=
+      find i2 <= N_keys suchthat defined(seed[i2]) &&
+                                 pk = ml_pkgen_ideal(seed[i2]) then (
+        r <-R ml_encapseed;
+        let ml_pair(_, c) = ml_encap_r_ideal(pk, r) in
+        s <-R ml_secret;
+        insert ML_challenge(i2, c, s);
+        return(ml_pair(s, c))
+      ) else (
+        r <-R ml_encapseed;
+        return(ml_encap_r(pk, r))
+      ).
+
+(* Machine-checked stage-1 reduction target. *)
+query_equiv(mlkem_only_indcca2_arm)
+  foreach i <= N_keys do seed <-R ml_keyseed; (
+    PublicKey() := return(ml_pkgen(seed))
+    |
+    foreach id <= N_dec do
+      Decap(c: ml_ciphertext) := return(ml_decap(c, ml_skgen(seed)))
+  )
+  |
+  foreach ie <= N_enc do
+    Encaps(pk: ml_pkey) := r <-R ml_encapseed;
+                            return(ml_encap_r(pk, r)) [all]
+  <=(?)=>
+  foreach i <= N_keys do seed <-R ml_keyseed; (
+    PublicKey() := return(ml_pkgen_ideal(seed))
+    |
+    foreach id <= N_dec do
+      Decap(c: ml_ciphertext) :=
+        get ML_challenge(=i, =c, s) in return(ml_injbot(s))
+        else return(ml_decap_ideal(c, ml_skgen_ideal(seed)))
+  )
+  |
+  foreach ie <= N_enc do
+    Encaps(pk: ml_pkey) :=
+      find i2 <= N_keys suchthat defined(seed[i2]) &&
+                                 pk = ml_pkgen_ideal(seed[i2]) then (
+        r <-R ml_encapseed;
+        let ml_pair(_, c) = ml_encap_r_ideal(pk, r) in
+        s <-R ml_secret;
+        insert ML_challenge(i2, c, s);
+        return(ml_pair(s, c))
+      ) else (
+        r <-R ml_encapseed;
+        return(ml_encap_r(pk, r))
+      ).

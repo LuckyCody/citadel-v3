@@ -1,0 +1,522 @@
+Initial state
+Game 2 is
+     ((
+       foreach i <= N_keys do
+       O_1() :=
+       seed <-R ml_keyseed;
+       return();
+       ((
+         PublicKey() :=
+         return(ml_pkgen_ideal(seed))
+       ) | (
+         foreach id <= N_dec do
+         O() :=
+         return();
+         Decap(c: ml_ciphertext) :=
+         return((get ML_challenge(=i, =c, s_2: ml_secret) in ml_injbot(s_2) else ml_decap_ideal(c, ml_skgen_ideal(seed))))
+       ))
+     ) | (
+       foreach ie <= N_enc do
+       O_2() :=
+       return();
+       Encaps(pk: ml_pkey) :=
+       return((find i2_1 = i2 <= N_keys suchthat defined(seed[i2]) && (pk = ml_pkgen_ideal(seed[i2])) then r_1 <-R ml_encapseed; let ml_pair(ignored: ml_secret, c_1: ml_ciphertext) = ml_encap_r_ideal(pk, r_1) in s_1 <-R ml_secret; insert ML_challenge(i2_1, c_1, s_1); ml_pair(s_1, c_1) else r_1 <-R ml_encapseed; ml_encap_r(pk, r_1)))
+     ))
+
+
+Applying expand get, insert and prove unique annotations
+  - Expand get/insert for table ML_challenge
+yields
+
+Game 3 is
+     ((
+       foreach i <= N_keys do
+       O_1() :=
+       seed <-R ml_keyseed;
+       return();
+       ((
+         PublicKey() :=
+         return(ml_pkgen_ideal(seed))
+       ) | (
+         foreach id <= N_dec do
+         O() :=
+         return();
+         Decap(c: ml_ciphertext) :=
+         return((find u = u_1 <= N_enc suchthat defined(ML_challenge_1[u_1], ML_challenge_2[u_1], ML_challenge_3[u_1]) && (ML_challenge_1[u_1] = i) && (ML_challenge_2[u_1] = c) then ml_injbot(ML_challenge_3[u]) else ml_decap_ideal(c, ml_skgen_ideal(seed))))
+       ))
+     ) | (
+       foreach ie <= N_enc do
+       O_2() :=
+       return();
+       Encaps(pk: ml_pkey) :=
+       return((find i2_1 = i2 <= N_keys suchthat defined(seed[i2]) && (pk = ml_pkgen_ideal(seed[i2])) then r_1 <-R ml_encapseed; {60}let ml_pair(ignored: ml_secret, c_1: ml_ciphertext) = ml_encap_r_ideal(pk, r_1) in s_1 <-R ml_secret; ML_challenge_1 <= N_keys <- i2_1; ML_challenge_2: ml_ciphertext <- c_1; ML_challenge_3: ml_secret <- s_1; ml_pair(s_1, c_1) else r_1 <-R ml_encapseed; ml_encap_r(pk, r_1)))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Simplify pattern ml_pair(ignored: ml_secret, c_1: ml_ciphertext) (bijective tuple expanded) at 60
+yields
+
+Game 4 is
+     ((
+       foreach i <= N_keys do
+       O_1() :=
+       seed <-R ml_keyseed;
+       return();
+       ((
+         PublicKey() :=
+         return(ml_pkgen_ideal(seed))
+       ) | (
+         foreach id <= N_dec do
+         O() :=
+         return();
+         Decap(c: ml_ciphertext) :=
+         find u = u_1 <= N_enc suchthat defined(ML_challenge_1[u_1], ML_challenge_2[u_1], ML_challenge_3[u_1]) && (ML_challenge_1[u_1] = i) && (ML_challenge_2[u_1] = c) then
+           return(ml_injbot(ML_challenge_3[u]))
+         else
+           return(ml_decap_ideal(c, ml_skgen_ideal(seed)))
+       ))
+     ) | (
+       foreach ie <= N_enc do
+       O_2() :=
+       return();
+       Encaps(pk: ml_pkey) :=
+       find i2_1 = i2 <= N_keys suchthat defined(seed[i2]) && (pk = ml_pkgen_ideal(seed[i2])) then
+         r_1 <-R ml_encapseed;
+         v_3: ml_output <- ml_encap_r_ideal(pk, r_1);
+         c_1: ml_ciphertext <- 2-proj-ml_pair(v_3);
+         ignored: ml_secret <- 1-proj-ml_pair(v_3);
+         s_1 <-R ml_secret;
+         ML_challenge_1 <= N_keys <- i2_1;
+         ML_challenge_2: ml_ciphertext <- c_1;
+         ML_challenge_3: ml_secret <- s_1;
+         return(ml_pair(s_1, c_1))
+       else
+         r_1 <-R ml_encapseed;
+         return(ml_encap_r(pk, r_1))
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on ignored (definition removed, all usages removed)
+  - Remove assignments on ML_challenge_1 (definition removed, all usages removed)
+  - Remove assignments on ML_challenge_2 (definition removed, all usages removed)
+  - Remove assignments on ML_challenge_3 (definition removed, all usages removed)
+yields
+
+Game 5 is
+     ((
+       foreach i <= N_keys do
+       O_1() :=
+       seed <-R ml_keyseed;
+       return();
+       ((
+         PublicKey() :=
+         return(ml_pkgen_ideal(seed))
+       ) | (
+         foreach id <= N_dec do
+         O() :=
+         return();
+         Decap(c: ml_ciphertext) :=
+         find u = u_1 <= N_enc suchthat defined(i2_1[u_1], c_1[u_1], s_1[u_1]) && (i2_1[u_1] = i) && (c_1[u_1] = c) then
+           return(ml_injbot(s_1[u]))
+         else
+           return(ml_decap_ideal(c, ml_skgen_ideal(seed)))
+       ))
+     ) | (
+       foreach ie <= N_enc do
+       O_2() :=
+       return();
+       Encaps(pk: ml_pkey) :=
+       find i2_1 = i2 <= N_keys suchthat defined(seed[i2]) && (pk = ml_pkgen_ideal(seed[i2])) then
+         r_1 <-R ml_encapseed;
+         v_3: ml_output <- ml_encap_r_ideal(pk, r_1);
+         c_1: ml_ciphertext <- 2-proj-ml_pair(v_3);
+         s_1 <-R ml_secret;
+         return(ml_pair(s_1, c_1))
+       else
+         r_1 <-R ml_encapseed;
+         return(ml_encap_r(pk, r_1))
+     ))
+
+
+Applying SA rename new without array accesses and remove assignments of findcond
+  - Rename variable r_1 into r_2, r_1
+yields
+
+Game 6 is
+     ((
+       foreach i <= N_keys do
+       O_1() :=
+       seed <-R ml_keyseed;
+       return();
+       ((
+         PublicKey() :=
+         return(ml_pkgen_ideal(seed))
+       ) | (
+         foreach id <= N_dec do
+         O() :=
+         return();
+         Decap(c: ml_ciphertext) :=
+         find u = u_1 <= N_enc suchthat defined(i2_1[u_1], c_1[u_1], s_1[u_1]) && (i2_1[u_1] = i) && (c_1[u_1] = c) then
+           return(ml_injbot(s_1[u]))
+         else
+           return(ml_decap_ideal(c, ml_skgen_ideal(seed)))
+       ))
+     ) | (
+       foreach ie <= N_enc do
+       O_2() :=
+       return();
+       Encaps(pk: ml_pkey) :=
+       find i2_1 = i2 <= N_keys suchthat defined(seed[i2]) && (pk = ml_pkgen_ideal(seed[i2])) then
+         r_2 <-R ml_encapseed;
+         v_3: ml_output <- ml_encap_r_ideal(pk, r_2);
+         c_1: ml_ciphertext <- 2-proj-ml_pair(v_3);
+         s_1 <-R ml_secret;
+         return(ml_pair(s_1, c_1))
+       else
+         r_1 <-R ml_encapseed;
+         return(ml_encap_r(pk, r_1))
+     ))
+
+Initial state
+Game 1 is
+     ((
+       foreach i <= N_keys do
+       O_1() :=
+       seed <-R ml_keyseed;
+       return();
+       ((
+         PublicKey() :=
+         return(ml_pkgen(seed))
+       ) | (
+         foreach id <= N_dec do
+         O() :=
+         return();
+         Decap(c: ml_ciphertext) :=
+         return(ml_decap(c, ml_skgen(seed)))
+       ))
+     ) | (
+       foreach ie <= N_enc do
+       O_2() :=
+       r <-R ml_encapseed;
+       return();
+       Encaps(pk: ml_pkey) :=
+       return(ml_encap_r(pk, r))
+     ))
+
+
+Applying equivalence mlkem_indcca2_assumption [probability P_ml_indcca2(time_1, N_keys, N_enc, #Decap)]
+  - Equivalence mlkem_indcca2_assumption with variables: r -> r, seed -> seed
+yields
+
+Game 7 is
+     ((
+       foreach i <= N_keys do
+       O_1() :=
+       seed <-R ml_keyseed;
+       return();
+       ((
+         PublicKey() :=
+         return(ml_pkgen_ideal(seed))
+       ) | (
+         foreach id <= N_dec do
+         O() :=
+         return();
+         Decap(c: ml_ciphertext) :=
+         return((c: ml_ciphertext <- c; find u_3 = ri_1 <= N_enc suchthat defined(s[ri_1], encoded_i2[ri_1], c_1[ri_1], s_1[ri_1]) && (encoded_i2[ri_1] = encode_idx_seed(i)) && (c_1[ri_1] = c) then ml_injbot(s_1[u_3]) else ml_decap_ideal(c, ml_skgen_ideal(seed))))
+       ))
+     ) | (
+       foreach ie <= N_enc do
+       O_2() :=
+       r <-R ml_encapseed;
+       s_1 <-R ml_secret;
+       return();
+       Encaps(pk: ml_pkey) :=
+       return((pk: ml_pkey <- pk; find u_2 = ri <= N_keys suchthat defined(seed[ri]) && (pk = ml_pkgen_ideal(seed[ri])) then encoded_i2: encoded_N_keys_t <- encode_idx_seed(u_2); v_4: ml_output <- ml_encap_r_ideal(pk, r); c_1: ml_ciphertext <- 2-proj-ml_pair(v_4); s: ml_secret <- cst_ml_secret; ml_pair(s_1, c_1) else ml_encap_r(pk, r)))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 8 is
+     ((
+       foreach i <= N_keys do
+       O_1() :=
+       seed <-R ml_keyseed;
+       return();
+       ((
+         PublicKey() :=
+         return(ml_pkgen_ideal(seed))
+       ) | (
+         foreach id <= N_dec do
+         O() :=
+         return();
+         Decap(c: ml_ciphertext) :=
+         c: ml_ciphertext <- c;
+         find u_3 = ri_1 <= N_enc suchthat defined(s[ri_1], encoded_i2[ri_1], c_1[ri_1], s_1[ri_1]) && (encoded_i2[ri_1] = encode_idx_seed(i)) && (c_1[ri_1] = c) then
+           return(ml_injbot(s_1[u_3]))
+         else
+           return(ml_decap_ideal(c, ml_skgen_ideal(seed)))
+       ))
+     ) | (
+       foreach ie <= N_enc do
+       O_2() :=
+       r <-R ml_encapseed;
+       s_1 <-R ml_secret;
+       return();
+       Encaps(pk: ml_pkey) :=
+       pk: ml_pkey <- pk;
+       find u_2 = ri <= N_keys suchthat defined(seed[ri]) && (pk = ml_pkgen_ideal(seed[ri])) then
+         encoded_i2: encoded_N_keys_t <- encode_idx_seed(u_2);
+         v_4: ml_output <- ml_encap_r_ideal(pk, r);
+         c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+         s: ml_secret <- cst_ml_secret;
+         return(ml_pair(s_1, c_1))
+       else
+         return(ml_encap_r(pk, r))
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on pk (definition removed, all usages removed)
+  - Remove assignments on s (definition removed, all usages removed)
+  - Remove assignments on c (definition removed, all usages removed)
+yields
+
+Game 9 is
+     ((
+       foreach i <= N_keys do
+       O_1() :=
+       seed <-R ml_keyseed;
+       return();
+       ((
+         PublicKey() :=
+         return(ml_pkgen_ideal(seed))
+       ) | (
+         foreach id <= N_dec do
+         O() :=
+         return();
+         Decap(c: ml_ciphertext) :=
+ {17}    find u_3 = ri_1 <= N_enc suchthat defined(encoded_i2[ri_1], c_1[ri_1], s_1[ri_1]) && {21}((encoded_i2[ri_1] = encode_idx_seed(i)) && (c_1[ri_1] = c)) then
+           return(ml_injbot(s_1[u_3]))
+         else
+           return(ml_decap_ideal(c, ml_skgen_ideal(seed)))
+       ))
+     ) | (
+       foreach ie <= N_enc do
+       O_2() :=
+       r <-R ml_encapseed;
+       s_1 <-R ml_secret;
+       return();
+       Encaps(pk: ml_pkey) :=
+       find u_2 = ri <= N_keys suchthat defined(seed[ri]) && (pk = ml_pkgen_ideal(seed[ri])) then
+         encoded_i2: encoded_N_keys_t <- encode_idx_seed(u_2);
+         v_4: ml_output <- ml_encap_r_ideal(pk, r);
+         c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+         return(ml_pair(s_1, c_1))
+       else
+         return(ml_encap_r(pk, r))
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced ((encoded_i2[ri_1] = encode_idx_seed(i)) && (c_1[ri_1] = c)) with ((u_2[ri_1] = i) && (c_1[ri_1] = c)) at 21
+    - Replaced defined condition encoded_i2[ri_1], c_1[ri_1], s_1[ri_1] with s_1[ri_1], c_1[ri_1], u_2[ri_1] in find at 17
+yields
+
+Game 10 is
+     ((
+       foreach i <= N_keys do
+       O_1() :=
+       seed <-R ml_keyseed;
+       return();
+       ((
+         PublicKey() :=
+         return(ml_pkgen_ideal(seed))
+       ) | (
+         foreach id <= N_dec do
+         O() :=
+         return();
+         Decap(c: ml_ciphertext) :=
+         find u_3 = ri_1 <= N_enc suchthat defined(s_1[ri_1], c_1[ri_1], u_2[ri_1]) && (u_2[ri_1] = i) && (c_1[ri_1] = c) then
+           return(ml_injbot(s_1[u_3]))
+         else
+           return(ml_decap_ideal(c, ml_skgen_ideal(seed)))
+       ))
+     ) | (
+       foreach ie <= N_enc do
+       O_2() :=
+       r <-R ml_encapseed;
+       s_1 <-R ml_secret;
+       return();
+       Encaps(pk: ml_pkey) :=
+       find u_2 = ri <= N_keys suchthat defined(seed[ri]) && (pk = ml_pkgen_ideal(seed[ri])) then
+         encoded_i2: encoded_N_keys_t <- encode_idx_seed(u_2);
+         v_4: ml_output <- ml_encap_r_ideal(pk, r);
+         c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+         return(ml_pair(s_1, c_1))
+       else
+         return(ml_encap_r(pk, r))
+     ))
+
+
+Applying move all binders
+  - Move random number generation r
+yields
+
+Game 11 is
+     ((
+       foreach i <= N_keys do
+       O_1() :=
+       seed <-R ml_keyseed;
+       return();
+       ((
+         PublicKey() :=
+         return(ml_pkgen_ideal(seed))
+       ) | (
+         foreach id <= N_dec do
+         O() :=
+         return();
+         Decap(c: ml_ciphertext) :=
+         find u_3 = ri_1 <= N_enc suchthat defined(s_1[ri_1], c_1[ri_1], u_2[ri_1]) && (u_2[ri_1] = i) && (c_1[ri_1] = c) then
+           return(ml_injbot(s_1[u_3]))
+         else
+           return(ml_decap_ideal(c, ml_skgen_ideal(seed)))
+       ))
+     ) | (
+       foreach ie <= N_enc do
+       O_2() :=
+       s_1 <-R ml_secret;
+       return();
+       Encaps(pk: ml_pkey) :=
+       find u_2 = ri <= N_keys suchthat defined(seed[ri]) && (pk = ml_pkgen_ideal(seed[ri])) then
+         encoded_i2: encoded_N_keys_t <- encode_idx_seed(u_2);
+         r <-R ml_encapseed;
+         v_4: ml_output <- ml_encap_r_ideal(pk, r);
+         c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+         return(ml_pair(s_1, c_1))
+       else
+         r <-R ml_encapseed;
+         return(ml_encap_r(pk, r))
+     ))
+
+
+Applying SA rename new without array accesses and remove assignments of findcond
+  - Remove assignments on encoded_i2 (definition removed, all usages removed)
+  - Rename variable r into r_4, r_3
+yields
+
+Game 12 is
+     ((
+       foreach i <= N_keys do
+       O_1() :=
+       seed <-R ml_keyseed;
+       return();
+       ((
+         PublicKey() :=
+         return(ml_pkgen_ideal(seed))
+       ) | (
+         foreach id <= N_dec do
+         O() :=
+         return();
+         Decap(c: ml_ciphertext) :=
+         find u_3 = ri_1 <= N_enc suchthat defined(s_1[ri_1], c_1[ri_1], u_2[ri_1]) && (u_2[ri_1] = i) && (c_1[ri_1] = c) then
+           return(ml_injbot(s_1[u_3]))
+         else
+           return(ml_decap_ideal(c, ml_skgen_ideal(seed)))
+       ))
+     ) | (
+       foreach ie <= N_enc do
+       O_2() :=
+       s_1 <-R ml_secret;
+       return();
+       Encaps(pk: ml_pkey) :=
+       find u_2 = ri <= N_keys suchthat defined(seed[ri]) && (pk = ml_pkgen_ideal(seed[ri])) then
+         r_4 <-R ml_encapseed;
+         v_4: ml_output <- ml_encap_r_ideal(pk, r_4);
+         c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+         return(ml_pair(s_1, c_1))
+       else
+         r_3 <-R ml_encapseed;
+         return(ml_encap_r(pk, r_3))
+     ))
+
+RESULT time_1 = time + time(context for game 1) = time
+RESULT Could not prove indistinguishability between game 1 and game 2.
+
+===== EXECUTION METADATA =====
+Command:
+C:\tmp\cryptoverif-2.12\cryptoverif2.12\cryptoverif.exe -oproof receipt.txt citadel_hybrid_combiner.ocv
+Process exit code: 0
+Tool: CryptoVerif 2.12 official Windows binary (ENS/CNRS/Inria/MPI-SP/Ecole Polytechnique)
+Platform: Microsoft Windows NT 10.0.26200.0, X64
+Repository revision: 4dc2669918b2dd1c81396e5b7568788342d842d9
+
+Verbatim console output:
+Doing expand get, insert and prove unique annotations... Done.
+Doing simplify (non-expanded game)... No change.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on seed inside simplify... At 9, returned message ml_pkgen_ideal(seed) depends on seed.
+No change
+Run simplify 1 time(s). Fixpoint reached.
+No change.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... Done.
+Doing merge branches... No change.
+Doing expand get, insert and prove unique annotations... No change.
+Doing simplify (non-expanded game)... No change.
+Doing expand... No change.
+Doing remove assignments of findcond... No change.
+Doing simplify... Run simplify 1 time(s). Fixpoint reached.
+No change.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+At 5 in this process and at 4 on the other end, processes differ.
+Trying equivalence mlkem_indcca2_assumption... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... No change.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on seed inside simplify... At 9, returned message ml_pkgen_ideal(seed) depends on seed.
+No change
+Doing global dependency analysis on seed inside simplify... At 9, returned message ml_pkgen_ideal(seed) depends on seed.
+No change
+Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... Done.
+Doing SA rename new without array accesses and remove assignments of findcond... Done.
+Doing merge branches... No change.
+At 50 in this process and at 50 on the other end, processes differ.
+Trying equivalence mlkem_indcca2_assumption... Failed.
+===================== Proof starts =======================
+Outputting proof in receipt.txt
+RESULT Could not prove indistinguishability between game 1 and game 2.
+PROCESS_EXIT_CODE=0
+
+===== CLAIM STATUS =====
+VERIFIED: none. The file parses; the named IND-CCA2 equivalence is applied and
+its advantage is computed, but the final indistinguishability query does not close.
+
+Explicit cryptographic assumption present in the model:
+- mlkem_indcca2_assumption: ML-KEM is IND-CCA2 with advantage
+  P_ml_indcca2(t, N_keys, N_enc, N_dec), including programmed decapsulation
+  consistency for challenge ciphertexts.
+
+Named remaining lemmas:
+- mlkem_only_indcca2_arm: NOT PROVED. Exact needed tool capability/assumption:
+  a CryptoVerif equivalence whose ideal challenge table uses the same internal
+  encoded replication-index representation as the query target, or a proved
+  game equivalence between that representation and the direct-index table.
+- x25519_only_indcca2_arm: NOT ATTEMPTED. Needs a DDH/ODH (or PRF-ODH)
+  computational assumption for contributory X25519 and a programmed CCA table.
+- ciphertext_bound_dual_prf_rom_step: NOT ATTEMPTED. Needs HKDF-SHA256 as a
+  dual-PRF or ROM KDF on (x25519_ss, mlkem_ss, SHA3-256(ct1||ct2), context), plus
+  collision/second-preimage treatment for SHA3-256 and fixed-length encodings.
+- citadel_indcca2_robust_if_either_component_secure: NOT ATTEMPTED; depends on
+  all three lemmas above.
