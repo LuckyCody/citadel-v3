@@ -148,9 +148,34 @@ fn downgrade_confusion_and_noncontributory_x25519_are_rejected() {
         .open(&sk, &legacy_stream_prefix, &aad, &context)
         .is_err());
 
-    let mut zero_x25519 = ciphertext.clone();
-    zero_x25519[98..130].fill(0);
-    assert!(engine.open(&sk, &zero_x25519, &aad, &context).is_err());
+    // Non-contributory X25519: every entry of the standard Curve25519 low-order
+    // encoded-input blacklist, spliced into the ephemeral slot (bytes 98..130), must be
+    // rejected end-to-end by open(). Isolation of the contributory guard itself is
+    // covered by the KEM-level unit tests in kem.rs; this is envelope-level
+    // defense-in-depth that also pins the wire offsets.
+    let hex32 = |s: &str| -> [u8; 32] {
+        let mut out = [0u8; 32];
+        for (i, b) in out.iter_mut().enumerate() {
+            *b = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).unwrap();
+        }
+        out
+    };
+    for point in [
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "0100000000000000000000000000000000000000000000000000000000000000",
+        "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800",
+        "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157",
+        "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+        "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+        "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    ] {
+        let mut bad = ciphertext.clone();
+        bad[98..130].copy_from_slice(&hex32(point));
+        assert!(
+            engine.open(&sk, &bad, &aad, &context).is_err(),
+            "low-order X25519 ephemeral {point} must be rejected end-to-end"
+        );
+    }
 }
 
 #[test]
