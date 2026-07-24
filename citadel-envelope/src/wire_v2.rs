@@ -18,12 +18,28 @@ use crate::wire::KEM_CIPHERTEXT_BYTES;
 pub const MAGIC: &[u8; 4] = b"CTD2";
 pub const VERSION: u8 = 2;
 pub const FLAGS: u8 = 0;
-pub const SUITE_KEM: u8 = 0xA3;
+// The KEM suite byte is no longer a constant here. It is owned by `wire::SUITE_TABLE`
+// and read from the provider (`K::SUITE_KEM`) — a second copy in this module is the
+// drift the table exists to prevent.
 pub const SUITE_KDF: u8 = 0xC1;
 pub const SUITE_AEAD: u8 = 0xB1;
 pub const HEADER_LEN: usize = 98;
 pub const TAG_LEN: usize = 16;
+/// Minimum envelope length **for the `0xA3` suite**.
+///
+/// Retained at its frozen value because it is re-exported on the public SDK surface as
+/// `MIN_ENVELOPE_V2_BYTES`. It is *not* safe as a pre-suite-resolution bound — use
+/// [`MIN_ENVELOPE_LEN_ANY_SUITE`] for that.
 pub const MIN_ENVELOPE_LEN: usize = HEADER_LEN + KEM_CIPHERTEXT_BYTES + TAG_LEN;
+
+/// Smallest envelope any supported suite can produce.
+///
+/// `decode()`'s first guard runs before the suite byte has been validated, so it must
+/// not assume any one suite's sizes. Derived from `wire::SUITE_TABLE`, so adding a
+/// suite cannot leave this stale. With a single suite in the table this equals
+/// [`MIN_ENVELOPE_LEN`].
+pub const MIN_ENVELOPE_LEN_ANY_SUITE: usize =
+    HEADER_LEN + crate::wire::MIN_KEM_CIPHERTEXT_BYTES + TAG_LEN;
 pub const MAX_PLAINTEXT_LEN: usize = 64 * 1024 * 1024;
 pub const MAX_AAD_LEN: usize = 64 * 1024;
 pub const MAX_CONTEXT_LEN: usize = 4 * 1024;
@@ -39,6 +55,10 @@ pub struct Parts<'a> {
     pub aead_ciphertext: &'a [u8],
     pub recipient_key_hash: &'a [u8; 32],
     pub plaintext_len: usize,
+    /// The suite resolved from `header[6]`, and the source of every length used to
+    /// slice this envelope. Callers that decapsulate must check it against their own
+    /// provider's `SUITE_KEM` — `decode` deliberately does not know which key you hold.
+    pub suite: crate::wire::SuiteParams,
 }
 
 fn push_u16(out: &mut Vec<u8>, value: usize) -> Result<(), EncodingError> {
@@ -68,7 +88,13 @@ pub fn context_hash(context: &[u8]) -> [u8; 32] {
     digest.into()
 }
 
-pub fn encode_header(
+/// Build the 98-byte header for suite `K`.
+///
+/// The suite byte and `kem_ct_len` come from the provider, and both are cross-checked
+/// against `wire::SUITE_TABLE` before anything is written. A provider whose associated
+/// consts disagree with the table is a drift bug that would produce envelopes the
+/// decoder rejects; it fails here instead, at encode time, on the writer's machine.
+pub fn encode_header<K: KemProvider>(
     plaintext_len: usize,
     recipient_hash: &[u8; 32],
     context_hash: &[u8; 32],
@@ -77,16 +103,22 @@ pub fn encode_header(
     if plaintext_len > MAX_PLAINTEXT_LEN {
         return Err(EncodingError);
     }
+    let suite = crate::wire::suite_params(K::SUITE_KEM).ok_or(EncodingError)?;
+    if suite.kem_ciphertext_bytes != K::KEM_CIPHERTEXT_BYTES {
+        return Err(EncodingError);
+    }
+    let kem_ct_len = u16::try_from(K::KEM_CIPHERTEXT_BYTES).map_err(|_| EncodingError)?;
+
     let mut header = [0u8; HEADER_LEN];
     header[..4].copy_from_slice(MAGIC);
     header[4] = VERSION;
     header[5] = FLAGS;
-    header[6] = SUITE_KEM;
+    header[6] = K::SUITE_KEM;
     header[7] = SUITE_KDF;
     header[8] = SUITE_AEAD;
     header[9] = 0;
     header[10..12].copy_from_slice(&(HEADER_LEN as u16).to_be_bytes());
-    header[12..14].copy_from_slice(&(KEM_CIPHERTEXT_BYTES as u16).to_be_bytes());
+    header[12..14].copy_from_slice(&kem_ct_len.to_be_bytes());
     header[14..22].copy_from_slice(&(plaintext_len as u64).to_be_bytes());
     header[22..54].copy_from_slice(recipient_hash);
     header[54..86].copy_from_slice(context_hash);
@@ -150,12 +182,12 @@ pub fn derive_key(shared_secret: &[u8], transcript: &[u8]) -> Result<[u8; 32], E
     Ok(key)
 }
 
-pub fn encode(
+pub fn encode<K: KemProvider>(
     header: &[u8; HEADER_LEN],
     kem_ct: &[u8],
     aead_ct: &[u8],
 ) -> Result<Vec<u8>, EncodingError> {
-    if kem_ct.len() != KEM_CIPHERTEXT_BYTES || aead_ct.len() < TAG_LEN {
+    if kem_ct.len() != K::KEM_CIPHERTEXT_BYTES || aead_ct.len() < TAG_LEN {
         return Err(EncodingError);
     }
     let mut out = Vec::with_capacity(HEADER_LEN + kem_ct.len() + aead_ct.len());
@@ -165,21 +197,39 @@ pub fn encode(
     Ok(out)
 }
 
+/// Strictly parse a CTD2 envelope of **any supported suite**.
+///
+/// Order matters and is the whole point of this function:
+///
+/// 1. A conservative length floor that assumes nothing about the suite
+///    ([`MIN_ENVELOPE_LEN_ANY_SUITE`]) — enough to reach the header, no more.
+/// 2. The suite-invariant header fields.
+/// 3. **Resolve `header[6]` against the suite table.** Unsupported, allocated-but-
+///    unimplemented, and reserved identifiers all resolve to `None` and reject here.
+/// 4. Only now, every length comes from the resolved suite: the declared `kem_ct_len`
+///    must equal it, and the **total length is re-checked exactly** against it.
+///
+/// Step 4's exact re-check is what makes the slicing below sound. Without it a short
+/// envelope declaring a large suite (or the reverse) would be sliced with the wrong
+/// offsets — the length-confusion trap this packet exists to close.
 pub fn decode(data: &[u8]) -> Result<Parts<'_>, DecryptionError> {
-    if data.len() < MIN_ENVELOPE_LEN {
+    if data.len() < MIN_ENVELOPE_LEN_ANY_SUITE {
         return Err(DecryptionError);
     }
     let header = data.get(..HEADER_LEN).ok_or(DecryptionError)?;
     if &header[..4] != MAGIC
         || header[4] != VERSION
         || header[5] != FLAGS
-        || header[6] != SUITE_KEM
         || header[7] != SUITE_KDF
         || header[8] != SUITE_AEAD
         || header[9] != 0
         || u16::from_be_bytes([header[10], header[11]]) as usize != HEADER_LEN
-        || u16::from_be_bytes([header[12], header[13]]) as usize != KEM_CIPHERTEXT_BYTES
     {
+        return Err(DecryptionError);
+    }
+
+    let suite = crate::wire::suite_params(header[6]).ok_or(DecryptionError)?;
+    if u16::from_be_bytes([header[12], header[13]]) as usize != suite.kem_ciphertext_bytes {
         return Err(DecryptionError);
     }
 
@@ -188,15 +238,18 @@ pub fn decode(data: &[u8]) -> Result<Parts<'_>, DecryptionError> {
     if plaintext_len > MAX_PLAINTEXT_LEN {
         return Err(DecryptionError);
     }
-    let expected_len = MIN_ENVELOPE_LEN
-        .checked_add(plaintext_len)
+    let expected_len = HEADER_LEN
+        .checked_add(suite.kem_ciphertext_bytes)
+        .and_then(|n| n.checked_add(TAG_LEN))
+        .and_then(|n| n.checked_add(plaintext_len))
         .ok_or(DecryptionError)?;
     if data.len() != expected_len {
         return Err(DecryptionError);
     }
 
+    // Sound because `data.len() == expected_len >= HEADER_LEN + suite.kem_ciphertext_bytes`.
     let kem_start = HEADER_LEN;
-    let kem_end = kem_start + KEM_CIPHERTEXT_BYTES;
+    let kem_end = kem_start + suite.kem_ciphertext_bytes;
     let nonce: &[u8; 12] = header[86..98].try_into().map_err(|_| DecryptionError)?;
     let recipient_key_hash = header[22..54].try_into().map_err(|_| DecryptionError)?;
     Ok(Parts {
@@ -206,6 +259,7 @@ pub fn decode(data: &[u8]) -> Result<Parts<'_>, DecryptionError> {
         aead_ciphertext: &data[kem_end..],
         recipient_key_hash,
         plaintext_len,
+        suite,
     })
 }
 
@@ -241,7 +295,7 @@ pub(crate) fn seal_with_material<K: KemProvider>(
     {
         return Err(EncodingError);
     }
-    let header = encode_header(
+    let header = encode_header::<K>(
         plaintext.len(),
         &public_key_hash::<K>(pk),
         &context_hash(context),
@@ -251,7 +305,7 @@ pub(crate) fn seal_with_material<K: KemProvider>(
     let key = Zeroizing::new(derive_key(shared_secret, &transcript)?);
     let bound_aad = associated_data(&header, kem_ct, context, aad)?;
     let aead_ct = aead::aead_seal(&key, nonce, plaintext, &bound_aad)?;
-    encode(&header, kem_ct, &aead_ct)
+    encode::<K>(&header, kem_ct, &aead_ct)
 }
 
 pub fn open<K: KemProvider>(
@@ -264,6 +318,13 @@ pub fn open<K: KemProvider>(
         return Err(DecryptionError);
     }
     let parts = decode(ciphertext)?;
+    // Cross-suite reject, before any crypto. `decode` validates that the envelope is
+    // internally consistent for *its* suite; it cannot know which key the caller holds.
+    // Opening an envelope of one suite with another suite's key must fail here, not
+    // deeper in on a length mismatch inside decapsulate.
+    if parts.suite.suite_kem != K::SUITE_KEM {
+        return Err(DecryptionError);
+    }
     let supplied_context_hash: &[u8; 32] = parts.header[54..86]
         .try_into()
         .map_err(|_| DecryptionError)?;
