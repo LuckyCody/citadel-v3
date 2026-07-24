@@ -58,6 +58,15 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # Run as the image's own redis user (uid 999) directly: the official
+    # entrypoint normally starts as root and drops to this user via setpriv,
+    # which needs CAP_SETUID/CAP_SETGID — capabilities cap_drop: ALL below
+    # removes. Skipping the entrypoint's own privilege-drop step means no
+    # capability needs adding back (found live: cap_drop: ALL + the
+    # unmodified image crash-looped with "setpriv: setresuid failed:
+    # Operation not permitted" — this compose file had never actually been
+    # run end to end before).
+    user: "999:1000"
     command: >
       redis-server
       --maxmemory 128mb

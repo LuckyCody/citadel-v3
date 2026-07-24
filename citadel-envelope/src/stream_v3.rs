@@ -278,6 +278,13 @@ impl StreamV3Encryptor {
 // ---------------------------------------------------------------------------
 
 /// V3 streaming decryptor.
+///
+/// TRUNCATION SAFETY: after the last chunk you MUST finalize with
+/// [`StreamV3Decryptor::finish`] (or [`StreamV3Decryptor::verify_final_tag`]).
+/// Decrypting chunks without finalizing accepts a truncated stream — the final
+/// tag binds the total chunk count, so only finalization detects a dropped tail.
+/// Prefer the high-level [`decrypt_stream_v3`], which finalizes for you.
+#[must_use = "a StreamV3Decryptor must be finalized (finish/verify_final_tag) or a truncated stream is silently accepted"]
 pub struct StreamV3Decryptor {
     stream_key: Zeroizing<[u8; 32]>,
     final_key: Zeroizing<[u8; 32]>,
@@ -430,7 +437,8 @@ impl StreamV3Decryptor {
     ///
     /// Must be called after receiving `is_final = true` from `decrypt_chunk`.
     /// Returns `Err(DecryptionError)` if the tag doesn't match (stream was truncated
-    /// or the chunk count was tampered).
+    /// or the chunk count was tampered). Prefer [`Self::finish`], which consumes the
+    /// decryptor so the terminal check cannot be forgotten.
     pub fn verify_final_tag(&self, final_tag: &[u8]) -> Result<(), DecryptionError> {
         if !self.done {
             return Err(DecryptionError); // Can't verify until all chunks received.
@@ -441,6 +449,15 @@ impl StreamV3Decryptor {
         mac.verify_slice(final_tag).map_err(|_| DecryptionError)
     }
 
+    /// Consume the decryptor and verify the final tag — the truncation-safe terminal.
+    ///
+    /// Because it takes `self` by value, the decryptor cannot be used afterwards and
+    /// the finalization cannot be silently skipped. Returns `Err` if the final chunk
+    /// was never received (truncated stream) or the tag does not match.
+    pub fn finish(self, final_tag: &[u8]) -> Result<(), DecryptionError> {
+        self.verify_final_tag(final_tag)
+    }
+
     pub fn is_done(&self) -> bool {
         self.done
     }
@@ -448,4 +465,92 @@ impl StreamV3Decryptor {
     pub fn chunks_received(&self) -> u64 {
         self.expected_seq
     }
+}
+
+// NOTE: a Drop-based "was this finalized?" guard was considered and REJECTED: on any
+// error path the decryptor is dropped un-finalized (e.g. decrypt_stream_v3 returning
+// Err on a detected truncation), which is indistinguishable from the footgun, so the
+// guard turned legitimate Err returns into panics. Truncation safety is enforced by
+// the high-level decrypt_stream_v3 (mandatory finish) and encouraged by the consuming
+// finish() + #[must_use]; there is intentionally no Drop guard. (022-R judge finding.)
+
+// ---------------------------------------------------------------------------
+// High-level, truncation-safe stream API (recommended)
+//
+// These one-call helpers wrap the chunk API and make finalization MANDATORY, so an
+// integrator cannot accidentally accept a truncated stream (the H1 footgun). Use
+// these unless you specifically need incremental chunk-by-chunk streaming.
+// ---------------------------------------------------------------------------
+
+/// Output of [`encrypt_stream_v3`]: the stream `header`, the ordered chunk `frames`,
+/// and the `final_tag`. Transmit all three; the recipient feeds them to
+/// [`decrypt_stream_v3`].
+pub struct EncryptedStreamV3 {
+    pub header: Vec<u8>,
+    pub frames: Vec<Vec<u8>>,
+    pub final_tag: Vec<u8>,
+}
+
+/// Encrypt a complete message as a V3 stream in one call.
+///
+/// Encrypts `plaintext_chunks` in order (marking the last one final) and returns the
+/// header, ordered chunk frames, and final tag as an [`EncryptedStreamV3`]. Requires
+/// ≥1 chunk.
+pub fn encrypt_stream_v3(
+    pk: &PublicKey,
+    plaintext_chunks: &[&[u8]],
+    aad: &Aad,
+    context: &Context,
+) -> Result<EncryptedStreamV3, EncodingError> {
+    if plaintext_chunks.is_empty() {
+        return Err(EncodingError);
+    }
+    let mut enc = StreamV3Encryptor::new(pk, aad, context)?;
+    let header = enc.header().to_vec();
+    let last = plaintext_chunks.len() - 1;
+    let mut frames = Vec::with_capacity(plaintext_chunks.len());
+    for (i, pt) in plaintext_chunks.iter().enumerate() {
+        frames.push(enc.encrypt_chunk(pt, i == last, aad)?);
+    }
+    let final_tag = enc.final_tag()?;
+    Ok(EncryptedStreamV3 {
+        header,
+        frames,
+        final_tag,
+    })
+}
+
+/// Decrypt a complete V3 stream in one call, ENFORCING truncation safety.
+///
+/// Requires the full ordered set of chunk frames and the `final_tag`. Returns `Err`
+/// if any chunk fails to authenticate, the final chunk is missing (truncation), a
+/// non-final chunk appears last or any chunk appears after the final one, or the
+/// count-binding final tag does not verify. Returns the concatenated plaintext.
+pub fn decrypt_stream_v3(
+    sk: &SecretKey,
+    header: &[u8],
+    chunks: &[&[u8]],
+    final_tag: &[u8],
+    aad: &Aad,
+    context: &Context,
+) -> Result<Vec<u8>, DecryptionError> {
+    if chunks.is_empty() {
+        return Err(DecryptionError);
+    }
+    let (mut dec, _hdr) = StreamV3Decryptor::from_header(sk, header, aad, context)?;
+    let last = chunks.len() - 1;
+    let mut out = Vec::new();
+    for (i, frame) in chunks.iter().enumerate() {
+        let (pt, is_final) = dec.decrypt_chunk(frame, aad)?;
+        out.extend_from_slice(&pt);
+        // The final flag must be set on exactly the last supplied chunk — this
+        // rejects a truncated tail (last chunk not final) and a chunk after final.
+        if is_final != (i == last) {
+            return Err(DecryptionError);
+        }
+    }
+    // Mandatory terminal check: consumes `dec` and verifies the count-binding final
+    // tag, so truncation cannot slip through even if the loop above is bypassed.
+    dec.finish(final_tag)?;
+    Ok(out)
 }

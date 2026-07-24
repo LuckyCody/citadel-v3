@@ -1,0 +1,581 @@
+Doing expand get, insert and prove unique annotations... No change.
+Doing simplify (non-expanded game)... No change.
+Doing expand... Done.
+Doing remove assignments of findcond... No change.
+Doing simplify... Run simplify 1 time(s). Fixpoint reached.
+No change.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proof of (one-session) secrecy of K failed:
+  K is not defined only by restrictions or assignments.
+Trying equivalence mlkem_indcca2_assumption... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... Done.
+Doing merge branches... No change.
+Trying equivalence rom(kdf)... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... No change.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on s_1 inside simplify... Done. Restarting simplify
+Eliminated collisions between s_1 and x2 Probability: N_kdf / |ml_secret|
+(s_1 collides with a value independent of s_1[...] with probability at most 1 / |ml_secret|;
+ x2 does not depend on s_1[...])
+Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... Done.
+Doing SA rename new without array accesses and remove assignments of findcond... Done.
+Doing merge branches... No change.
+Doing simplify... Run simplify 1 time(s). Fixpoint reached.
+No change.
+Proved one-session secrecy of K
+Proved secrecy of K
+===================== Proof starts =======================
+Initial state
+Game 1 is
+     Ostart() :=
+     hk <-R hashkey;
+     seed <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed);
+     r <-R ml_encapseed;
+  {8}let ml_pair(ss2: ml_secret, ct: ml_ciphertext) = ml_encap_r(pk, r) in
+     return(pk, ct);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       return(kdf(hk, x1, x2))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = ct then
+         yield
+       else
+         return(ml_decap(c, ml_skgen(seed)))
+     ) | (
+       OChal(ss1: bitstring) :=
+       K: kdfkey <- kdf(hk, ss1, ss2)
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Simplify pattern ml_pair(ss2: ml_secret, ct: ml_ciphertext) (bijective tuple expanded) at 8
+yields
+
+Game 2 is
+     Ostart() :=
+     hk <-R hashkey;
+     seed <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed);
+     r <-R ml_encapseed;
+     v_3: ml_output <- ml_encap_r(pk, r);
+     ct: ml_ciphertext <- 2-proj-ml_pair(v_3);
+     ss2: ml_secret <- 1-proj-ml_pair(v_3);
+     return(pk, ct);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       return(kdf(hk, x1, x2))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = ct then
+         yield
+       else
+         return(ml_decap(c, ml_skgen(seed)))
+     ) | (
+       OChal(ss1: bitstring) :=
+       K: kdfkey <- kdf(hk, ss1, ss2)
+     ))
+
+
+Applying equivalence mlkem_indcca2_assumption [probability P_ml_indcca2(time_1, 1, 1, N_dec)]
+  - Equivalence mlkem_indcca2_assumption with variables: r -> r, seed -> seed
+yields
+
+Game 3 is
+     Ostart() :=
+     hk <-R hashkey;
+     seed_1 <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed_1);
+     r_1 <-R ml_encapseed;
+     s_1 <-R ml_secret;
+     v_3: ml_output <- (pk_1: ml_pkey <- pk; if {13}(pk_1 = ml_pkgen(seed_1)) then encoded_i2: encoded_N_keys_t <- encode_idx_seed(); v_4: ml_output <- ml_encap_r(pk_1, r_1); c_1: ml_ciphertext <- 2-proj-ml_pair(v_4); s: ml_secret <- cst_ml_secret; ml_pair(s_1, c_1) else ml_encap_r(pk_1, r_1));
+     ct: ml_ciphertext <- 2-proj-ml_pair(v_3);
+     ss2: ml_secret <- 1-proj-ml_pair(v_3);
+     return(pk, ct);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       return(kdf(hk, x1, x2))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = ct then
+         yield
+       else
+         return((c_2: ml_ciphertext <- c; if defined(s, c_1, encoded_i2) && (encoded_i2 = encode_idx_seed()) && (c_1 = c_2) then ml_injbot(s_1) else ml_decap(c_2, ml_skgen(seed_1))))
+     ) | (
+       OChal(ss1: bitstring) :=
+       K: kdfkey <- kdf(hk, ss1, ss2)
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Replaced (pk_1 = ml_pkgen(seed_1)) with true at 13
+yields
+
+Game 4 is
+     Ostart() :=
+     hk <-R hashkey;
+     seed_1 <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed_1);
+     r_1 <-R ml_encapseed;
+     s_1 <-R ml_secret;
+     v_3: ml_output <- (pk_1: ml_pkey <- pk; {12}if true then encoded_i2: encoded_N_keys_t <- encode_idx_seed(); v_4: ml_output <- ml_encap_r(pk_1, r_1); c_1: ml_ciphertext <- 2-proj-ml_pair(v_4); s: ml_secret <- cst_ml_secret; ml_pair(s_1, c_1) else ml_encap_r(pk_1, r_1));
+     ct: ml_ciphertext <- 2-proj-ml_pair(v_3);
+     ss2: ml_secret <- 1-proj-ml_pair(v_3);
+     return(pk, ct);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       return(kdf(hk, x1, x2))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = ct then
+         yield
+       else
+         return((c_2: ml_ciphertext <- c; {64}if defined(s, c_1, encoded_i2) && (encoded_i2 = encode_idx_seed()) && (c_1 = c_2) then ml_injbot(s_1) else ml_decap(c_2, ml_skgen(seed_1))))
+     ) | (
+       OChal(ss1: bitstring) :=
+       K: kdfkey <- kdf(hk, ss1, ss2)
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Transformed find at 12 into a test
+    - Test at 12 always true
+    - Remove branch 1 in find at 64
+    - Find at 64 removed (else branch kept if any)
+yields
+
+Game 5 is
+     Ostart() :=
+     hk <-R hashkey;
+     seed_1 <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed_1);
+     r_1 <-R ml_encapseed;
+     s_1 <-R ml_secret;
+     pk_1: ml_pkey <- pk;
+     encoded_i2: encoded_N_keys_t <- encode_idx_seed();
+     v_4: ml_output <- ml_encap_r(pk_1, r_1);
+     c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+     s: ml_secret <- cst_ml_secret;
+     v_3: ml_output <- ml_pair(s_1, c_1);
+     ct: ml_ciphertext <- 2-proj-ml_pair(v_3);
+     ss2: ml_secret <- 1-proj-ml_pair(v_3);
+     return(pk, ct);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       return(kdf(hk, x1, x2))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = ct then
+         yield
+       else
+         c_2: ml_ciphertext <- c;
+         return(ml_decap(c_2, ml_skgen(seed_1)))
+     ) | (
+       OChal(ss1: bitstring) :=
+       K: kdfkey <- kdf(hk, ss1, ss2)
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on pk_1 (definition removed, all usages removed)
+  - Remove assignments on encoded_i2 (definition removed, all usages removed)
+  - Remove assignments on s (definition removed, all usages removed)
+  - Remove assignments on c_2 (definition removed, all usages removed)
+yields
+
+Game 6 is
+     Ostart() :=
+     hk <-R hashkey;
+     seed_1 <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed_1);
+     r_1 <-R ml_encapseed;
+     s_1 <-R ml_secret;
+     v_4: ml_output <- ml_encap_r(pk, r_1);
+     c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+     v_3: ml_output <- ml_pair(s_1, c_1);
+     ct: ml_ciphertext <- {21}2-proj-ml_pair(v_3);
+     ss2: ml_secret <- {24}1-proj-ml_pair(v_3);
+     return(pk, ct);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       return(kdf(hk, x1, x2))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = ct then
+         yield
+       else
+         return(ml_decap(c, ml_skgen(seed_1)))
+     ) | (
+       OChal(ss1: bitstring) :=
+       K: kdfkey <- kdf(hk, ss1, ss2)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced 2-proj-ml_pair(v_3) with c_1 at 21
+    - Replaced 1-proj-ml_pair(v_3) with s_1 at 24
+yields
+
+Game 7 is
+     Ostart() :=
+     hk <-R hashkey;
+     seed_1 <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed_1);
+     r_1 <-R ml_encapseed;
+     s_1 <-R ml_secret;
+     v_4: ml_output <- ml_encap_r(pk, r_1);
+     c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+     v_3: ml_output <- ml_pair(s_1, c_1);
+     ct: ml_ciphertext <- c_1;
+     ss2: ml_secret <- s_1;
+     return(pk, ct);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       return(kdf(hk, x1, x2))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = ct then
+         yield
+       else
+         return(ml_decap(c, ml_skgen(seed_1)))
+     ) | (
+       OChal(ss1: bitstring) :=
+       K: kdfkey <- kdf(hk, ss1, ss2)
+     ))
+
+
+Applying SA rename new without array accesses and remove assignments of findcond
+  - Remove assignments on v_3 (definition removed, all usages removed)
+  - Remove assignments on ct (definition removed, all usages removed)
+  - Remove assignments on ss2 (definition removed, all usages removed)
+yields
+
+Game 8 is
+     Ostart() :=
+     hk <-R hashkey;
+     seed_1 <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed_1);
+     r_1 <-R ml_encapseed;
+     s_1 <-R ml_secret;
+     v_4: ml_output <- ml_encap_r(pk, r_1);
+     c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+     return(pk, c_1);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       return(kdf(hk, x1, x2))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = c_1 then
+         yield
+       else
+         return(ml_decap(c, ml_skgen(seed_1)))
+     ) | (
+       OChal(ss1: bitstring) :=
+       K: kdfkey <- kdf(hk, ss1, s_1)
+     ))
+
+
+Applying equivalence rom(kdf)
+  - Equivalence rom(kdf) with variables: hk -> hk_1
+yields
+
+Game 9 is
+     Ostart() :=
+     seed_1 <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed_1);
+     r_1 <-R ml_encapseed;
+     s_1 <-R ml_secret;
+     v_4: ml_output <- ml_encap_r(pk, r_1);
+     c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+     return(pk, c_1);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       return((x_O_1: bitstring <- x1; x_O: ml_secret <- x2; find [unique] u_1 = ri_1 <= N_kdf suchthat defined(x_O_1[ri_1], x_O[ri_1], r_2[ri_1]) && (x_O_1 = x_O_1[ri_1]) && (x_O = x_O[ri_1]) then r_2[u_1] orfind  suchthat defined(x_O_3, x_O_2, r_3) && (x_O_1 = x_O_3) && (x_O = x_O_2) then r_3 else r_2 <-R kdfkey; r_2))
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = c_1 then
+         yield
+       else
+         return(ml_decap(c, ml_skgen(seed_1)))
+     ) | (
+       OChal(ss1: bitstring) :=
+       K: kdfkey <- (x_O_3: bitstring <- ss1; x_O_2: ml_secret <- s_1; find [unique] u = ri <= N_kdf suchthat defined(x_O_1[ri], x_O[ri], r_2[ri]) && (x_O_3 = x_O_1[ri]) && (x_O_2 = x_O[ri]) then r_2[u] else r_3 <-R kdfkey; r_3)
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 10 is
+     Ostart() :=
+     seed_1 <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed_1);
+     r_1 <-R ml_encapseed;
+     s_1 <-R ml_secret;
+     v_4: ml_output <- ml_encap_r(pk, r_1);
+     c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+     return(pk, c_1);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       x_O_1: bitstring <- x1;
+       x_O: ml_secret <- x2;
+       find [unique] u_1 = ri_1 <= N_kdf suchthat defined(x_O_1[ri_1], x_O[ri_1], r_2[ri_1]) && (x_O_1 = x_O_1[ri_1]) && (x_O = x_O[ri_1]) then
+         return(r_2[u_1])
+       orfind  suchthat defined(x_O_3, x_O_2, r_3) && (x_O_1 = x_O_3) && (x_O = x_O_2) then
+         return(r_3)
+       else
+         r_2 <-R kdfkey;
+         return(r_2)
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = c_1 then
+         yield
+       else
+         return(ml_decap(c, ml_skgen(seed_1)))
+     ) | (
+       OChal(ss1: bitstring) :=
+       x_O_3: bitstring <- ss1;
+       x_O_2: ml_secret <- s_1;
+       find [unique] u = ri <= N_kdf suchthat defined(x_O_1[ri], x_O[ri], r_2[ri]) && (x_O_3 = x_O_1[ri]) && (x_O_2 = x_O[ri]) then
+         K: kdfkey <- r_2[u]
+       else
+         r_3 <-R kdfkey;
+         K: kdfkey <- r_3
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x_O_3 (definition point kept, all usages removed)
+  - Remove assignments on x_O_2 (definition removed, all usages removed)
+  - Remove assignments on x_O_1 (definition point kept, all usages removed)
+  - Remove assignments on x_O (definition removed, all usages removed)
+yields
+
+Game 11 is
+     Ostart() :=
+     seed_1 <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed_1);
+     r_1 <-R ml_encapseed;
+     s_1 <-R ml_secret;
+     v_4: ml_output <- ml_encap_r(pk, r_1);
+     c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+     return(pk, c_1);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       x_O_1: bitstring <- cst_bitstring;
+       find [unique] u_1 = ri_1 <= N_kdf suchthat defined(x1[ri_1], x2[ri_1], x_O_1[ri_1], r_2[ri_1]) && (x1 = x1[ri_1]) && (x2 = x2[ri_1]) then
+         return(r_2[u_1])
+       orfind  suchthat defined(ss1, s_1, x_O_3, r_3) && (x1 = ss1) && (x2 = s_1) then
+         return(r_3)
+       else
+         r_2 <-R kdfkey;
+         return(r_2)
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = c_1 then
+         yield
+       else
+         return(ml_decap(c, ml_skgen(seed_1)))
+     ) | (
+       OChal(ss1: bitstring) :=
+       x_O_3: bitstring <- cst_bitstring;
+       find [unique] u = ri <= N_kdf suchthat defined(x1[ri], x2[ri], x_O_1[ri], r_2[ri]) && (ss1 = x1[ri]) && (s_1 = x2[ri]) then
+         K: kdfkey <- r_2[u]
+       else
+         r_3 <-R kdfkey;
+         K: kdfkey <- r_3
+     ))
+
+
+Applying simplify [probability N_kdf / |ml_secret|]
+  - Global dependency analysis on s_1
+yields
+
+Game 12 is
+     Ostart() :=
+     seed_1 <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed_1);
+     r_1 <-R ml_encapseed;
+  {7}s_1 <-R ml_secret;
+     v_4: ml_output <- ml_encap_r(pk, r_1);
+     c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+     return(pk, c_1);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       x_O_1: bitstring <- cst_bitstring;
+ {24}  find [unique] u_1 = ri_1 <= N_kdf suchthat defined(x1[ri_1], x2[ri_1], x_O_1[ri_1], r_2[ri_1]) && (x1 = x1[ri_1]) && (x2 = x2[ri_1]) then
+         return(r_2[u_1])
+       else
+         r_2 <-R kdfkey;
+         return(r_2)
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = c_1 then
+         yield
+       else
+         return(ml_decap(c, ml_skgen(seed_1)))
+     ) | (
+       OChal(ss1: bitstring) :=
+       x_O_3: bitstring <- cst_bitstring;
+ {69}  find [unique] 
+       else
+         r_3 <-R kdfkey;
+         K: kdfkey <- r_3
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Find at 69 removed (else branch kept if any)
+    - Replaced defined condition x1[ri_1], x2[ri_1], x_O_1[ri_1], r_2[ri_1] with r_2[ri_1], x2[ri_1], x1[ri_1] in find at 24
+    - Remove random number generation at 7
+yields
+
+Game 13 is
+     Ostart() :=
+     seed_1 <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed_1);
+     r_1 <-R ml_encapseed;
+     v_4: ml_output <- ml_encap_r(pk, r_1);
+     c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+     return(pk, c_1);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       x_O_1: bitstring <- cst_bitstring;
+       find [unique] u_1 = ri_1 <= N_kdf suchthat defined(r_2[ri_1], x2[ri_1], x1[ri_1]) && (x1 = x1[ri_1]) && (x2 = x2[ri_1]) then
+         return(r_2[u_1])
+       else
+         r_2 <-R kdfkey;
+         return(r_2)
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = c_1 then
+         yield
+       else
+         return(ml_decap(c, ml_skgen(seed_1)))
+     ) | (
+       OChal(ss1: bitstring) :=
+       x_O_3: bitstring <- cst_bitstring;
+       r_3 <-R kdfkey;
+       K: kdfkey <- r_3
+     ))
+
+
+Applying move all binders
+  - Move assignment to x_O_1
+yields
+
+Game 14 is
+     Ostart() :=
+     seed_1 <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed_1);
+     r_1 <-R ml_encapseed;
+     v_4: ml_output <- ml_encap_r(pk, r_1);
+     c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+     return(pk, c_1);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       find [unique] u_1 = ri_1 <= N_kdf suchthat defined(r_2[ri_1], x2[ri_1], x1[ri_1]) && (x1 = x1[ri_1]) && (x2 = x2[ri_1]) then
+         return(r_2[u_1])
+       else
+         r_2 <-R kdfkey;
+         return(r_2)
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = c_1 then
+         yield
+       else
+         return(ml_decap(c, ml_skgen(seed_1)))
+     ) | (
+       OChal(ss1: bitstring) :=
+       x_O_3: bitstring <- cst_bitstring;
+       r_3 <-R kdfkey;
+       K: kdfkey <- r_3
+     ))
+
+
+Applying SA rename new without array accesses and remove assignments of findcond
+  - Remove assignments on x_O_3 (definition removed, all usages removed)
+yields
+
+Game 15 is
+     Ostart() :=
+     seed_1 <-R ml_keyseed;
+     pk: ml_pkey <- ml_pkgen(seed_1);
+     r_1 <-R ml_encapseed;
+     v_4: ml_output <- ml_encap_r(pk, r_1);
+     c_1: ml_ciphertext <- 2-proj-ml_pair(v_4);
+     return(pk, c_1);
+     ((
+       foreach iH <= N_kdf do
+       OH(x1: bitstring, x2: ml_secret) :=
+       find [unique] u_1 = ri_1 <= N_kdf suchthat defined(r_2[ri_1], x2[ri_1], x1[ri_1]) && (x1 = x1[ri_1]) && (x2 = x2[ri_1]) then
+         return(r_2[u_1])
+       else
+         r_2 <-R kdfkey;
+         return(r_2)
+     ) | (
+       foreach id <= N_dec do
+       ODecap(c: ml_ciphertext) :=
+       if c = c_1 then
+         yield
+       else
+         return(ml_decap(c, ml_skgen(seed_1)))
+     ) | (
+       OChal(ss1: bitstring) :=
+       r_3 <-R kdfkey;
+       K: kdfkey <- r_3
+     ))
+
+
+Proved secrecy of K in game 15
+Adv[Game 1: secrecy of K] <= 2 * N_kdf / |ml_secret| + 2 * P_ml_indcca2(time_1, 1, 1, N_dec) + Adv[Game 15: secrecy of K]
+Adv[Game 15: secrecy of K] <= 0
+RESULT Proved secrecy of K up to probability 2 * N_kdf / |ml_secret| + 2 * P_ml_indcca2(time_1, 1, 1, N_dec)
+RESULT time_1 = time + time(context for game 2) = time(2-proj-ml_pair) + time(1-proj-ml_pair) + N_kdf * time(kdf, maxlength(game 2: x1)) + time(kdf, maxlength(game 2: ss1)) + time
+All queries proved.

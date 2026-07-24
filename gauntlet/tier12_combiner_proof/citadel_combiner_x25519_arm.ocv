@@ -1,0 +1,111 @@
+(* Citadel hybrid combiner — packet 017, Option A (verified combiner-half).
+   X25519 ARM of IND-CCA2 robustness, mirror of the verified ML-KEM arm:
+
+     IF the X25519 component (used as DHKEM: static recipient key, ephemeral
+     sender) is IND-CCA2, THEN the KDF-derived key K is secret from the adversary
+     EVEN IF ML-KEM-768 is fully broken (the adversary chooses the ML-KEM shared
+     secret ss_mlkem).
+
+   This is the SAME combiner-secrecy reduction proved for the ML-KEM arm, with the
+   surviving component swapped to X25519. It rests on the named premise
+   `dhkem_indcca2_assumption` (X25519-as-DHKEM is IND-CCA2). That premise is not
+   re-derived here; it is the standard result machine-checked under Gap-DH + ROM
+   in CryptoVerif's shipped proof examples/hpke/dhkem.base.indcca2-lr.m4.ocv
+   ("All queries proved"). Grounding this premise directly in Citadel's own model
+   from raw Gap-DH is Option B (packet 018, citadel_combiner_x25519_gdh_attempt.ocv).
+
+   Epistemic status is exactly that of the ML-KEM arm: the ML-KEM arm assumes
+   ML-KEM-768 IND-CCA2 (FIPS 203 + literature); this arm assumes X25519-DHKEM
+   IND-CCA2 (published GDH+ROM proof). The combiner robustness reduction itself is
+   what is machine-checked here, and it is generic in the surviving KEM. *)
+
+type dh_keyseed    [fixed, large].
+type dh_pkey       [bounded].
+type dh_skey       [bounded].
+type dh_encapseed  [bounded].
+type dh_secret     [fixed, large].
+type dh_ciphertext [bounded].
+type dh_output     [bounded].
+
+proba P_dh_indcca2.
+proba P_dh_keycoll.
+proba P_dh_ctcoll.
+
+expand KEM_all_args(
+  dh_keyseed, dh_pkey, dh_skey, dh_encapseed, dh_secret,
+  dh_ciphertext, dh_output,
+  dh_pkgen, dh_skgen, dh_encap, dh_encap_r, dh_pair, dh_decap,
+  dh_injbot, P_dh_keycoll, P_dh_ctcoll).
+
+(* X25519-as-DHKEM IND-CCA2 premise (standard KEM CCA2 form; see file header for
+   its provenance under Gap-DH + ROM). *)
+param N_keys, N_enc, N_dec.
+table DH_challenge(N_keys, dh_ciphertext, dh_secret).
+
+equiv(dhkem_indcca2_assumption)
+  foreach i <= N_keys do seed <-R dh_keyseed; (
+    PublicKey() := return(dh_pkgen(seed))
+  | foreach id <= N_dec do
+      Decap(c: dh_ciphertext) := return(dh_decap(c, dh_skgen(seed))) )
+  | foreach ie <= N_enc do
+      Encaps(pk: dh_pkey) := r <-R dh_encapseed; return(dh_encap_r(pk, r)) [all]
+  <=(P_dh_indcca2(time, N_keys, #Encaps, #Decap))=>
+  foreach i <= N_keys do seed <-R dh_keyseed; (
+    PublicKey() := return(dh_pkgen(seed))
+  | foreach id <= N_dec do
+      Decap(c: dh_ciphertext) :=
+        get DH_challenge(=i, =c, s) in return(dh_injbot(s))
+        else return(dh_decap(c, dh_skgen(seed))) )
+  | foreach ie <= N_enc do
+      Encaps(pk: dh_pkey) :=
+        find i2 <= N_keys suchthat defined(seed[i2]) && pk = dh_pkgen(seed[i2]) then (
+          r <-R dh_encapseed;
+          let dh_pair(junk, c) = dh_encap_r(pk, r) in
+          s <-R dh_secret;
+          insert DH_challenge(i2, c, s);
+          return(dh_pair(s, c)) )
+        else ( r <-R dh_encapseed; return(dh_encap_r(pk, r)) ).
+
+(* KDF as a random oracle: input is (ss_mlkem || ss_x25519 || H(kem_ct)), abstracted
+   as the pair of the (adversary-chosen, broken-ML-KEM) secret and the surviving
+   X25519 secret. Surviving secret is the second argument, matching the ML-KEM arm's
+   proven structure. *)
+type hashkey [fixed].
+type kdfkey  [fixed, large].
+expand ROM_hash_2(hashkey, bitstring, dh_secret, kdfkey, kdf, kdf_oracle, N_kdf).
+
+(* The derived key we want secret. *)
+query secret K.
+
+(* Guided proof: identical shape to the verified ML-KEM arm. *)
+proof {
+  crypto dhkem_indcca2_assumption;
+  crypto rom(kdf);
+  simplify;
+  success
+}
+
+process
+  Ostart() :=
+    hk <-R hashkey;
+    seed <-R dh_keyseed;
+    let pk = dh_pkgen(seed) in
+    (* Honest challenge encapsulation fixed at setup; ct depends only on pk and
+       fresh randomness, not on the adversary's ML-KEM choice. *)
+    r <-R dh_encapseed;
+    let dh_pair(ss_x25519: dh_secret, ct: dh_ciphertext) = dh_encap_r(pk, r) in
+    return(pk, ct);
+  (
+    (run kdf_oracle(hk))
+  | (* Decapsulation oracle (attacker-accessible; CCA). Challenge ciphertext ct is
+       refused — the CCA game forbids decapsulating the exact challenge. *)
+    (foreach id <= N_dec do
+      ODecap(c: dh_ciphertext) :=
+        if c = ct then yield else
+        return(dh_decap(c, dh_skgen(seed))))
+  | (* One challenge: ML-KEM broken => adversary supplies ss_mlkem; K derived from
+       (ss_mlkem, ss_x25519). Adversary gets ct (published above), never K. *)
+    (OChal(ss_mlkem: bitstring) :=
+      let K: kdfkey = kdf(hk, ss_mlkem, ss_x25519) in
+      yield)
+  )

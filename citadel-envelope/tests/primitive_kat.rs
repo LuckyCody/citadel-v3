@@ -181,7 +181,7 @@ fn aes256gcm_nist_empty_plaintext() {
     let nonce_bytes = [0u8; 12];
 
     let cipher = Aes256Gcm::new_from_slice(&key).unwrap();
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = &Nonce::try_from(&nonce_bytes[..]).unwrap();
     let ct = cipher
         .encrypt(nonce, Payload { msg: &[], aad: &[] })
         .unwrap();
@@ -213,7 +213,7 @@ fn aes256gcm_nist_nonempty_plaintext() {
     );
 
     let cipher = Aes256Gcm::new_from_slice(&key).unwrap();
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = &Nonce::try_from(&nonce_bytes[..]).unwrap();
     let ct = cipher
         .encrypt(
             nonce,
@@ -260,7 +260,7 @@ fn aes256gcm_nist_with_aad() {
     let expected_tag = from_hex("76fc6ece0f4e1768cddf8853bb2d551b");
 
     let cipher = Aes256Gcm::new_from_slice(&key).unwrap();
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = &Nonce::try_from(&nonce_bytes[..]).unwrap();
     let ct = cipher
         .encrypt(
             nonce,
@@ -284,7 +284,7 @@ fn aes256gcm_nist_with_aad() {
 fn aes256gcm_wrong_aad_fails() {
     // Any change to AAD must cause authentication failure
     let key = [0x42u8; 32];
-    let nonce = Nonce::from_slice(&[0x11u8; 12]);
+    let nonce = &Nonce::try_from(&[0x11u8; 12][..]).unwrap();
     let cipher = Aes256Gcm::new_from_slice(&key).unwrap();
 
     let ct = cipher
@@ -466,7 +466,7 @@ fn composition_kdf_plus_aead_pinned() {
 
     // Step 3: AES-256-GCM
     let cipher = Aes256Gcm::new_from_slice(&aes_key).unwrap();
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = &Nonce::try_from(&nonce_bytes[..]).unwrap();
     let ct = cipher
         .encrypt(
             nonce,

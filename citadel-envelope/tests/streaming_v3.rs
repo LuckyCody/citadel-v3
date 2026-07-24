@@ -10,8 +10,9 @@
 
 use citadel_envelope::{
     stream_v3::{
-        StreamV3Decryptor, StreamV3Encryptor, STREAM_V3_FLAGS, STREAM_V3_HEADER_BYTES,
-        STREAM_V3_MAGIC, STREAM_V3_SUITE_AEAD, STREAM_V3_SUITE_KEM, STREAM_V3_VERSION,
+        decrypt_stream_v3, encrypt_stream_v3, EncryptedStreamV3, StreamV3Decryptor,
+        StreamV3Encryptor, STREAM_V3_FLAGS, STREAM_V3_HEADER_BYTES, STREAM_V3_MAGIC,
+        STREAM_V3_SUITE_AEAD, STREAM_V3_SUITE_KEM, STREAM_V3_VERSION,
     },
     Aad, Citadel, Context, PublicKey, SecretKey,
 };
@@ -571,4 +572,113 @@ fn v3_deleted_middle_chunk_rejected() {
     );
 
     drop(chunk2); // suppress unused warning
+}
+
+// ---------------------------------------------------------------------------
+// High-level truncation-safe API (encrypt_stream_v3 / decrypt_stream_v3)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn hl_stream_roundtrip() {
+    let (pk, sk) = setup();
+    let parts: [&[u8]; 3] = [b"alpha", b"bravo", b"charlie-final"];
+    let EncryptedStreamV3 {
+        header,
+        frames,
+        final_tag,
+    } = encrypt_stream_v3(&pk, &parts, &aad(), &ctx()).expect("encrypt");
+    let frame_refs: Vec<&[u8]> = frames.iter().map(|f| f.as_slice()).collect();
+    let pt =
+        decrypt_stream_v3(&sk, &header, &frame_refs, &final_tag, &aad(), &ctx()).expect("decrypt");
+    assert_eq!(pt, b"alphabravocharlie-final");
+}
+
+#[test]
+fn hl_stream_truncation_rejected() {
+    // The whole point: a dropped tail (missing final chunk) MUST be rejected by the
+    // high-level API, with no separate finalize call required from the caller.
+    let (pk, sk) = setup();
+    let parts: [&[u8]; 3] = [b"one", b"two", b"three-final"];
+    let EncryptedStreamV3 {
+        header,
+        frames,
+        final_tag,
+    } = encrypt_stream_v3(&pk, &parts, &aad(), &ctx()).expect("encrypt");
+
+    // Attacker delivers only the first two frames (drops the final chunk).
+    let truncated: Vec<&[u8]> = frames[..2].iter().map(|f| f.as_slice()).collect();
+    let r = decrypt_stream_v3(&sk, &header, &truncated, &final_tag, &aad(), &ctx());
+    assert!(
+        r.is_err(),
+        "high-level decrypt must reject a truncated stream (missing final chunk)"
+    );
+}
+
+#[test]
+fn hl_stream_tampered_final_tag_rejected() {
+    let (pk, sk) = setup();
+    let parts: [&[u8]; 2] = [b"data", b"more-final"];
+    let EncryptedStreamV3 {
+        header,
+        frames,
+        mut final_tag,
+    } = encrypt_stream_v3(&pk, &parts, &aad(), &ctx()).expect("encrypt");
+    final_tag[0] ^= 0xFF;
+    let frame_refs: Vec<&[u8]> = frames.iter().map(|f| f.as_slice()).collect();
+    let r = decrypt_stream_v3(&sk, &header, &frame_refs, &final_tag, &aad(), &ctx());
+    assert!(r.is_err(), "tampered final tag must be rejected");
+}
+
+#[test]
+fn hl_stream_extra_chunk_after_final_rejected() {
+    // Append an extra (valid-looking) frame after the final chunk: the last supplied
+    // frame is not the encoder's final, so the API must reject.
+    let (pk, sk) = setup();
+    let parts: [&[u8]; 2] = [b"x", b"y-final"];
+    let EncryptedStreamV3 {
+        header,
+        frames,
+        final_tag,
+    } = encrypt_stream_v3(&pk, &parts, &aad(), &ctx()).expect("encrypt");
+    // Duplicate the final frame so a non-final/na frame trails the sequence.
+    let mut refs: Vec<&[u8]> = frames.iter().map(|f| f.as_slice()).collect();
+    refs.push(frames[1].as_slice()); // extra frame after final
+    let r = decrypt_stream_v3(&sk, &header, &refs, &final_tag, &aad(), &ctx());
+    assert!(r.is_err(), "a chunk after the final one must be rejected");
+}
+
+// Part B: the consuming finish() is the safe terminal for the low-level API; a stream
+// missing its final chunk must be rejected by finish() (truncation detection).
+#[test]
+fn hl_finish_rejects_truncated_low_level() {
+    let (pk, sk) = setup();
+    let parts: [&[u8]; 3] = [b"a", b"b", b"c-final"];
+    let EncryptedStreamV3 {
+        header,
+        frames,
+        final_tag,
+    } = encrypt_stream_v3(&pk, &parts, &aad(), &ctx()).unwrap();
+    let (mut dec, _) = StreamV3Decryptor::from_header(&sk, &header, &aad(), &ctx()).unwrap();
+    // Feed only the first two chunks (final chunk dropped), then finalize.
+    dec.decrypt_chunk(frames[0].as_slice(), &aad()).unwrap();
+    dec.decrypt_chunk(frames[1].as_slice(), &aad()).unwrap();
+    assert!(
+        dec.finish(&final_tag).is_err(),
+        "finish() must reject a stream whose final chunk was never received"
+    );
+}
+
+#[test]
+fn hl_stream_single_chunk_roundtrip() {
+    let (pk, sk) = setup();
+    let parts: [&[u8]; 1] = [b"only-chunk"];
+    let EncryptedStreamV3 {
+        header,
+        frames,
+        final_tag,
+    } = encrypt_stream_v3(&pk, &parts, &aad(), &ctx()).expect("encrypt");
+    let frame_refs: Vec<&[u8]> = frames.iter().map(|f| f.as_slice()).collect();
+    let pt =
+        decrypt_stream_v3(&sk, &header, &frame_refs, &final_tag, &aad(), &ctx()).expect("decrypt");
+    assert_eq!(pt, b"only-chunk");
 }

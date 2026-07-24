@@ -9,6 +9,15 @@
 //! - Output buffers are allocated by citadel and returned via out-pointers.
 //! - The CALLER must free every such buffer with citadel_free().
 //! - Passing NULL to any function returns CITADEL_ERR_NULL.
+//! - When all required output pointers are non-null, they are zeroed on entry, so a
+//!   non-OK return leaves them null/0 EXCEPT for a produced, registered partial
+//!   output (e.g. keygen writes the public key, then an unforeseen panic yields
+//!   CITADEL_ERR_PANIC): the caller must then treat the result as invalid but MUST
+//!   free any non-null output pointer with citadel_free() to avoid leaking an
+//!   (unzeroized) buffer.
+//! - On CITADEL_ERR_NULL (a required output pointer was null), output parameters are
+//!   NOT modified and NOT ownership-transferred: the caller retains exactly what it
+//!   passed and must not infer ownership of any pre-existing non-null value.
 //!
 //! Error codes:
 //!   0 = CITADEL_OK
@@ -17,6 +26,15 @@
 //!   3 = CITADEL_ERR_OPEN   (decryption/authentication failed)
 //!   4 = CITADEL_ERR_KEY    (invalid key bytes)
 //!   5 = CITADEL_ERR_ALLOC  (memory allocation failed)
+//!   6 = CITADEL_ERR_PANIC  (internal panic caught at the FFI boundary)
+//!
+//! Panic-boundary policy: the fallible, stateful operations (keygen/seal/open/free)
+//! run inside a guard that catches any unforeseen panic and returns
+//! CITADEL_ERR_PANIC instead of unwinding across the C ABI (which would abort the
+//! host under panic="unwind"). The trivial accessors citadel_public_key_bytes,
+//! citadel_secret_key_bytes, and citadel_error_string are NOT wrapped: they return a
+//! compile-time constant or select a static string via a total match and have no
+//! panic path by construction, so a guard would only add a worse degraded return.
 
 use std::alloc::{alloc, dealloc, Layout};
 use std::collections::HashMap;
@@ -24,6 +42,7 @@ use std::slice;
 use std::sync::{Mutex, OnceLock};
 
 use citadel_envelope::{Aad, Citadel, Context, PublicKey, SecretKey};
+use zeroize::Zeroizing;
 
 #[cfg(test)]
 mod allocation_probe {
@@ -66,10 +85,39 @@ pub const CITADEL_ERR_SEAL: i32 = 2;
 pub const CITADEL_ERR_OPEN: i32 = 3;
 pub const CITADEL_ERR_KEY: i32 = 4;
 pub const CITADEL_ERR_ALLOC: i32 = 5;
+/// A panic was caught at the FFI boundary (defense-in-depth; the bodies are
+/// panic-safe, so this should never occur in practice).
+pub const CITADEL_ERR_PANIC: i32 = 6;
+
+/// Run an FFI body, converting any panic into `CITADEL_ERR_PANIC` instead of
+/// unwinding across the `extern "C"` boundary — which, under `panic = "unwind"`,
+/// would abort the host process. Defense-in-depth: the bodies are already
+/// panic-safe; this ensures an unforeseen panic degrades to an error code.
+fn ffi_guard(body: impl FnOnce() -> i32) -> i32 {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)).unwrap_or(CITADEL_ERR_PANIC)
+}
+
+/// Void-returning variant of [`ffi_guard`] for `citadel_free`.
+fn ffi_guard_void(body: impl FnOnce()) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body));
+}
 
 fn allocations() -> &'static Mutex<HashMap<usize, usize>> {
     static ALLOCATIONS: OnceLock<Mutex<HashMap<usize, usize>>> = OnceLock::new();
     ALLOCATIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Lock the allocation registry, recovering from mutex poisoning (025-R M2).
+///
+/// The registry only performs `insert`/`remove` of `(ptr, size)` with no
+/// partial-mutation window, so a panic caught at the FFI boundary while the lock was
+/// held does NOT leave the map inconsistent. Recovering via `into_inner()` prevents a
+/// caught panic from permanently poisoning the mutex and bricking every subsequent
+/// allocation and free (which would leak — and leave unzeroized — live buffers).
+fn lock_allocations() -> std::sync::MutexGuard<'static, HashMap<usize, usize>> {
+    allocations()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn alloc_buf(size: usize) -> *mut u8 {
@@ -85,16 +133,8 @@ fn alloc_buf(size: usize) -> *mut u8 {
         return ptr;
     }
 
-    match allocations().lock() {
-        Ok(mut owned) => {
-            owned.insert(ptr as usize, size);
-            ptr
-        }
-        Err(_) => {
-            unsafe { dealloc(ptr, layout) };
-            std::ptr::null_mut()
-        }
-    }
+    lock_allocations().insert(ptr as usize, size);
+    ptr
 }
 
 fn write_output(data: &[u8], out_ptr: *mut *mut u8, out_len: *mut usize) -> i32 {
@@ -137,16 +177,40 @@ pub unsafe extern "C" fn citadel_keygen(
     sk_out: *mut *mut u8,
     sk_len: *mut usize,
 ) -> i32 {
+    ffi_guard(|| unsafe { citadel_keygen_impl(pk_out, pk_len, sk_out, sk_len) })
+}
+
+unsafe fn citadel_keygen_impl(
+    pk_out: *mut *mut u8,
+    pk_len: *mut usize,
+    sk_out: *mut *mut u8,
+    sk_len: *mut usize,
+) -> i32 {
     if pk_out.is_null() || pk_len.is_null() || sk_out.is_null() || sk_len.is_null() {
         return CITADEL_ERR_NULL;
     }
+    // Zero outputs up front so any error/partial return leaves predictable values
+    // (null/0 unless that specific buffer was produced). See the module memory contract.
+    *pk_out = std::ptr::null_mut();
+    *pk_len = 0;
+    *sk_out = std::ptr::null_mut();
+    *sk_len = 0;
     let engine = Citadel::new();
     let (pk, sk) = engine.generate_keypair();
     let rc = write_output(&pk.to_bytes(), pk_out, pk_len);
     if rc != CITADEL_OK {
         return rc;
     }
-    write_output(&sk.to_bytes(), sk_out, sk_len)
+    // `SecretKey::to_bytes()` returns a bare [u8; N] holding the full serialized
+    // hybrid secret key (X25519 static secret || ML-KEM decapsulation key). Wrap it
+    // in `Zeroizing` so the transient copy is wiped on drop — crucially, drop runs
+    // during unwind too, so an unforeseen panic inside `write_output` (caught by
+    // `ffi_guard`) still wipes it. A manual post-copy `zeroize()` would be skipped by
+    // that unwind (028-R P1). The caller's C buffer is wiped by citadel_free before
+    // dealloc; `sk` zeroizes on drop via its component types. (Moved-from stack slots
+    // from to_bytes() remain a general Rust-zeroize limitation, out of scope.)
+    let sk_bytes = Zeroizing::new(sk.to_bytes());
+    write_output(&*sk_bytes, sk_out, sk_len)
 }
 
 /// Encrypt plaintext to a recipient public key.
@@ -169,9 +233,31 @@ pub unsafe extern "C" fn citadel_seal(
     ct_out: *mut *mut u8,
     ct_len_out: *mut usize,
 ) -> i32 {
+    ffi_guard(|| unsafe {
+        citadel_seal_impl(
+            pk_ptr, pk_len, pt_ptr, pt_len, aad_ptr, aad_len, ctx_ptr, ctx_len, ct_out, ct_len_out,
+        )
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe fn citadel_seal_impl(
+    pk_ptr: *const u8,
+    pk_len: usize,
+    pt_ptr: *const u8,
+    pt_len: usize,
+    aad_ptr: *const u8,
+    aad_len: usize,
+    ctx_ptr: *const u8,
+    ctx_len: usize,
+    ct_out: *mut *mut u8,
+    ct_len_out: *mut usize,
+) -> i32 {
     if pk_ptr.is_null() || pt_ptr.is_null() || ct_out.is_null() || ct_len_out.is_null() {
         return CITADEL_ERR_NULL;
     }
+    *ct_out = std::ptr::null_mut();
+    *ct_len_out = 0;
     let pk_bytes = slice::from_raw_parts(pk_ptr, pk_len);
     let pk = match PublicKey::from_bytes(pk_bytes) {
         Ok(k) => k,
@@ -221,9 +307,31 @@ pub unsafe extern "C" fn citadel_open(
     pt_out: *mut *mut u8,
     pt_len_out: *mut usize,
 ) -> i32 {
+    ffi_guard(|| unsafe {
+        citadel_open_impl(
+            sk_ptr, sk_len, ct_ptr, ct_len, aad_ptr, aad_len, ctx_ptr, ctx_len, pt_out, pt_len_out,
+        )
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe fn citadel_open_impl(
+    sk_ptr: *const u8,
+    sk_len: usize,
+    ct_ptr: *const u8,
+    ct_len: usize,
+    aad_ptr: *const u8,
+    aad_len: usize,
+    ctx_ptr: *const u8,
+    ctx_len: usize,
+    pt_out: *mut *mut u8,
+    pt_len_out: *mut usize,
+) -> i32 {
     if sk_ptr.is_null() || ct_ptr.is_null() || pt_out.is_null() || pt_len_out.is_null() {
         return CITADEL_ERR_NULL;
     }
+    *pt_out = std::ptr::null_mut();
+    *pt_len_out = 0;
     let sk_bytes = slice::from_raw_parts(sk_ptr, sk_len);
     let sk = match SecretKey::from_bytes(sk_bytes) {
         Ok(k) => k,
@@ -269,14 +377,15 @@ pub unsafe extern "C" fn citadel_open(
 /// do not linger in heap memory after the caller is done with them.
 #[no_mangle]
 pub unsafe extern "C" fn citadel_free(ptr: *mut u8, _len: usize) {
+    ffi_guard_void(|| unsafe { citadel_free_impl(ptr, _len) })
+}
+
+unsafe fn citadel_free_impl(ptr: *mut u8, _len: usize) {
     if ptr.is_null() {
         return;
     }
 
-    let actual_len = match allocations().lock() {
-        Ok(mut owned) => owned.remove(&(ptr as usize)),
-        Err(_) => None,
-    };
+    let actual_len = lock_allocations().remove(&(ptr as usize));
     let Some(actual_len) = actual_len else {
         return;
     };
@@ -301,6 +410,7 @@ pub extern "C" fn citadel_error_string(code: i32) -> *const u8 {
         CITADEL_ERR_OPEN => b"decryption failed\0".as_ptr(),
         CITADEL_ERR_KEY => b"invalid key\0".as_ptr(),
         CITADEL_ERR_ALLOC => b"memory allocation failed\0".as_ptr(),
+        CITADEL_ERR_PANIC => b"internal panic caught at FFI boundary\0".as_ptr(),
         _ => b"unknown error\0".as_ptr(),
     }
 }
@@ -723,4 +833,77 @@ fn ffi_concurrent_keygen_is_safe() {
         pks.len(),
         "concurrent keygen must produce distinct keypairs"
     );
+}
+
+// P160: the FFI boundary guard (used by every extern "C" fn) must convert an
+// unforeseen panic into CITADEL_ERR_PANIC rather than unwinding across the C ABI
+// (which would abort the host process under panic = "unwind").
+#[test]
+fn ffi_guard_converts_panic_to_error_code() {
+    let rc = ffi_guard(|| panic!("induced FFI-body panic"));
+    assert_eq!(
+        rc, CITADEL_ERR_PANIC,
+        "ffi_guard must catch a panic and return CITADEL_ERR_PANIC"
+    );
+    // A non-panicking body passes its return value through unchanged.
+    assert_eq!(ffi_guard(|| CITADEL_OK), CITADEL_OK);
+    assert_eq!(ffi_guard(|| CITADEL_ERR_SEAL), CITADEL_ERR_SEAL);
+    // The void variant must swallow a panic without unwinding out.
+    ffi_guard_void(|| panic!("induced free-body panic"));
+    // citadel_error_string must describe the new code.
+    let s = citadel_error_string(CITADEL_ERR_PANIC);
+    assert!(!s.is_null());
+}
+
+// P161 (025-R M2): a caught panic while the allocation-registry lock is held must
+// NOT permanently brick the allocator. The registry lock recovers from poisoning, so
+// keygen/free keep working (and buffers remain freeable/zeroizable) afterwards.
+#[test]
+fn allocation_registry_recovers_from_poison() {
+    // Poison the global registry mutex: panic while holding the lock.
+    let _ = std::panic::catch_unwind(|| {
+        let _guard = allocations().lock().expect("first lock is unpoisoned");
+        panic!("poison the allocation registry");
+    });
+
+    // A normal keygen must still succeed (its output registers via the recovered
+    // lock) and its buffers must still be freeable (removed via the recovered lock).
+    let mut pk_ptr: *mut u8 = std::ptr::null_mut();
+    let mut pk_len: usize = 0;
+    let mut sk_ptr: *mut u8 = std::ptr::null_mut();
+    let mut sk_len: usize = 0;
+    let rc = unsafe { citadel_keygen(&mut pk_ptr, &mut pk_len, &mut sk_ptr, &mut sk_len) };
+    assert_eq!(rc, CITADEL_OK, "keygen must succeed after registry poison");
+    assert!(!pk_ptr.is_null() && !sk_ptr.is_null());
+    unsafe {
+        citadel_free(pk_ptr, pk_len);
+        citadel_free(sk_ptr, sk_len);
+    }
+}
+
+// 026-R N5: on an error return, output params must be zeroed (not left at the
+// caller's prior value), so the "free any non-null output on error" contract holds.
+#[test]
+fn error_return_zeroes_output_params() {
+    let mut ct_ptr: *mut u8 = 0x1 as *mut u8; // non-null sentinel
+    let mut ct_len: usize = 999;
+    let bad_pk = [0u8; 4]; // invalid public key -> CITADEL_ERR_KEY
+    let pt = b"data";
+    let rc = unsafe {
+        citadel_seal(
+            bad_pk.as_ptr(),
+            bad_pk.len(),
+            pt.as_ptr(),
+            pt.len(),
+            std::ptr::null(),
+            0,
+            std::ptr::null(),
+            0,
+            &mut ct_ptr,
+            &mut ct_len,
+        )
+    };
+    assert_ne!(rc, CITADEL_OK, "invalid key must not succeed");
+    assert!(ct_ptr.is_null(), "ct_out must be zeroed to null on error");
+    assert_eq!(ct_len, 0, "ct_len_out must be zeroed to 0 on error");
 }

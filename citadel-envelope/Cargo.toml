@@ -23,8 +23,20 @@ ml-kem = { version = "=0.3.2", default-features = false, features = ["getrandom"
 # X25519 ECDH - classical KEM for hybrid defense-in-depth
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 
-# Symmetric cryptography
-aes-gcm = { version = "0.10", features = ["aes"] }
+# Symmetric cryptography. `zeroize` is enabled down the whole cipher stack so the
+# AES-GCM keyed state is ZeroizeOnDrop (028-R P3 / 029-R / 030-R — CLOSED):
+# - aes 0.9 is ZeroizeOnDrop on all backends → AES round-key schedule wiped on drop.
+# - polyval 0.7.3 has a top-level impl Drop (zeroize_flat_type) → GHASH H retained
+#   state wiped on drop, incl. x86_64. This closed the 030-R forgery-primitive residual
+#   that polyval 0.6.2 (via old aes-gcm 0.10) left open on x86 (ManuallyDrop union, no
+#   Drop). See KEY_LIFECYCLE in kdf.rs.
+# - ghash 0.6 + aes-gcm zeroize wipe the transient GHASH construction copies.
+# The aes-gcm 0.10->0.11 bump pulls the fixed ghash 0.6 -> polyval 0.7.3. KAT/ACVP
+# re-validated bit-identical after the bump.
+aes-gcm = { version = "0.11", features = ["aes", "zeroize"] }
+aes = { version = "0.9", features = ["zeroize"] }
+ghash = { version = "0.6", features = ["zeroize"] }
+polyval = { version = "0.7", features = ["zeroize"] }
 hkdf = "0.12"
 hmac = "0.12"
 sha2 = "0.10"
@@ -48,7 +60,7 @@ aws-lc-rs = { version = "1.17", features = ["unstable"], optional = true }
 hex = "0.4"
 rand = "0.8"
 # Re-listed so benchmarks/examples can import these crates directly
-aes-gcm = { version = "0.10", features = ["aes"] }
+aes-gcm = { version = "0.11", features = ["aes"] }
 sha2 = "0.10"
 # P163: keep Criterion minimal and gated by required-features on bench targets.
 criterion = { version = "0.5", default-features = false }
@@ -70,6 +82,11 @@ kat = ["ml-kem/hazmat"]
 bench = []
 # Explicit opt-in for the AWS-LC comparison path. Never selected by default.
 aws-lc-comparison = ["dep:aws-lc-rs"]
+# Diagnostic/timing helpers (raw component decapsulation for side-channel benches).
+# NOT compiled into default/production builds: these expose unguarded intermediate
+# KEM material (e.g. raw X25519 output without the contributory check) purely for
+# timing isolation. Never enable in production. (020-R hardening.)
+timing-diagnostics = []
 # Compatibility-only V2 streaming API. New integrations must use stream_v3.
 legacy-stream-v2 = []
 # Compatibility-only creation of historical envelope v1 fixtures. Default
@@ -105,6 +122,7 @@ harness = false
 [[bench]]
 name = "timing_sidechannel"
 harness = false
+required-features = ["timing-diagnostics"]
 
 [[bench]]
 name = "mlkem_standalone"

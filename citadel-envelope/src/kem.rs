@@ -178,10 +178,19 @@ impl SecretKey {
 }
 
 // ---------------------------------------------------------------------------
-// Diagnostic helpers (used by timing benches)
+// Diagnostic helpers (used by timing benches ONLY)
+//
+// Feature-gated behind `timing-diagnostics` so they are NOT compiled into
+// default/production builds (020-R hardening). These return raw intermediate KEM
+// material for timing isolation and deliberately SKIP production checks (e.g. the
+// X25519 contributory guard) — never call them outside a benchmark.
 // ---------------------------------------------------------------------------
 
+/// TIMING-DIAGNOSTIC ONLY. Returns the raw X25519 shared secret WITHOUT the
+/// `was_contributory()` guard that production encapsulate/decapsulate enforce.
+/// Not for production use; feature-gated out of default builds.
 #[doc(hidden)]
+#[cfg(feature = "timing-diagnostics")]
 pub fn diagnostic_x25519_decapsulate_only(
     sk: &SecretKey,
     ct: &[u8],
@@ -202,6 +211,7 @@ pub fn diagnostic_x25519_decapsulate_only(
 }
 
 #[doc(hidden)]
+#[cfg(feature = "timing-diagnostics")]
 pub fn diagnostic_mlkem_decapsulate_only(
     sk: &SecretKey,
     ct: &[u8],
@@ -221,6 +231,7 @@ pub fn diagnostic_mlkem_decapsulate_only(
 }
 
 #[doc(hidden)]
+#[cfg(feature = "timing-diagnostics")]
 pub fn diagnostic_mlkem_decapsulate_from_key_bytes(
     sk_bytes: &[u8; KEM_SECRET_KEY_BYTES],
     ct: &[u8; KEM_CIPHERTEXT_BYTES],
@@ -423,3 +434,81 @@ impl KemProvider for HybridX25519MlKem768Provider {
 
 /// Legacy alias — now backed by the hybrid provider.
 pub type MlKem768Provider = HybridX25519MlKem768Provider;
+
+// ---------------------------------------------------------------------------
+// Curve25519 low-order / non-contributory rejection (empirical, real code path)
+//
+// The formal combiner proof abstracts X25519 as a prime-order group and cannot model
+// Curve25519's cofactor / low-order points. These unit tests instead prove the SHIPPED
+// decapsulate path rejects them: feeding any low-order encoded input as the X25519
+// ephemeral yields the all-zero (identity) shared secret, which `was_contributory()`
+// must reject BEFORE the ML-KEM secret is combined — isolating the guard from AEAD.
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod low_order_x25519_tests {
+    use super::*;
+
+    fn hex32(s: &str) -> [u8; 32] {
+        let mut out = [0u8; 32];
+        for (i, byte) in out.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).expect("valid hex");
+        }
+        out
+    }
+
+    /// The standard libsodium ref10 Curve25519 low-order encoded-input blacklist
+    /// (little-endian, top-bit-masked comparison): five canonical u-values — 0, 1, the
+    /// two order-8 points, and p-1 — plus two non-canonical aliases, p (≡0) and p+1
+    /// (≡1). Any of these as the peer key drives the (cofactor-8-clamped) scalar mult
+    /// to the identity → all-zero shared secret. Because X25519 masks the u-coordinate's
+    /// most significant bit (RFC 7748 §5), the high-bit twin of every entry is covered
+    /// too; the direct KEM tests below confirm rejection of all seven.
+    const LOW_ORDER_POINTS: &[&str] = &[
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "0100000000000000000000000000000000000000000000000000000000000000",
+        "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800",
+        "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157",
+        "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+        "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+        "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    ];
+
+    #[test]
+    fn decapsulate_rejects_low_order_x25519_points() {
+        let (pk, sk) = HybridX25519MlKem768Provider::keygen();
+        // A real encapsulation gives a well-formed ML-KEM ct portion and correct length;
+        // we then splice a low-order point into the X25519 ephemeral slot.
+        let (_ss, mut kem_ct) = HybridX25519MlKem768Provider::encapsulate(&pk).unwrap();
+        assert_eq!(kem_ct.len(), KEM_CIPHERTEXT_BYTES);
+
+        // Positive control: the unmodified ciphertext decapsulates.
+        assert!(
+            HybridX25519MlKem768Provider::decapsulate(&sk, &kem_ct).is_ok(),
+            "valid ciphertext must decapsulate"
+        );
+
+        for hexp in LOW_ORDER_POINTS {
+            kem_ct[..X25519_KEY_BYTES].copy_from_slice(&hex32(hexp));
+            assert!(
+                HybridX25519MlKem768Provider::decapsulate(&sk, &kem_ct).is_err(),
+                "decapsulate must reject non-contributory low-order X25519 point {hexp}"
+            );
+        }
+    }
+
+    #[test]
+    fn encapsulate_rejects_low_order_recipient_key() {
+        // A recipient public key that is a low-order point must also be rejected by
+        // encapsulate's contributory check.
+        let (_pk, sk) = HybridX25519MlKem768Provider::keygen();
+        let mlkem_pk = sk.public_key().mlkem_pk();
+        for hexp in LOW_ORDER_POINTS {
+            let x25519_pk = X25519PublicKey::from(hex32(hexp));
+            let bad_pk = PublicKey::from_parts_mlkem(x25519_pk, &mlkem_pk);
+            assert!(
+                HybridX25519MlKem768Provider::encapsulate(&bad_pk).is_err(),
+                "encapsulate must reject low-order recipient X25519 key {hexp}"
+            );
+        }
+    }
+}

@@ -354,9 +354,9 @@ impl Keystore {
         rand_core::OsRng.fill_bytes(&mut nonce_bytes);
 
         let cipher = Aes256Gcm::new((&*aes_key).into());
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce = Nonce::from(nonce_bytes);
         let ct = cipher
-            .encrypt(nonce, sk_bytes)
+            .encrypt(&nonce, sk_bytes)
             .map_err(|_| "AES-256-GCM encrypt failed")?;
 
         Ok(SecretKeyMaterial::Encrypted(format!(
@@ -589,9 +589,10 @@ impl Keystore {
                         .map_err(|e| format!("HKDF expand: {}", e))?;
 
                     let cipher = Aes256Gcm::new((&*aes_key).into());
-                    let nonce = Nonce::from_slice(&nonce_bytes);
+                    let nonce = Nonce::try_from(nonce_bytes.as_slice())
+                        .map_err(|_| "nonce must be 12 bytes".to_string())?;
                     cipher
-                        .decrypt(nonce, ciphertext.as_ref())
+                        .decrypt(&nonce, ciphertext.as_ref())
                         .map(Zeroizing::new)
                         .map_err(|_| {
                             "AES-256-GCM decryption failed — wrong master key or corruption"

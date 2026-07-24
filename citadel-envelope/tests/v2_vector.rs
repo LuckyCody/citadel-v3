@@ -98,7 +98,7 @@ fn deterministic_vector_matches_independent_transcript_reconstruction() {
     let aead = Aes256Gcm::new_from_slice(&key).unwrap();
     let sealed = aead
         .encrypt(
-            Nonce::from_slice(&[0x66; 12]),
+            &Nonce::try_from(&[0x66u8; 12][..]).unwrap(),
             Payload {
                 msg: PLAINTEXT,
                 aad: &bound_aad,
