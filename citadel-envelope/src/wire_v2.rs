@@ -347,3 +347,114 @@ pub fn open<K: KemProvider>(
     }
     Ok(plaintext)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kem::{HybridX25519MlKem768Provider as P, KemProvider};
+
+    #[test]
+    fn decode_accepts_a_pristine_envelope() {
+        let (pk, _sk) = P::keygen();
+        let envelope: Vec<u8> = seal::<P>(&pk, b"a message", b"", b"ctx").expect("seal");
+        let parts = decode(&envelope).expect("decode should accept pristine envelope");
+        assert_eq!(
+            parts.suite.suite_kem, 0xA3,
+            "suite_kem must be 0xA3 for pristine envelope"
+        );
+    }
+
+    #[test]
+    fn decode_rejects_every_unsupported_suite_byte() {
+        let (pk, _sk) = P::keygen();
+        let pristine = seal::<P>(&pk, b"a message", b"", b"ctx").expect("seal");
+        for suite_kem in 0..=u8::MAX {
+            if suite_kem == 0xA3 {
+                continue;
+            }
+            let mut envelope = pristine.clone();
+            envelope[6] = suite_kem;
+            assert!(
+                decode(&envelope).is_err(),
+                "suite byte {suite_kem:#04x} was accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn decode_rejects_allocated_and_reserved_suite_bytes() {
+        let (pk, _sk) = P::keygen();
+        let pristine = seal::<P>(&pk, b"a message", b"", b"ctx").expect("seal");
+        for bad in [0xA4, 0xA5, 0xA6] {
+            let mut envelope = pristine.clone();
+            envelope[6] = bad;
+            assert!(
+                decode(&envelope).is_err(),
+                "allocated/reserved suite byte {bad:#04x} was accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn decode_rejects_kem_ct_len_field_mismatch() {
+        let (pk, _sk) = P::keygen();
+        let pristine = seal::<P>(&pk, b"a message", b"", b"ctx").expect("seal");
+        for bad_len in [1119u16, 1121, 0, 65535] {
+            let mut envelope = pristine.clone();
+            envelope[12..14].copy_from_slice(&bad_len.to_be_bytes());
+            assert!(
+                decode(&envelope).is_err(),
+                "kem_ct_len {bad_len} was accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn decode_rejects_wrong_total_length() {
+        let (pk, _sk) = P::keygen();
+        let pristine = seal::<P>(&pk, b"a message", b"", b"ctx").expect("seal");
+        for len in [HEADER_LEN - 1, HEADER_LEN + 1, HEADER_LEN] {
+            let mut envelope = pristine.clone();
+            envelope.truncate(len);
+            assert!(
+                decode(&envelope).is_err(),
+                "envelope length {len} was accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn decode_rejects_altered_fixed_header_fields() {
+        let (pk, _sk) = P::keygen();
+        let pristine = seal::<P>(&pk, b"a message", b"", b"ctx").expect("seal");
+        let mut envelope = pristine.clone();
+        for i in [0, 4, 5, 7, 8, 9] {
+            envelope[i] ^= 1;
+            assert!(
+                decode(&envelope).is_err(),
+                "fixed header field at index {i} was altered"
+            );
+            envelope[i] ^= 1; // restore
+        }
+        let mut envelope = pristine.clone();
+        envelope[10..12].copy_from_slice(&97u16.to_be_bytes());
+        assert!(
+            decode(&envelope).is_err(),
+            "header length field set to 97 was accepted"
+        );
+    }
+
+    #[test]
+    fn decode_rejects_absurd_declared_plaintext_len() {
+        let (pk, _sk) = P::keygen();
+        let pristine = seal::<P>(&pk, b"a message", b"", b"ctx").expect("seal");
+        for bad_len in [u64::MAX, 0x0000_0000_FFFF_FFFF, 0] {
+            let mut envelope = pristine.clone();
+            envelope[14..22].copy_from_slice(&bad_len.to_be_bytes());
+            assert!(
+                decode(&envelope).is_err(),
+                "plaintext len {bad_len:#x} was accepted"
+            );
+        }
+    }
+}
