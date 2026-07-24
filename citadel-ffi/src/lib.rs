@@ -9,6 +9,11 @@
 //! - Output buffers are allocated by citadel and returned via out-pointers.
 //! - The CALLER must free every such buffer with citadel_free().
 //! - Passing NULL to any function returns CITADEL_ERR_NULL.
+//! - Output parameters are zeroed on entry, so on a plain error return they are
+//!   null/0. A partial success is still possible (e.g. keygen writes the public key,
+//!   then an unforeseen panic yields CITADEL_ERR_PANIC): on ANY non-OK return the
+//!   caller must treat the outputs as invalid, but MUST still free any non-null
+//!   output pointer with citadel_free() to avoid leaking an (unzeroized) buffer.
 //!
 //! Error codes:
 //!   0 = CITADEL_OK
@@ -177,6 +182,12 @@ unsafe fn citadel_keygen_impl(
     if pk_out.is_null() || pk_len.is_null() || sk_out.is_null() || sk_len.is_null() {
         return CITADEL_ERR_NULL;
     }
+    // Zero outputs up front so any error/partial return leaves predictable values
+    // (null/0 unless that specific buffer was produced). See the module memory contract.
+    *pk_out = std::ptr::null_mut();
+    *pk_len = 0;
+    *sk_out = std::ptr::null_mut();
+    *sk_len = 0;
     let engine = Citadel::new();
     let (pk, sk) = engine.generate_keypair();
     let rc = write_output(&pk.to_bytes(), pk_out, pk_len);
@@ -229,6 +240,8 @@ unsafe fn citadel_seal_impl(
     if pk_ptr.is_null() || pt_ptr.is_null() || ct_out.is_null() || ct_len_out.is_null() {
         return CITADEL_ERR_NULL;
     }
+    *ct_out = std::ptr::null_mut();
+    *ct_len_out = 0;
     let pk_bytes = slice::from_raw_parts(pk_ptr, pk_len);
     let pk = match PublicKey::from_bytes(pk_bytes) {
         Ok(k) => k,
@@ -301,6 +314,8 @@ unsafe fn citadel_open_impl(
     if sk_ptr.is_null() || ct_ptr.is_null() || pt_out.is_null() || pt_len_out.is_null() {
         return CITADEL_ERR_NULL;
     }
+    *pt_out = std::ptr::null_mut();
+    *pt_len_out = 0;
     let sk_bytes = slice::from_raw_parts(sk_ptr, sk_len);
     let sk = match SecretKey::from_bytes(sk_bytes) {
         Ok(k) => k,
@@ -848,4 +863,31 @@ fn allocation_registry_recovers_from_poison() {
         citadel_free(pk_ptr, pk_len);
         citadel_free(sk_ptr, sk_len);
     }
+}
+
+// 026-R N5: on an error return, output params must be zeroed (not left at the
+// caller's prior value), so the "free any non-null output on error" contract holds.
+#[test]
+fn error_return_zeroes_output_params() {
+    let mut ct_ptr: *mut u8 = 0x1 as *mut u8; // non-null sentinel
+    let mut ct_len: usize = 999;
+    let bad_pk = [0u8; 4]; // invalid public key -> CITADEL_ERR_KEY
+    let pt = b"data";
+    let rc = unsafe {
+        citadel_seal(
+            bad_pk.as_ptr(),
+            bad_pk.len(),
+            pt.as_ptr(),
+            pt.len(),
+            std::ptr::null(),
+            0,
+            std::ptr::null(),
+            0,
+            &mut ct_ptr,
+            &mut ct_len,
+        )
+    };
+    assert_ne!(rc, CITADEL_OK, "invalid key must not succeed");
+    assert!(ct_ptr.is_null(), "ct_out must be zeroed to null on error");
+    assert_eq!(ct_len, 0, "ct_len_out must be zeroed to 0 on error");
 }
