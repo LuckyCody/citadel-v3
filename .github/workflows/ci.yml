@@ -37,6 +37,16 @@ jobs:
       - name: Test workspace
         run: cargo test --workspace -- --test-threads=1
 
+      # Standing crypto-identity gate: the deterministic KAT/ACVP vectors are
+      # feature-gated (v2_vector needs `kat`) and are otherwise skipped by the
+      # workspace test above. Running them here catches AES-GCM/KDF/transcript
+      # output drift from a dependency bump (e.g. aes-gcm 0.10->0.11). See eem/032.
+      - name: KAT / ACVP fixed vectors (feature-gated)
+        run: >
+          cargo test -p citadel-envelope --features kat
+          --test primitive_kat --test v2_vector --test nist_acvp_kat
+          --test kat --test acvp_libcrux_kat
+
   # ── Volume and stress tests ──────────────────────────────────────────
   stress-tests:
     name: Stress Tests
@@ -212,3 +222,74 @@ jobs:
         run: |
           kill $SERVER_PID 2>/dev/null || true
           rm -rf "$CI_DATA_DIR" 2>/dev/null || true
+
+  # ── Docker image + compose deploy (exercises deploy/docker/, eem/032) ────
+  # The jobs above build+run the citadel-api binary NATIVELY, so they never
+  # exercise the Dockerfile or docker-compose.yml. This job builds the real
+  # image and boots the full stack, turning the eem/030 deploy bugs (stale
+  # workspace COPY list; redis crash-loop under cap_drop: ALL) into standing
+  # gates instead of things an outside consumer discovers.
+  docker-deploy:
+    name: Docker Image & Compose Deploy
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v5
+
+      # Builds through the real Dockerfile (context = repo root via ../..):
+      # fails if the workspace-member COPY list or the rust pin regress.
+      - name: Build image
+        run: docker compose -f deploy/docker/docker-compose.yml build citadel
+
+      - name: Boot the stack
+        run: |
+          export CITADEL_MASTER_KEY=$(openssl rand -hex 32)
+          API_KEY="ci-docker-key"
+          export CITADEL_API_KEY_HASH=$(printf '%s' "$API_KEY" \
+            | openssl dgst -sha256 -mac HMAC -macopt hexkey:"$CITADEL_MASTER_KEY" \
+            | awk '{print $NF}')
+          docker compose -f deploy/docker/docker-compose.yml up -d
+
+      # Assert the citadel CONTAINER itself is up first — a bare /health probe can
+      # false-green off some other listener on 8443 if the container never started
+      # (observed locally against a stale port binding). Gate on the container, then
+      # on the health body it serves.
+      - name: Assert citadel container is running
+        run: |
+          CID=$(docker compose -f deploy/docker/docker-compose.yml ps -q citadel)
+          test -n "$CID"
+          STATE=$(docker inspect -f '{{.State.Status}}' "$CID")
+          RESTARTS=$(docker inspect -f '{{.RestartCount}}' "$CID")
+          echo "citadel state=$STATE restarts=$RESTARTS"
+          test "$STATE" = "running"
+          test "$RESTARTS" -lt 3
+
+      # /health served from the CONTAINER (loopback-published on 8443).
+      - name: Wait for container /health
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:8443/health >/dev/null 2>&1 && break
+            sleep 2
+          done
+          BODY=$(curl -sf http://127.0.0.1:8443/health || true)
+          echo "health: $BODY"
+          echo "$BODY" | grep -q '"status":"ok"'
+
+      # Directly asserts the redis compose fix: under cap_drop: ALL the
+      # unmodified image crash-loops (endless restarts / not running).
+      - name: Assert redis is running (not crash-looping under cap_drop ALL)
+        run: |
+          RID=$(docker compose -f deploy/docker/docker-compose.yml ps -q redis)
+          STATE=$(docker inspect -f '{{.State.Status}}' "$RID")
+          RESTARTS=$(docker inspect -f '{{.RestartCount}}' "$RID")
+          echo "redis state=$STATE restarts=$RESTARTS"
+          test "$STATE" = "running"
+          test "$RESTARTS" -lt 3
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f deploy/docker/docker-compose.yml logs --no-color
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f deploy/docker/docker-compose.yml down -v
