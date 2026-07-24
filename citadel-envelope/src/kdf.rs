@@ -7,13 +7,25 @@
 //! KEY_LIFECYCLE — secret-in-memory handling for the AEAD/KDF stack.
 //!
 //! Closed (drop-based, panic-safe) via enabled `zeroize` features (see Cargo.toml):
-//! - AES round-key schedule: `aes` is `ZeroizeOnDrop`, so the schedule expanded from
-//!   the derived key is wiped when the `Aes256Gcm` cipher drops.
-//! - GHASH keyed state: `polyval` has `impl Drop` that zeroizes, and `aes-gcm`'s own
-//!   `zeroize` wipes the transient GHASH construction key. The retained `H` state is
-//!   therefore wiped on cipher drop.
+//! - AES round-key schedule: `aes` 0.8.4 implements `Drop` + `ZeroizeOnDrop` on ALL
+//!   compiled backends, including the x86_64 `autodetect` wrapper (its `Drop` calls
+//!   `ManuallyDrop::drop` on the inner backend). So the schedule expanded from the
+//!   derived key — the reversible material from which the key could be recovered — is
+//!   wiped when the `Aes256Gcm` cipher drops, on unwind too. Verified 029-R Q2.
 //!
-//! Accepted residual (audited, bounded, no library API to close):
+//! Accepted residuals (audited, bounded, no library API to close):
+//! - GHASH `H` retained state on x86_64/x86: `polyval` 0.6.2's `autodetect` backend
+//!   (selected on x86) stores its active backend in a `ManuallyDrop` union and
+//!   implements NO `Drop`, so the backend's own zeroizing destructor never runs — the
+//!   retained `H`-derived Polyval key material is not wiped on cipher drop for this
+//!   target (029-R Q2/Q5). `aes-gcm`'s and `ghash`'s `zeroize` still wipe the
+//!   transient construction copies; only the retained accumulator key lingers.
+//!   Severity is low BY DESIGN: `H = AES_K(0^128)` is a ONE-WAY function of a
+//!   per-message ephemeral key `K` (fresh HKDF output per envelope, used once). A
+//!   leaked `H` neither reveals `K` (that needs inverting AES) nor helps forge under
+//!   any live key (K is never reused). Closing it needs `polyval/force-soft` (a GHASH
+//!   throughput regression) or a polyval fork; judged not worth it. Wiped correctly
+//!   on aarch64+PMULL and force-soft builds.
 //! - HKDF PRK: `Hkdf::<Sha256>::new` extracts a pseudorandom key from the shared
 //!   secret and holds it inside the `hk` value below. The `hkdf` 0.12 crate has no
 //!   `zeroize` feature or zeroize-on-drop, so that PRK lingers in this stack frame
