@@ -9,11 +9,15 @@
 //! - Output buffers are allocated by citadel and returned via out-pointers.
 //! - The CALLER must free every such buffer with citadel_free().
 //! - Passing NULL to any function returns CITADEL_ERR_NULL.
-//! - Output parameters are zeroed on entry, so on a plain error return they are
-//!   null/0. A partial success is still possible (e.g. keygen writes the public key,
-//!   then an unforeseen panic yields CITADEL_ERR_PANIC): on ANY non-OK return the
-//!   caller must treat the outputs as invalid, but MUST still free any non-null
-//!   output pointer with citadel_free() to avoid leaking an (unzeroized) buffer.
+//! - When all required output pointers are non-null, they are zeroed on entry, so a
+//!   non-OK return leaves them null/0 EXCEPT for a produced, registered partial
+//!   output (e.g. keygen writes the public key, then an unforeseen panic yields
+//!   CITADEL_ERR_PANIC): the caller must then treat the result as invalid but MUST
+//!   free any non-null output pointer with citadel_free() to avoid leaking an
+//!   (unzeroized) buffer.
+//! - On CITADEL_ERR_NULL (a required output pointer was null), output parameters are
+//!   NOT modified and NOT ownership-transferred: the caller retains exactly what it
+//!   passed and must not infer ownership of any pre-existing non-null value.
 //!
 //! Error codes:
 //!   0 = CITADEL_OK
