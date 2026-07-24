@@ -10,9 +10,10 @@ use sha3::Sha3_256;
 use subtle::ConstantTimeEq;
 use zeroize::Zeroizing;
 
+use crate::aead;
 use crate::error::{DecryptionError, EncodingError};
+use crate::kem::KemProvider;
 use crate::wire::KEM_CIPHERTEXT_BYTES;
-use crate::{aead, kem::PublicKey, kem::SecretKey};
 
 pub const MAGIC: &[u8; 4] = b"CTD2";
 pub const VERSION: u8 = 2;
@@ -52,8 +53,13 @@ fn push_u32(out: &mut Vec<u8>, value: usize) -> Result<(), EncodingError> {
     Ok(())
 }
 
-pub fn public_key_hash(pk: &PublicKey) -> [u8; 32] {
-    let digest = Sha3_256::digest(pk.to_bytes());
+/// SHA3-256 over the suite's canonical public-key serialization.
+///
+/// The hash construction belongs to the wire spec, so it stays here; only the
+/// serialization is delegated to the suite. For `0xA3` this is byte-for-byte what it
+/// always was — `K::public_key_bytes` returns the same 1216 bytes `to_bytes()` did.
+pub fn public_key_hash<K: KemProvider>(pk: &K::PublicKey) -> [u8; 32] {
+    let digest = Sha3_256::digest(K::public_key_bytes(pk));
     digest.into()
 }
 
@@ -203,8 +209,8 @@ pub fn decode(data: &[u8]) -> Result<Parts<'_>, DecryptionError> {
     })
 }
 
-pub fn seal<K: crate::kem::KemProvider>(
-    pk: &PublicKey,
+pub fn seal<K: KemProvider>(
+    pk: &K::PublicKey,
     plaintext: &[u8],
     aad: &[u8],
     context: &[u8],
@@ -217,11 +223,11 @@ pub fn seal<K: crate::kem::KemProvider>(
     }
     let (shared_secret, kem_ct) = K::encapsulate(pk)?;
     let nonce = aead::nonce()?;
-    seal_with_material(pk, plaintext, aad, context, &shared_secret, &kem_ct, &nonce)
+    seal_with_material::<K>(pk, plaintext, aad, context, &shared_secret, &kem_ct, &nonce)
 }
 
-pub(crate) fn seal_with_material(
-    pk: &PublicKey,
+pub(crate) fn seal_with_material<K: KemProvider>(
+    pk: &K::PublicKey,
     plaintext: &[u8],
     aad: &[u8],
     context: &[u8],
@@ -237,7 +243,7 @@ pub(crate) fn seal_with_material(
     }
     let header = encode_header(
         plaintext.len(),
-        &public_key_hash(pk),
+        &public_key_hash::<K>(pk),
         &context_hash(context),
         nonce,
     )?;
@@ -248,8 +254,8 @@ pub(crate) fn seal_with_material(
     encode(&header, kem_ct, &aead_ct)
 }
 
-pub fn open<K: crate::kem::KemProvider>(
-    sk: &SecretKey,
+pub fn open<K: KemProvider>(
+    sk: &K::SecretKey,
     ciphertext: &[u8],
     aad: &[u8],
     context: &[u8],
@@ -274,7 +280,7 @@ pub fn open<K: crate::kem::KemProvider>(
     if plaintext.len() != parts.plaintext_len {
         return Err(DecryptionError);
     }
-    let expected_recipient = public_key_hash(&sk.public_key());
+    let expected_recipient = public_key_hash::<K>(&K::public_key_of(sk));
     if !bool::from(parts.recipient_key_hash.ct_eq(&expected_recipient)) {
         return Err(DecryptionError);
     }

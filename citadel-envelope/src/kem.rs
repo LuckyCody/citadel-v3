@@ -257,14 +257,56 @@ pub fn diagnostic_mlkem_decapsulate_from_key_bytes(
 // KEM provider trait + hybrid implementation
 // ---------------------------------------------------------------------------
 
+/// A hybrid KEM suite: one classical arm, one post-quantum arm, one combined secret.
+///
+/// Packet 033 P2 made this trait suite-generic via **associated types plus associated
+/// consts**. That shape is not a style preference — `API_FREEZE.md` Tier 1 freezes
+/// `PublicKey::to_bytes -> [u8; 1216]` and `SecretKey::to_bytes -> [u8; 2432]`
+/// concretely, so parameterizing the key types themselves (`PublicKey<P>`) would
+/// change the identity of a frozen type and require the breaking-change process.
+/// Associated types let each suite own distinct key types while the `0xA3` suite's
+/// resolve to exactly the frozen ones. Associated consts keep every size on the trait
+/// without rippling `typenum` generics through the crate.
+/// See `eem/033R_decisions_D2_D3_freeze.md` (Constraint A).
+///
+/// Implementors must uphold:
+/// - `encapsulate` returns a `kem_ct` of exactly `KEM_CIPHERTEXT_BYTES`;
+/// - `decapsulate` rejects any `ct` whose length is not `KEM_CIPHERTEXT_BYTES`
+///   **before** touching key material;
+/// - the combined secret is the concatenation of the arms, so that compromise of
+///   either arm alone leaves the KDF input unpredictable.
 pub trait KemProvider {
-    fn keygen() -> (PublicKey, SecretKey);
+    /// Suite identifier written to CTD2 header byte 6. Globally unique per suite.
+    const SUITE_KEM: u8;
+    /// Exact on-wire length of `kem_ct` for this suite.
+    const KEM_CIPHERTEXT_BYTES: usize;
+    /// Exact serialized length of this suite's public key.
+    const KEM_PUBLIC_KEY_BYTES: usize;
+    /// Exact serialized length of this suite's secret key.
+    const KEM_SECRET_KEY_BYTES: usize;
+
+    /// This suite's public key type. Distinct per suite — never shared across suites,
+    /// so a key from one suite cannot be passed to another's `encapsulate`.
+    type PublicKey;
+    /// This suite's secret key type. Distinct per suite for the same reason.
+    type SecretKey;
+
+    fn keygen() -> (Self::PublicKey, Self::SecretKey);
     /// P011: Returns (Zeroizing<combined_shared_secret>, kem_ciphertext_bytes).
     /// Shared secret is wrapped in Zeroizing to ensure heap cleanup.
-    fn encapsulate(pk: &PublicKey) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), EncodingError>;
+    fn encapsulate(pk: &Self::PublicKey) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), EncodingError>;
     /// P011: Returns Zeroizing<combined_shared_secret>.
     /// Shared secret is wrapped in Zeroizing to ensure heap cleanup.
-    fn decapsulate(sk: &SecretKey, ct: &[u8]) -> Result<Zeroizing<Vec<u8>>, DecryptionError>;
+    fn decapsulate(sk: &Self::SecretKey, ct: &[u8]) -> Result<Zeroizing<Vec<u8>>, DecryptionError>;
+
+    /// Canonical serialization of a public key. The envelope hashes this to bind a
+    /// ciphertext to its recipient; the hash construction stays in `wire_v2` because
+    /// it is part of the wire spec, not the suite.
+    fn public_key_bytes(pk: &Self::PublicKey) -> Vec<u8>;
+
+    /// Recover the public key from a secret key, for the recipient-binding check on
+    /// open. Suite-local because key layout is suite-local.
+    fn public_key_of(sk: &Self::SecretKey) -> Self::PublicKey;
 }
 
 /// Hybrid X25519 + ML-KEM-768 provider.
@@ -365,6 +407,19 @@ impl HybridX25519MlKem768Provider {
 }
 
 impl KemProvider for HybridX25519MlKem768Provider {
+    // These reproduce the values `wire.rs` has always hard-coded. `KEM_CIPHERTEXT_BYTES`
+    // in `wire.rs` stays pinned at 1120 forever (API_FREEZE lists it as a frozen
+    // constant); per-suite sizes live here instead.
+    const SUITE_KEM: u8 = crate::wire::SUITE_KEM_HYBRID_X25519_MLKEM768;
+    const KEM_CIPHERTEXT_BYTES: usize = crate::wire::KEM_CIPHERTEXT_BYTES;
+    const KEM_PUBLIC_KEY_BYTES: usize =
+        crate::wire::X25519_KEY_BYTES + crate::wire::MLKEM_PUBLIC_KEY_BYTES;
+    const KEM_SECRET_KEY_BYTES: usize =
+        crate::wire::X25519_KEY_BYTES + crate::wire::MLKEM_SECRET_KEY_BYTES;
+
+    type PublicKey = PublicKey;
+    type SecretKey = SecretKey;
+
     fn keygen() -> (PublicKey, SecretKey) {
         let x25519_sk = StaticSecret::random_from_rng(OsRng);
         let x25519_pk = X25519PublicKey::from(&x25519_sk);
@@ -425,6 +480,16 @@ impl KemProvider for HybridX25519MlKem768Provider {
         let combined_ss = Zeroizing::new(combined_raw.to_vec());
 
         Ok(combined_ss)
+    }
+
+    fn public_key_bytes(pk: &PublicKey) -> Vec<u8> {
+        // `to_bytes()` returns the frozen [u8; 1216]; the Vec carries identical bytes,
+        // so the SHA3-256 recipient hash is unchanged by this refactor.
+        pk.to_bytes().to_vec()
+    }
+
+    fn public_key_of(sk: &SecretKey) -> PublicKey {
+        sk.public_key()
     }
 }
 

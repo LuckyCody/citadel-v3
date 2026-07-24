@@ -187,7 +187,7 @@ mod kem_engine {
     use zeroize::Zeroizing;
 
     use crate::error::{DecryptionError, EncodingError};
-    use crate::kem::{KemProvider, PublicKey, SecretKey};
+    use crate::kem::KemProvider;
     use crate::{aead, kdf, wire, wire_v2};
 
     pub struct Citadel<K: KemProvider> {
@@ -207,13 +207,13 @@ mod kem_engine {
             }
         }
 
-        pub fn keygen(&self) -> (PublicKey, SecretKey) {
+        pub fn keygen(&self) -> (K::PublicKey, K::SecretKey) {
             K::keygen()
         }
 
         pub fn encrypt(
             &self,
-            pk: &PublicKey,
+            pk: &K::PublicKey,
             plaintext: &[u8],
             aad: &[u8],
             context: &[u8],
@@ -223,7 +223,7 @@ mod kem_engine {
 
         pub fn decrypt(
             &self,
-            sk: &SecretKey,
+            sk: &K::SecretKey,
             ciphertext: &[u8],
             aad: &[u8],
             context: &[u8],
@@ -245,7 +245,7 @@ mod kem_engine {
         #[cfg(feature = "legacy-envelope-v1")]
         pub fn encrypt_v1_compat(
             &self,
-            pk: &PublicKey,
+            pk: &K::PublicKey,
             plaintext: &[u8],
             aad: &[u8],
             context: &[u8],
@@ -261,7 +261,7 @@ mod kem_engine {
         #[inline]
         pub fn seal(
             &self,
-            pk: &PublicKey,
+            pk: &K::PublicKey,
             plaintext: &[u8],
             aad: &[u8],
             context: &[u8],
@@ -272,7 +272,7 @@ mod kem_engine {
         #[inline]
         pub fn open(
             &self,
-            sk: &SecretKey,
+            sk: &K::SecretKey,
             ciphertext: &[u8],
             aad: &[u8],
             context: &[u8],
@@ -325,7 +325,7 @@ pub mod v2_test_vectors {
             ephemeral_x25519_secret,
             mlkem_m,
         )?;
-        let envelope = crate::wire_v2::seal_with_material(
+        let envelope = crate::wire_v2::seal_with_material::<HybridX25519MlKem768Provider>(
             &pk,
             plaintext,
             aad,
