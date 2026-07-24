@@ -17,6 +17,15 @@
 //!   3 = CITADEL_ERR_OPEN   (decryption/authentication failed)
 //!   4 = CITADEL_ERR_KEY    (invalid key bytes)
 //!   5 = CITADEL_ERR_ALLOC  (memory allocation failed)
+//!   6 = CITADEL_ERR_PANIC  (internal panic caught at the FFI boundary)
+//!
+//! Panic-boundary policy: the fallible, stateful operations (keygen/seal/open/free)
+//! run inside a guard that catches any unforeseen panic and returns
+//! CITADEL_ERR_PANIC instead of unwinding across the C ABI (which would abort the
+//! host under panic="unwind"). The trivial accessors citadel_public_key_bytes,
+//! citadel_secret_key_bytes, and citadel_error_string are NOT wrapped: they return a
+//! compile-time constant or select a static string via a total match and have no
+//! panic path by construction, so a guard would only add a worse degraded return.
 
 use std::alloc::{alloc, dealloc, Layout};
 use std::collections::HashMap;
@@ -88,6 +97,17 @@ fn allocations() -> &'static Mutex<HashMap<usize, usize>> {
     ALLOCATIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Lock the allocation registry, recovering from mutex poisoning (025-R M2).
+///
+/// The registry only performs `insert`/`remove` of `(ptr, size)` with no
+/// partial-mutation window, so a panic caught at the FFI boundary while the lock was
+/// held does NOT leave the map inconsistent. Recovering via `into_inner()` prevents a
+/// caught panic from permanently poisoning the mutex and bricking every subsequent
+/// allocation and free (which would leak — and leave unzeroized — live buffers).
+fn lock_allocations() -> std::sync::MutexGuard<'static, HashMap<usize, usize>> {
+    allocations().lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 fn alloc_buf(size: usize) -> *mut u8 {
     if size == 0 {
         return std::ptr::NonNull::dangling().as_ptr();
@@ -101,16 +121,8 @@ fn alloc_buf(size: usize) -> *mut u8 {
         return ptr;
     }
 
-    match allocations().lock() {
-        Ok(mut owned) => {
-            owned.insert(ptr as usize, size);
-            ptr
-        }
-        Err(_) => {
-            unsafe { dealloc(ptr, layout) };
-            std::ptr::null_mut()
-        }
-    }
+    lock_allocations().insert(ptr as usize, size);
+    ptr
 }
 
 fn write_output(data: &[u8], out_ptr: *mut *mut u8, out_len: *mut usize) -> i32 {
@@ -342,10 +354,7 @@ unsafe fn citadel_free_impl(ptr: *mut u8, _len: usize) {
         return;
     }
 
-    let actual_len = match allocations().lock() {
-        Ok(mut owned) => owned.remove(&(ptr as usize)),
-        Err(_) => None,
-    };
+    let actual_len = lock_allocations().remove(&(ptr as usize));
     let Some(actual_len) = actual_len else {
         return;
     };
@@ -813,4 +822,30 @@ fn ffi_guard_converts_panic_to_error_code() {
     // citadel_error_string must describe the new code.
     let s = citadel_error_string(CITADEL_ERR_PANIC);
     assert!(!s.is_null());
+}
+
+// P161 (025-R M2): a caught panic while the allocation-registry lock is held must
+// NOT permanently brick the allocator. The registry lock recovers from poisoning, so
+// keygen/free keep working (and buffers remain freeable/zeroizable) afterwards.
+#[test]
+fn allocation_registry_recovers_from_poison() {
+    // Poison the global registry mutex: panic while holding the lock.
+    let _ = std::panic::catch_unwind(|| {
+        let _guard = allocations().lock().expect("first lock is unpoisoned");
+        panic!("poison the allocation registry");
+    });
+
+    // A normal keygen must still succeed (its output registers via the recovered
+    // lock) and its buffers must still be freeable (removed via the recovered lock).
+    let mut pk_ptr: *mut u8 = std::ptr::null_mut();
+    let mut pk_len: usize = 0;
+    let mut sk_ptr: *mut u8 = std::ptr::null_mut();
+    let mut sk_len: usize = 0;
+    let rc = unsafe { citadel_keygen(&mut pk_ptr, &mut pk_len, &mut sk_ptr, &mut sk_len) };
+    assert_eq!(rc, CITADEL_OK, "keygen must succeed after registry poison");
+    assert!(!pk_ptr.is_null() && !sk_ptr.is_null());
+    unsafe {
+        citadel_free(pk_ptr, pk_len);
+        citadel_free(sk_ptr, sk_len);
+    }
 }
