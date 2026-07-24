@@ -30,10 +30,12 @@ x25519-dalek = { version = "2", features = ["static_secrets"] }
 # - aes-gcm + ghash zeroize wipe the TRANSIENT GHASH construction copies.
 # - polyval 0.6.2's x86_64 autodetect wrapper stores its backend in a ManuallyDrop
 #   union with NO Drop impl, so the RETAINED GHASH H state is NOT wiped on x86 (a
-#   polyval limitation, not closable here without force-soft/fork). This is a bounded,
-#   low-severity residual — H is one-way from a one-time ephemeral key. See the
-#   KEY_LIFECYCLE note in kdf.rs. The features are kept: they wipe transients and DO
-#   wipe retained state on aarch64+PMULL / force-soft builds.
+#   polyval limitation). NOTE (030-R R2): this is a GCM tag-forgery primitive under a
+#   memory-disclosure precondition — NOT low severity — because Citadel envelopes are
+#   deterministically re-openable (K is re-derived per open, not single-use). Fixed
+#   upstream in polyval 0.7.3; the close is an aes-gcm 0.10->0.11 bump (pulls the fixed
+#   polyval), pending owner go-ahead. See the KEY_LIFECYCLE note in kdf.rs. Features
+#   kept: they wipe transients and DO wipe retained state on aarch64+PMULL / force-soft.
 aes-gcm = { version = "0.10", features = ["aes", "zeroize"] }
 aes = { version = "0.8", features = ["zeroize"] }
 ghash = { version = "0.5", features = ["zeroize"] }

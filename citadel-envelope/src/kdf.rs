@@ -20,12 +20,26 @@
 //!   retained `H`-derived Polyval key material is not wiped on cipher drop for this
 //!   target (029-R Q2/Q5). `aes-gcm`'s and `ghash`'s `zeroize` still wipe the
 //!   transient construction copies; only the retained accumulator key lingers.
-//!   Severity is low BY DESIGN: `H = AES_K(0^128)` is a ONE-WAY function of a
-//!   per-message ephemeral key `K` (fresh HKDF output per envelope, used once). A
-//!   leaked `H` neither reveals `K` (that needs inverting AES) nor helps forge under
-//!   any live key (K is never reused). Closing it needs `polyval/force-soft` (a GHASH
-//!   throughput regression) or a polyval fork; judged not worth it. Wiped correctly
-//!   on aarch64+PMULL and force-soft builds.
+//!   SEVERITY (corrected 030-R R2 — do NOT treat as low): this is a GCM tag-FORGERY
+//!   primitive, not a harmless value. Citadel envelopes are DETERMINISTICALLY
+//!   re-openable — the KEM ciphertext is preserved, so `open()` re-derives the SAME
+//!   AES-GCM key `K` and reuses the stored nonce on every open of a given envelope
+//!   (see `wire_v2::open`); `K` is NOT single-use. An attacker who reads this residual
+//!   from freed memory AND has the envelope's own `(AAD, ct, tag)` can recover the tag
+//!   mask `E_K(J0)` for that `(K, nonce)` and forge valid tags for modified
+//!   ciphertexts; a recipient re-opening the modified envelope re-derives the same `K`
+//!   and accepts the forgery — an authenticity break for that envelope. It does NOT
+//!   reveal `K` (one-way) and does not touch other envelopes (distinct nonces/keys).
+//!   Sole mitigation is the memory-disclosure precondition; the residual's marginal
+//!   risk is that `H` persists AFTER `K`/plaintext are zeroized, widening the window.
+//!   Disposition: CLOSE, do not accept as low-severity. Upstream ALREADY fixed this
+//!   in `polyval` 0.7.3 (restructured: a top-level `impl Drop` calling
+//!   `zeroize::zeroize_flat_type`, no `ManuallyDrop` union). The clean close is to
+//!   upgrade `aes-gcm` 0.10 -> 0.11 (pulls `ghash` 0.6 -> `polyval` 0.7.3), keeping
+//!   CLMUL and adding no fork — pending owner go-ahead (semver-major AEAD bump, needs
+//!   KAT re-validation). In the deployed API a fail-closed replay store may also block
+//!   the modified-envelope replay, but the library must not rely on that. Already
+//!   wiped today on aarch64+PMULL / force-soft builds.
 //! - HKDF PRK: `Hkdf::<Sha256>::new` extracts a pseudorandom key from the shared
 //!   secret and holds it inside the `hk` value below. The `hkdf` 0.12 crate has no
 //!   `zeroize` feature or zeroize-on-drop, so that PRK lingers in this stack frame
