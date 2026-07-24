@@ -42,7 +42,7 @@ use std::slice;
 use std::sync::{Mutex, OnceLock};
 
 use citadel_envelope::{Aad, Citadel, Context, PublicKey, SecretKey};
-use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 #[cfg(test)]
 mod allocation_probe {
@@ -200,16 +200,15 @@ unsafe fn citadel_keygen_impl(
         return rc;
     }
     // `SecretKey::to_bytes()` returns a bare [u8; N] holding the full serialized
-    // hybrid secret key (X25519 static secret || ML-KEM decapsulation key). Copy it
-    // into the caller's buffer, then wipe our transient copy so the secret does not
-    // linger in this process's stack after keygen returns. (The caller's buffer is
-    // itself wiped by citadel_free before dealloc; `sk` zeroizes on drop via its own
-    // component types.) Moved-from stack slots are a general Rust-zeroize limitation
-    // and out of scope; this removes the one bare copy this function keeps live.
-    let mut sk_bytes = sk.to_bytes();
-    let rc = write_output(&sk_bytes, sk_out, sk_len);
-    sk_bytes.zeroize();
-    rc
+    // hybrid secret key (X25519 static secret || ML-KEM decapsulation key). Wrap it
+    // in `Zeroizing` so the transient copy is wiped on drop — crucially, drop runs
+    // during unwind too, so an unforeseen panic inside `write_output` (caught by
+    // `ffi_guard`) still wipes it. A manual post-copy `zeroize()` would be skipped by
+    // that unwind (028-R P1). The caller's C buffer is wiped by citadel_free before
+    // dealloc; `sk` zeroizes on drop via its component types. (Moved-from stack slots
+    // from to_bytes() remain a general Rust-zeroize limitation, out of scope.)
+    let sk_bytes = Zeroizing::new(sk.to_bytes());
+    write_output(&*sk_bytes, sk_out, sk_len)
 }
 
 /// Encrypt plaintext to a recipient public key.

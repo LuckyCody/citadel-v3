@@ -21,6 +21,7 @@ dependencies = [
  "cfg-if",
  "cipher",
  "cpufeatures 0.2.17",
+ "zeroize",
 ]
 
 [[package]]
@@ -497,17 +498,20 @@ dependencies = [
 name = "citadel-envelope"
 version = "0.2.0"
 dependencies = [
+ "aes",
  "aes-gcm",
  "aws-lc-rs",
  "criterion",
  "dudect-bencher",
  "fips203",
  "getrandom 0.2.17",
+ "ghash",
  "hex",
  "hkdf",
  "hmac",
  "libcrux-ml-kem",
  "ml-kem",
+ "polyval",
  "rand 0.8.6",
  "rand_core 0.6.4",
  "serde",
@@ -1056,6 +1060,7 @@ checksum = "f0d8a4362ccb29cb0b265253fb0a2728f592895ee6854fd9bc13f2ffda266ff1"
 dependencies = [
  "opaque-debug",
  "polyval",
+ "zeroize",
 ]
 
 [[package]]
@@ -1851,6 +1856,7 @@ dependencies = [
  "cpufeatures 0.2.17",
  "opaque-debug",
  "universal-hash",
+ "zeroize",
 ]
 
 [[package]]

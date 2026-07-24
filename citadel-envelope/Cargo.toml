@@ -23,11 +23,18 @@ ml-kem = { version = "=0.3.2", default-features = false, features = ["getrandom"
 # X25519 ECDH - classical KEM for hybrid defense-in-depth
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 
-# Symmetric cryptography
-# `zeroize` wipes the transient GHASH key derived during AES-GCM construction.
-# (The AES round-key schedule inside the cipher is a bounded per-call residual of
-# an already-Zeroizing per-message key; see the KEY_LIFECYCLE note in kdf.rs.)
+# Symmetric cryptography.
+# The AES-GCM keyed state is made ZeroizeOnDrop by enabling `zeroize` down the
+# whole cipher stack (028-R P3): aes-gcm wipes its transient GHASH construction key;
+# `aes` (ZeroizeOnDrop) wipes the AES round-key schedule; `polyval` (impl Drop) wipes
+# the retained GHASH H state. AesGcm has no Drop of its own, but its field drop-glue
+# drops `cipher`/`ghash`, so the whole keyed state is wiped when the cipher drops —
+# including on unwind. aes/ghash/polyval are already transitive under aes-gcm; naming
+# them here only turns on the drop-based wipe. See KEY_LIFECYCLE in kdf.rs.
 aes-gcm = { version = "0.10", features = ["aes", "zeroize"] }
+aes = { version = "0.8", features = ["zeroize"] }
+ghash = { version = "0.5", features = ["zeroize"] }
+polyval = { version = "0.6", features = ["zeroize"] }
 hkdf = "0.12"
 hmac = "0.12"
 sha2 = "0.10"
