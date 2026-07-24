@@ -89,12 +89,12 @@ pub fn create_backup(keys: &[KeyMetadata], master_key: &[u8; 32]) -> Result<Vec<
     rand_core::OsRng.fill_bytes(&mut nonce_bytes);
 
     let cipher = Aes256Gcm::new((&*wrap_key).into());
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = Nonce::from(nonce_bytes);
     // AAD binds to the timestamp so the nonce can't be reused across backup files.
     let aad = now_unix.to_be_bytes();
     let ciphertext = cipher
         .encrypt(
-            nonce,
+            &nonce,
             Payload {
                 msg: &json,
                 aad: &aad,
@@ -210,11 +210,11 @@ fn decrypt_backup(data: &[u8], master_key: &[u8; 32]) -> Result<BackupPayload, S
         .map_err(|e| format!("HKDF expand: {}", e))?;
 
     let cipher = Aes256Gcm::new((&*wrap_key).into());
-    let nonce = Nonce::from_slice(nonce_bytes);
+    let nonce = Nonce::from(*nonce_bytes);
     let aad = timestamp.to_be_bytes();
     let plaintext = cipher
         .decrypt(
-            nonce,
+            &nonce,
             Payload {
                 msg: ciphertext,
                 aad: &aad,

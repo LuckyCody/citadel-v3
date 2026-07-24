@@ -27,12 +27,12 @@ pub fn aead_seal(
     aad: &[u8],
 ) -> Result<Vec<u8>, EncodingError> {
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| EncodingError)?;
-    let n = Nonce::from_slice(nonce);
+    let n = Nonce::from(*nonce);
     let payload = Payload {
         msg: plaintext,
         aad,
     };
-    cipher.encrypt(n, payload).map_err(|_| EncodingError)
+    cipher.encrypt(&n, payload).map_err(|_| EncodingError)
 }
 
 /// AEAD open (decrypt path). Returns DecryptionError on failure.
@@ -43,10 +43,10 @@ pub fn aead_open(
     aad: &[u8],
 ) -> Result<Vec<u8>, DecryptionError> {
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| DecryptionError)?;
-    let n = Nonce::from_slice(nonce);
+    let n = Nonce::from(*nonce);
     let payload = Payload {
         msg: ciphertext,
         aad,
     };
-    cipher.decrypt(n, payload).map_err(|_| DecryptionError)
+    cipher.decrypt(&n, payload).map_err(|_| DecryptionError)
 }

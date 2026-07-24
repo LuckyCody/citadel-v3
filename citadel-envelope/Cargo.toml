@@ -23,23 +23,20 @@ ml-kem = { version = "=0.3.2", default-features = false, features = ["getrandom"
 # X25519 ECDH - classical KEM for hybrid defense-in-depth
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 
-# Symmetric cryptography. `zeroize` is enabled down the cipher stack (028-R P3):
-# - aes 0.8.4 is ZeroizeOnDrop on ALL backends incl. the x86_64 autodetect wrapper,
-#   so the AES round-key schedule (from which the key is recoverable) IS wiped on
-#   cipher drop, on unwind too (verified 029-R Q2).
-# - aes-gcm + ghash zeroize wipe the TRANSIENT GHASH construction copies.
-# - polyval 0.6.2's x86_64 autodetect wrapper stores its backend in a ManuallyDrop
-#   union with NO Drop impl, so the RETAINED GHASH H state is NOT wiped on x86 (a
-#   polyval limitation). NOTE (030-R R2): this is a GCM tag-forgery primitive under a
-#   memory-disclosure precondition — NOT low severity — because Citadel envelopes are
-#   deterministically re-openable (K is re-derived per open, not single-use). Fixed
-#   upstream in polyval 0.7.3; the close is an aes-gcm 0.10->0.11 bump (pulls the fixed
-#   polyval), pending owner go-ahead. See the KEY_LIFECYCLE note in kdf.rs. Features
-#   kept: they wipe transients and DO wipe retained state on aarch64+PMULL / force-soft.
-aes-gcm = { version = "0.10", features = ["aes", "zeroize"] }
-aes = { version = "0.8", features = ["zeroize"] }
-ghash = { version = "0.5", features = ["zeroize"] }
-polyval = { version = "0.6", features = ["zeroize"] }
+# Symmetric cryptography. `zeroize` is enabled down the whole cipher stack so the
+# AES-GCM keyed state is ZeroizeOnDrop (028-R P3 / 029-R / 030-R — CLOSED):
+# - aes 0.9 is ZeroizeOnDrop on all backends → AES round-key schedule wiped on drop.
+# - polyval 0.7.3 has a top-level impl Drop (zeroize_flat_type) → GHASH H retained
+#   state wiped on drop, incl. x86_64. This closed the 030-R forgery-primitive residual
+#   that polyval 0.6.2 (via old aes-gcm 0.10) left open on x86 (ManuallyDrop union, no
+#   Drop). See KEY_LIFECYCLE in kdf.rs.
+# - ghash 0.6 + aes-gcm zeroize wipe the transient GHASH construction copies.
+# The aes-gcm 0.10->0.11 bump pulls the fixed ghash 0.6 -> polyval 0.7.3. KAT/ACVP
+# re-validated bit-identical after the bump.
+aes-gcm = { version = "0.11", features = ["aes", "zeroize"] }
+aes = { version = "0.9", features = ["zeroize"] }
+ghash = { version = "0.6", features = ["zeroize"] }
+polyval = { version = "0.7", features = ["zeroize"] }
 hkdf = "0.12"
 hmac = "0.12"
 sha2 = "0.10"
@@ -63,7 +60,7 @@ aws-lc-rs = { version = "1.17", features = ["unstable"], optional = true }
 hex = "0.4"
 rand = "0.8"
 # Re-listed so benchmarks/examples can import these crates directly
-aes-gcm = { version = "0.10", features = ["aes"] }
+aes-gcm = { version = "0.11", features = ["aes"] }
 sha2 = "0.10"
 # P163: keep Criterion minimal and gated by required-features on bench targets.
 criterion = { version = "0.5", default-features = false }
