@@ -115,7 +115,9 @@ fn allocations() -> &'static Mutex<HashMap<usize, usize>> {
 /// caught panic from permanently poisoning the mutex and bricking every subsequent
 /// allocation and free (which would leak — and leave unzeroized — live buffers).
 fn lock_allocations() -> std::sync::MutexGuard<'static, HashMap<usize, usize>> {
-    allocations().lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    allocations()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn alloc_buf(size: usize) -> *mut u8 {

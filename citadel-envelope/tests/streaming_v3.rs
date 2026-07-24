@@ -588,8 +588,8 @@ fn hl_stream_roundtrip() {
         final_tag,
     } = encrypt_stream_v3(&pk, &parts, &aad(), &ctx()).expect("encrypt");
     let frame_refs: Vec<&[u8]> = frames.iter().map(|f| f.as_slice()).collect();
-    let pt = decrypt_stream_v3(&sk, &header, &frame_refs, &final_tag, &aad(), &ctx())
-        .expect("decrypt");
+    let pt =
+        decrypt_stream_v3(&sk, &header, &frame_refs, &final_tag, &aad(), &ctx()).expect("decrypt");
     assert_eq!(pt, b"alphabravocharlie-final");
 }
 
@@ -678,7 +678,7 @@ fn hl_stream_single_chunk_roundtrip() {
         final_tag,
     } = encrypt_stream_v3(&pk, &parts, &aad(), &ctx()).expect("encrypt");
     let frame_refs: Vec<&[u8]> = frames.iter().map(|f| f.as_slice()).collect();
-    let pt = decrypt_stream_v3(&sk, &header, &frame_refs, &final_tag, &aad(), &ctx())
-        .expect("decrypt");
+    let pt =
+        decrypt_stream_v3(&sk, &header, &frame_refs, &final_tag, &aad(), &ctx()).expect("decrypt");
     assert_eq!(pt, b"only-chunk");
 }
