@@ -42,6 +42,7 @@ use std::slice;
 use std::sync::{Mutex, OnceLock};
 
 use citadel_envelope::{Aad, Citadel, Context, PublicKey, SecretKey};
+use zeroize::Zeroize;
 
 #[cfg(test)]
 mod allocation_probe {
@@ -198,7 +199,17 @@ unsafe fn citadel_keygen_impl(
     if rc != CITADEL_OK {
         return rc;
     }
-    write_output(&sk.to_bytes(), sk_out, sk_len)
+    // `SecretKey::to_bytes()` returns a bare [u8; N] holding the full serialized
+    // hybrid secret key (X25519 static secret || ML-KEM decapsulation key). Copy it
+    // into the caller's buffer, then wipe our transient copy so the secret does not
+    // linger in this process's stack after keygen returns. (The caller's buffer is
+    // itself wiped by citadel_free before dealloc; `sk` zeroizes on drop via its own
+    // component types.) Moved-from stack slots are a general Rust-zeroize limitation
+    // and out of scope; this removes the one bare copy this function keeps live.
+    let mut sk_bytes = sk.to_bytes();
+    let rc = write_output(&sk_bytes, sk_out, sk_len);
+    sk_bytes.zeroize();
+    rc
 }
 
 /// Encrypt plaintext to a recipient public key.

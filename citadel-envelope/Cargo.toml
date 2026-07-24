@@ -24,7 +24,10 @@ ml-kem = { version = "=0.3.2", default-features = false, features = ["getrandom"
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 
 # Symmetric cryptography
-aes-gcm = { version = "0.10", features = ["aes"] }
+# `zeroize` wipes the transient GHASH key derived during AES-GCM construction.
+# (The AES round-key schedule inside the cipher is a bounded per-call residual of
+# an already-Zeroizing per-message key; see the KEY_LIFECYCLE note in kdf.rs.)
+aes-gcm = { version = "0.10", features = ["aes", "zeroize"] }
 hkdf = "0.12"
 hmac = "0.12"
 sha2 = "0.10"

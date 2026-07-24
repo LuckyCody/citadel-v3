@@ -35,6 +35,7 @@ dependencies = [
  "ctr",
  "ghash",
  "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -523,6 +524,7 @@ name = "citadel-ffi"
 version = "0.1.0"
 dependencies = [
  "citadel-envelope",
+ "zeroize",
 ]
 
 [[package]]
