@@ -589,3 +589,120 @@ mod p3c_cross_suite_tests {
         }
     }
 }
+
+/// Open-layer red tests for the `0xA4` suite (VALIDATION red tests 1, 2, 3).
+///
+/// `p3c_cross_suite_tests` covers the codec: `decode` resolving `header[6]` and
+/// validating every length from the resolved suite. These go through `open`, which is
+/// where key material, the KDF transcript, and the AEAD actually participate.
+///
+/// Every test asserts only that the input is REJECTED, never which layer rejects it.
+/// Which check fires first is an implementation detail a later hardening change is
+/// allowed to move, and a test that pins it would fail for the wrong reason.
+///
+/// Measured caveat, recorded so the suite is not read as stronger than it is: of these
+/// seven, only `p3d_open_rejects_a4_envelope_opened_with_a_different_aad` dies under any
+/// single mutation of this crate. The others are regression tests -- the mechanisms they
+/// depend on (differing ciphertext lengths, SEC1 parsing, the nonce) are all required for
+/// correct decryption too, so breaking one kills the roundtrip control instead. See
+/// eem/033_swarm/grade_p3d_open_layer.sh for the arms and the measurements.
+#[cfg(test)]
+mod p3d_open_layer_tests {
+    use super::*;
+    use crate::kem::{HybridX25519MlKem768Provider as P3, KemProvider};
+    use crate::kem_p384::HybridP384MlKem1024Provider as P4;
+
+    const A4_TOTAL: usize = 1788;
+
+    /// The positive control. Without it, "open::<P4> rejects everything" -- including a
+    /// `0xA4` path deleted outright -- would read as a clean sweep of the six red tests.
+    #[test]
+    fn p3d_open_roundtrips_a_pristine_a4_envelope() {
+        let (pk4, sk4) = P4::keygen();
+        let envelope = seal::<P4>(&pk4, b"a message", b"", b"ctx").expect("seal a4");
+        assert_eq!(envelope.len(), A4_TOTAL);
+        let plaintext = open::<P4>(&sk4, &envelope, b"", b"ctx").expect("open a4");
+        assert_eq!(&plaintext[..], b"a message");
+    }
+
+    /// VALIDATION red test 1.
+    #[test]
+    fn p3d_open_rejects_a3_envelope_with_an_a4_secret_key() {
+        let (pk3, _sk3) = P3::keygen();
+        let envelope = seal::<P3>(&pk3, b"a message", b"", b"ctx").expect("seal a3");
+        let (_pk4, sk4) = P4::keygen();
+        assert!(
+            open::<P4>(&sk4, &envelope, b"", b"ctx").is_err(),
+            "an a3 envelope must not open under an a4 key"
+        );
+    }
+
+    /// VALIDATION red test 2.
+    #[test]
+    fn p3d_open_rejects_a4_envelope_with_an_a3_secret_key() {
+        let (pk4, _sk4) = P4::keygen();
+        let envelope = seal::<P4>(&pk4, b"a message", b"", b"ctx").expect("seal a4");
+        let (_pk3, sk3) = P3::keygen();
+        assert!(
+            open::<P3>(&sk3, &envelope, b"", b"ctx").is_err(),
+            "an a4 envelope must not open under an a3 key"
+        );
+    }
+
+    /// VALIDATION red test 3, restated.
+    ///
+    /// VALIDATION words this as "AEAD auth failure", which is not reachable: the suites'
+    /// total lengths differ, so a flipped `header[6]` is rejected by `decode`'s exact
+    /// total-length re-check long before any key is derived. No `header[6]` value can
+    /// reach the AEAD on a well-formed envelope. The property worth testing is that the
+    /// flip is rejected at all.
+    #[test]
+    fn p3d_open_rejects_a4_envelope_with_the_suite_byte_flipped_to_a3() {
+        let (pk4, sk4) = P4::keygen();
+        let mut envelope = seal::<P4>(&pk4, b"a message", b"", b"ctx").expect("seal a4");
+        envelope[6] = 0xA3;
+        assert!(
+            open::<P4>(&sk4, &envelope, b"", b"ctx").is_err(),
+            "a suite-byte downgrade must be rejected"
+        );
+    }
+
+    /// `envelope[22..54]` is the recipient key hash -- a header field `decode` does not
+    /// validate, so this input survives the codec and is rejected inside `open`.
+    #[test]
+    fn p3d_open_rejects_a4_envelope_with_a_tampered_recipient_key_hash() {
+        let (pk4, sk4) = P4::keygen();
+        let mut envelope = seal::<P4>(&pk4, b"a message", b"", b"ctx").expect("seal a4");
+        envelope[22] ^= 0x01;
+        assert!(
+            open::<P4>(&sk4, &envelope, b"", b"ctx").is_err(),
+            "a tampered recipient key hash must be rejected"
+        );
+    }
+
+    /// `envelope[86..98]` is the nonce.
+    #[test]
+    fn p3d_open_rejects_a4_envelope_with_the_nonce_tampered() {
+        let (pk4, sk4) = P4::keygen();
+        let mut envelope = seal::<P4>(&pk4, b"a message", b"", b"ctx").expect("seal a4");
+        envelope[86] ^= 0x01;
+        assert!(
+            open::<P4>(&sk4, &envelope, b"", b"ctx").is_err(),
+            "a tampered nonce must be rejected"
+        );
+    }
+
+    /// The one test here with a mutation gate: dropping `caller_aad` from
+    /// `associated_data` is symmetric across seal and open, so the roundtrip keeps
+    /// working while this test starts passing bad input. Note the envelope is PRISTINE --
+    /// only the caller's aad argument differs.
+    #[test]
+    fn p3d_open_rejects_a4_envelope_opened_with_a_different_aad() {
+        let (pk4, sk4) = P4::keygen();
+        let envelope = seal::<P4>(&pk4, b"a message", b"aad-one", b"ctx").expect("seal a4");
+        assert!(
+            open::<P4>(&sk4, &envelope, b"aad-two", b"ctx").is_err(),
+            "opening under a different aad must fail"
+        );
+    }
+}

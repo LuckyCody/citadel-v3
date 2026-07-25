@@ -351,9 +351,22 @@ pub fn inspect(ciphertext: &[u8]) -> Result<CiphertextInfo, OpenError> {
     // the historical byte-based stream-v2 dispatch.
     if ciphertext.starts_with(crate::wire_v2::MAGIC) {
         let parts = crate::wire_v2::decode(ciphertext)?;
+        // Read the suite from the decoded envelope, not from a constant. This was
+        // hardcoded to the X25519 string, which was correct while 0xA3 was the only v2
+        // suite and became a wrong answer the moment 0xA4 joined SUITE_TABLE. The
+        // legacy branches below have always done it this way.
+        //
+        // `decode` already rejects any suite absent from SUITE_TABLE, so the fallback
+        // arm is unreachable today; it is here so that adding a table row without
+        // touching this match produces "unknown" rather than a confident lie.
+        let kem_suite = match parts.suite.suite_kem {
+            SUITE_KEM_HYBRID_X25519_MLKEM768 => "X25519+ML-KEM-768",
+            crate::wire::SUITE_KEM_HYBRID_P384_MLKEM1024 => "P-384+ML-KEM-1024",
+            _ => "unknown",
+        };
         return Ok(CiphertextInfo {
             version: crate::wire_v2::VERSION,
-            kem_suite: "X25519+ML-KEM-768",
+            kem_suite,
             aead_suite: "AES-256-GCM",
             total_bytes: ciphertext.len(),
             plaintext_bytes: parts.plaintext_len,
@@ -436,3 +449,35 @@ pub const ENVELOPE_VERSION: u8 = crate::wire_v2::VERSION;
 
 /// Minimum current envelope-v2 size (empty plaintext).
 pub const MIN_ENVELOPE_V2_BYTES: usize = crate::wire_v2::MIN_ENVELOPE_LEN;
+
+/// `inspect()` must report the suite it actually decoded.
+///
+/// Filed as F-2 in packet 033: the v2 branch returned the X25519 string unconditionally,
+/// so a `0xA4` envelope was reported as `X25519+ML-KEM-768`. `cli.rs` prints this field to
+/// a human, which makes a wrong answer here worse than a missing one.
+///
+/// The `0xA3` assertion is as load-bearing as the `0xA4` one: it pins that this fix did
+/// not change what `inspect` already reported for the frozen suite.
+#[cfg(test)]
+mod p3d_inspect_suite_label_tests {
+    use crate::kem::{HybridX25519MlKem768Provider as P3, KemProvider};
+    use crate::kem_p384::HybridP384MlKem1024Provider as P4;
+
+    #[test]
+    fn p3d_inspect_reports_a4_envelopes_as_p384_mlkem1024() {
+        let (pk4, _sk4) = P4::keygen();
+        let envelope = crate::wire_v2::seal::<P4>(&pk4, b"a message", b"", b"ctx").expect("seal");
+        let info = crate::inspect(&envelope).expect("inspect a4");
+        assert_eq!(info.kem_suite, "P-384+ML-KEM-1024");
+        assert_eq!(info.plaintext_bytes, 9);
+        assert!(!info.streaming);
+    }
+
+    #[test]
+    fn p3d_inspect_still_reports_a3_envelopes_as_x25519_mlkem768() {
+        let (pk3, _sk3) = P3::keygen();
+        let envelope = crate::wire_v2::seal::<P3>(&pk3, b"a message", b"", b"ctx").expect("seal");
+        let info = crate::inspect(&envelope).expect("inspect a3");
+        assert_eq!(info.kem_suite, "X25519+ML-KEM-768");
+    }
+}

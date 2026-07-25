@@ -349,3 +349,53 @@ mod tests {
         assert!(P::decapsulate(&sk, &[]).is_err());
     }
 }
+
+/// VALIDATION red test 10 — P-384 identity / invalid point rejection.
+///
+/// `parse_p384_point` is private, so these go through `decapsulate`, which is the path an
+/// attacker actually controls. A `0xA4` KEM ciphertext is
+/// `uncompressed_sec1_point[97] || mlkem1024_ciphertext[1568]`, so the crafted point goes
+/// in `ct[0..97]`.
+///
+/// What this DOES establish: neither input panics, and both fail closed. A panic on a
+/// decode path is a remote DoS surface, so "returns Err" and "does not panic" are
+/// separate properties and both matter.
+///
+/// What it does NOT establish, measured rather than assumed: deleting the SEC1
+/// length + tag guard above does not make either test fail, because
+/// `P384PublicKey::from_sec1_bytes` does the real on-curve and non-identity validation.
+/// So these tests measure that the `p384` crate rejects bad points -- worth pinning,
+/// since it would catch a refactor swapping `from_sec1_bytes` for a length check, but it
+/// is not evidence about our own validation logic. The guard's real job is injectivity
+/// against a future `sec1` that accepts compressed encodings, which no test against
+/// today's `p384` can exercise.
+#[cfg(test)]
+mod p3d_point_validation_tests {
+    use super::*;
+    use crate::kem::KemProvider;
+
+    /// A leading `0x00` is SEC1's identity / point-at-infinity octet, and is not the
+    /// `0x04` uncompressed tag this suite requires (decision D2).
+    #[test]
+    fn p3d_decapsulate_rejects_all_zero_point_encoding() {
+        let (_pk, sk) = HybridP384MlKem1024Provider::keygen();
+        let ciphertext = [0u8; 1665];
+        assert!(
+            HybridP384MlKem1024Provider::decapsulate(&sk, &ciphertext).is_err(),
+            "an all-zero point encoding must be rejected"
+        );
+    }
+
+    /// Right tag, right length, and `x = 0, y = 0` is not on the P-384 curve. This is the
+    /// only one of these inputs that gets past the tag check to the on-curve check.
+    #[test]
+    fn p3d_decapsulate_rejects_correctly_tagged_off_curve_point() {
+        let (_pk, sk) = HybridP384MlKem1024Provider::keygen();
+        let mut ciphertext = [0u8; 1665];
+        ciphertext[0] = 0x04;
+        assert!(
+            HybridP384MlKem1024Provider::decapsulate(&sk, &ciphertext).is_err(),
+            "a correctly tagged off-curve point must be rejected"
+        );
+    }
+}
