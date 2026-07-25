@@ -22,9 +22,10 @@ pub const PROTOCOL_VERSION: u8 = 0x01;
 pub const SUITE_KEM_HYBRID_X25519_MLKEM768: u8 = 0xA3;
 pub const SUITE_AEAD_AES256GCM: u8 = 0xB1;
 
-/// CNSA-aligned hybrid: P-384 ECDH + ML-KEM-1024. **Allocated, not yet implemented** —
-/// deliberately absent from [`SUITE_TABLE`] until its provider exists, so the decoder
-/// can never advertise a suite nothing can decrypt.
+/// CNSA-aligned hybrid: P-384 ECDH + ML-KEM-1024. Implemented by
+/// [`crate::kem_p384::HybridP384MlKem1024Provider`] and present in [`SUITE_TABLE`] as of
+/// packet 033 P3c — the row and the provider landed in the same commit, so no build has
+/// ever advertised this suite without the code to open it.
 pub const SUITE_KEM_HYBRID_P384_MLKEM1024: u8 = 0xA4;
 
 /// Reserved: X25519 + ML-KEM-1024. Recorded now so `0xA4` can never be retro-fitted to
@@ -114,15 +115,34 @@ pub struct SuiteParams {
 /// Every suite this build can actually encrypt and decrypt.
 ///
 /// **Membership is the definition of "supported."** A suite identifier that has been
-/// allocated or reserved but has no provider (`0xA4`, `0xA5`, `0xA6`) is absent, so
-/// [`suite_params`] returns `None` and the decoder fails closed. Adding a row without
-/// a working provider would make the decoder accept envelopes nothing can open.
-const SUITE_TABLE: &[SuiteParams] = &[SuiteParams {
-    suite_kem: SUITE_KEM_HYBRID_X25519_MLKEM768,
-    kem_ciphertext_bytes: KEM_CIPHERTEXT_BYTES,
-    kem_public_key_bytes: KEM_PUBLIC_KEY_BYTES,
-    kem_secret_key_bytes: KEM_SECRET_KEY_BYTES,
-}];
+/// reserved but has no provider (`0xA5`, `0xA6`) is absent, so [`suite_params`] returns
+/// `None` and the decoder fails closed. Adding a row without a working provider would
+/// make the decoder accept envelopes nothing can open.
+///
+/// The `0xA4` lengths below are written as literals on purpose, **not** derived from
+/// `HybridP384MlKem1024Provider`'s associated consts. `encode_header` cross-checks
+/// `suite.kem_ciphertext_bytes` against `K::KEM_CIPHERTEXT_BYTES`; if this table simply
+/// referenced the provider, that check would compare a value to itself and could never
+/// fail. The duplication *is* the check — two independent statements of the FIPS 203 and
+/// SEC1 sizes, so an edit to one and not the other is caught at the first encode.
+const SUITE_TABLE: &[SuiteParams] = &[
+    SuiteParams {
+        suite_kem: SUITE_KEM_HYBRID_X25519_MLKEM768,
+        kem_ciphertext_bytes: KEM_CIPHERTEXT_BYTES,
+        kem_public_key_bytes: KEM_PUBLIC_KEY_BYTES,
+        kem_secret_key_bytes: KEM_SECRET_KEY_BYTES,
+    },
+    SuiteParams {
+        suite_kem: SUITE_KEM_HYBRID_P384_MLKEM1024,
+        // p384 uncompressed SEC1 point (97) + ML-KEM-1024 ciphertext (1568)
+        kem_ciphertext_bytes: 1665,
+        // p384 uncompressed SEC1 point (97) + ML-KEM-1024 encapsulation key (1568)
+        kem_public_key_bytes: 1665,
+        // p384 scalar (48) + FIPS 203 (d, z) seed (64) -- D3, not the 3168-byte
+        // expanded decapsulation key
+        kem_secret_key_bytes: 112,
+    },
+];
 
 /// Resolve a `suite_kem` byte to its lengths, or `None` if this build does not
 /// support it. Callers must treat `None` as a hard reject, never as a default.

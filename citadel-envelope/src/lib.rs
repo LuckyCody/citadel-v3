@@ -54,6 +54,7 @@ mod aead;
 mod error;
 mod kdf;
 mod kem;
+mod kem_p384;
 mod wire_v2;
 
 #[doc(hidden)]
@@ -290,6 +291,7 @@ pub use envelope::Envelope;
 pub use error::{DecryptionError, EncodingError};
 #[doc(hidden)]
 pub use kem::{HybridX25519MlKem768Provider, KemProvider, MlKem768Provider};
+pub use kem_p384::{HybridP384MlKem1024Provider, P384MlKem1024PublicKey, P384MlKem1024SecretKey};
 
 /// Deterministic envelope-v2 construction for checked-in vectors only.
 /// This module is absent from default production builds.
