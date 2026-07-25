@@ -458,3 +458,134 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod p3c_cross_suite_tests {
+    use super::*;
+    use crate::kem::{HybridX25519MlKem768Provider as P3, KemProvider};
+    use crate::kem_p384::HybridP384MlKem1024Provider as P4;
+
+    const A3_TOTAL: usize = 1243;
+    const A4_TOTAL: usize = 1788;
+
+    #[test]
+    fn p3c_decode_accepts_pristine_a4_envelope() {
+        let (pk3, _sk3) = P3::keygen();
+        let env3: Vec<u8> = seal::<P3>(&pk3, b"a message", b"", b"ctx").expect("seal a3");
+        let (pk4, _sk4) = P4::keygen();
+        let env4: Vec<u8> = seal::<P4>(&pk4, b"a message", b"", b"ctx").expect("seal a4");
+
+        assert_eq!(env3.len(), A3_TOTAL);
+        assert_eq!(env4.len(), A4_TOTAL);
+
+        let parts = decode(&env4).expect("decode should accept pristine a4 envelope");
+        assert_eq!(parts.suite.suite_kem, 0xA4);
+        assert_eq!(parts.kem_ciphertext.len(), 1665usize);
+    }
+
+    #[test]
+    fn p3c_decode_rejects_a3_envelope_relabelled_a4() {
+        let (pk3, _sk3) = P3::keygen();
+        let env3: Vec<u8> = seal::<P3>(&pk3, b"a message", b"", b"ctx").expect("seal a3");
+        let mut envelope = env3.clone();
+        envelope[6] = 0xA4;
+        assert!(
+            decode(&envelope).is_err(),
+            "a3 relabelled as a4 should be rejected"
+        );
+    }
+
+    #[test]
+    fn p3c_decode_rejects_a4_envelope_relabelled_a3() {
+        let (pk4, _sk4) = P4::keygen();
+        let env4: Vec<u8> = seal::<P4>(&pk4, b"a message", b"", b"ctx").expect("seal a4");
+        let mut envelope = env4.clone();
+        envelope[6] = 0xA3;
+        assert!(
+            decode(&envelope).is_err(),
+            "a4 relabelled as a3 should be rejected"
+        );
+    }
+
+    #[test]
+    fn p3c_decode_rejects_a4_envelope_truncated_to_a3_total_length() {
+        let (pk4, _sk4) = P4::keygen();
+        let env4: Vec<u8> = seal::<P4>(&pk4, b"a message", b"", b"ctx").expect("seal a4");
+        let mut envelope = env4.clone();
+        envelope.truncate(A3_TOTAL);
+        assert!(
+            decode(&envelope).is_err(),
+            "a4 truncated to a3 length should be rejected"
+        );
+    }
+
+    #[test]
+    fn p3c_decode_rejects_a3_envelope_padded_to_a4_total_length() {
+        let (pk3, _sk3) = P3::keygen();
+        let env3: Vec<u8> = seal::<P3>(&pk3, b"a message", b"", b"ctx").expect("seal a3");
+        let mut envelope = env3.clone();
+        while envelope.len() < A4_TOTAL {
+            envelope.push(0u8);
+        }
+        assert!(
+            decode(&envelope).is_err(),
+            "a3 padded to a4 length should be rejected"
+        );
+
+        let mut envelope = env3.clone();
+        envelope[6] = 0xA4;
+        while envelope.len() < A4_TOTAL {
+            envelope.push(0u8);
+        }
+        assert!(
+            decode(&envelope).is_err(),
+            "a3 with suite a4 padded to a4 length should be rejected"
+        );
+    }
+
+    #[test]
+    fn p3c_decode_rejects_one_byte_longer_than_valid() {
+        let (pk3, _sk3) = P3::keygen();
+        let env3: Vec<u8> = seal::<P3>(&pk3, b"a message", b"", b"ctx").expect("seal a3");
+        let mut envelope = env3.clone();
+        envelope.push(0u8);
+        assert!(
+            decode(&envelope).is_err(),
+            "a3 one byte longer should be rejected"
+        );
+
+        let (pk4, _sk4) = P4::keygen();
+        let env4: Vec<u8> = seal::<P4>(&pk4, b"a message", b"", b"ctx").expect("seal a4");
+        let mut envelope = env4.clone();
+        envelope.push(0u8);
+        assert!(
+            decode(&envelope).is_err(),
+            "a4 one byte longer should be rejected"
+        );
+    }
+
+    #[test]
+    fn p3c_decode_rejects_reserved_and_unknown_suite_bytes_on_both_envelopes() {
+        let (pk3, _sk3) = P3::keygen();
+        let env3: Vec<u8> = seal::<P3>(&pk3, b"a message", b"", b"ctx").expect("seal a3");
+        for suite_byte in [0x00, 0xA5, 0xA6, 0xFF] {
+            let mut envelope = env3.clone();
+            envelope[6] = suite_byte;
+            assert!(
+                decode(&envelope).is_err(),
+                "suite byte {suite_byte:#04x} should be rejected"
+            );
+        }
+
+        let (pk4, _sk4) = P4::keygen();
+        let env4: Vec<u8> = seal::<P4>(&pk4, b"a message", b"", b"ctx").expect("seal a4");
+        for suite_byte in [0x00, 0xA5, 0xA6, 0xFF] {
+            let mut envelope = env4.clone();
+            envelope[6] = suite_byte;
+            assert!(
+                decode(&envelope).is_err(),
+                "suite byte {suite_byte:#04x} should be rejected"
+            );
+        }
+    }
+}
