@@ -22,6 +22,19 @@ pub const PROTOCOL_VERSION: u8 = 0x01;
 pub const SUITE_KEM_HYBRID_X25519_MLKEM768: u8 = 0xA3;
 pub const SUITE_AEAD_AES256GCM: u8 = 0xB1;
 
+/// CNSA-aligned hybrid: P-384 ECDH + ML-KEM-1024. **Allocated, not yet implemented** —
+/// deliberately absent from [`SUITE_TABLE`] until its provider exists, so the decoder
+/// can never advertise a suite nothing can decrypt.
+pub const SUITE_KEM_HYBRID_P384_MLKEM1024: u8 = 0xA4;
+
+/// Reserved: X25519 + ML-KEM-1024. Recorded now so `0xA4` can never be retro-fitted to
+/// a different pairing. Absent from [`SUITE_TABLE`] — reserved must **reject**.
+pub const SUITE_KEM_RESERVED_X25519_MLKEM1024: u8 = 0xA5;
+
+/// Reserved: pure ML-KEM-1024, no classical arm (a degenerate table row, not a third
+/// codebase). Absent from [`SUITE_TABLE`] — reserved must **reject**.
+pub const SUITE_KEM_RESERVED_PURE_MLKEM1024: u8 = 0xA6;
+
 /// Flags (reserved for future use)
 pub const FLAGS_V1: u8 = 0x00;
 
@@ -79,6 +92,69 @@ pub const VERSION: u8 = PROTOCOL_VERSION;
 pub const KEM_CT_BYTES: usize = KEM_CIPHERTEXT_BYTES;
 pub const KEM_PK_BYTES: usize = KEM_PUBLIC_KEY_BYTES;
 pub const KEM_SK_BYTES: usize = KEM_SECRET_KEY_BYTES;
+
+// ---------------------------------------------------------------------------
+// Suite table (packet 033)
+// ---------------------------------------------------------------------------
+
+/// Per-suite lengths resolved from the on-wire `suite_kem` byte.
+///
+/// One table, one lookup. The alternative — parallel per-suite constant modules —
+/// drifts: a hardening fix lands in one arm and not its twin, and an auditor reviews
+/// both. A table also makes a classical-arm-free suite a degenerate row rather than a
+/// third codebase.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SuiteParams {
+    pub suite_kem: u8,
+    pub kem_ciphertext_bytes: usize,
+    pub kem_public_key_bytes: usize,
+    pub kem_secret_key_bytes: usize,
+}
+
+/// Every suite this build can actually encrypt and decrypt.
+///
+/// **Membership is the definition of "supported."** A suite identifier that has been
+/// allocated or reserved but has no provider (`0xA4`, `0xA5`, `0xA6`) is absent, so
+/// [`suite_params`] returns `None` and the decoder fails closed. Adding a row without
+/// a working provider would make the decoder accept envelopes nothing can open.
+const SUITE_TABLE: &[SuiteParams] = &[SuiteParams {
+    suite_kem: SUITE_KEM_HYBRID_X25519_MLKEM768,
+    kem_ciphertext_bytes: KEM_CIPHERTEXT_BYTES,
+    kem_public_key_bytes: KEM_PUBLIC_KEY_BYTES,
+    kem_secret_key_bytes: KEM_SECRET_KEY_BYTES,
+}];
+
+/// Resolve a `suite_kem` byte to its lengths, or `None` if this build does not
+/// support it. Callers must treat `None` as a hard reject, never as a default.
+pub const fn suite_params(suite_kem: u8) -> Option<SuiteParams> {
+    let mut i = 0;
+    while i < SUITE_TABLE.len() {
+        if SUITE_TABLE[i].suite_kem == suite_kem {
+            return Some(SUITE_TABLE[i]);
+        }
+        i += 1;
+    }
+    None
+}
+
+const fn min_kem_ciphertext_bytes() -> usize {
+    let mut min = usize::MAX;
+    let mut i = 0;
+    while i < SUITE_TABLE.len() {
+        if SUITE_TABLE[i].kem_ciphertext_bytes < min {
+            min = SUITE_TABLE[i].kem_ciphertext_bytes;
+        }
+        i += 1;
+    }
+    min
+}
+
+/// Smallest `kem_ct` any supported suite can produce.
+///
+/// Derived from the table rather than written down, so a future row cannot silently
+/// invalidate a length guard that someone forgot to update. This is the only value
+/// safe to use in a bounds check taken *before* the suite byte has been resolved.
+pub const MIN_KEM_CIPHERTEXT_BYTES: usize = min_kem_ciphertext_bytes();
 
 /// Borrowed view of a parsed ciphertext.
 #[derive(Debug, Clone, Copy)]
