@@ -242,19 +242,41 @@ leaked on ciphertext value or key material, that control would move; it does not
 localizes to the fixed-input measurement artifact and confirms this file's "same-public-class
 only" rule, rather than indicating a timing oracle.
 
-This is still **not** a constant-time validation of the key-material class:
+### Box-capability baseline — this box DOES detect a real key-material leak (2026-07-26)
 
-- The key-A-vs-key-B run cropped to ~13K samples against dudect's own sufficiency estimate —
-  **underpowered**. A `\|t\|` below threshold at a fraction of the needed sample count is
-  "insufficient data," not "passed."
-- Noisy hardware inflates variance, which *lowers* dudect's sensitivity — a noisy box is the
-  least likely to surface a real leak. The ML-KEM signals above were only clean on dedicated
-  quiet hardware.
+The "noisy box, can't conclude" caveat is largely answered by a control experiment: run the
+**ML-KEM** key-material benches under the *identical harness on the identical box*. If the box
+can surface ML-KEM's documented Hertzbleed-class signal, then a P-384 null result is meaningful,
+not just insensitivity.
 
-**What the attacker-controlled screen does show:** the remote threat model (an attacker varies
-the ciphertext, not the key) maps to the same-public-class pool control, which shows **no signal**
-in this run — consistent with, though not as strongly powered as, the ML-KEM attacker-controlled
-classes that pass on quiet hardware.
+| Bench (same box, same harness) | max \|t\| | n | (5/tau)^2 | verdict |
+|---|---|---|---|---|
+| `rustcrypto_mlkem_key_a_vs_key_b` | **38.5** | 38K | 647 | **signal — well-powered** |
+| `stage_mlkem_key_a_vs_key_b` | **27.8** | 59K | 1923 | **signal — well-powered** |
+| `rustcrypto_mlkem_same_key` controls (×2) | ≤ 1.7 | 65–100K | — | clean |
+| `stage_mlkem_same_key` controls (×2) | ≤ 1.4 | 77–99K | — | clean |
+| **`p384_ecdh_key_a_vs_key_b`** | **1.8** | 13K | — | **no signal** |
+
+So on this exact hardware the harness catches ML-KEM's key-material dependence decisively
+(`|t|` 38.5 / 27.8, controls clean) — yet **P-384 ECDH shows no such signal (`|t|` 1.8)**. That
+makes the P-384 result a **meaningful comparative negative**: the P-384 arm does *not* exhibit
+the ML-KEM-magnitude key-material timing dependence. A signal as strong as ML-KEM's would have
+shown even at 13K samples.
+
+It is still **not** a full constant-time validation:
+- A *subtler* sub-threshold leak (weaker than ML-KEM's) below the box's sensitivity floor at
+  ~13K cropped samples is not excluded — that needs the quiet dedicated-Linux run at full
+  samples with frequency pinning.
+- But this is far stronger than "inconclusive": the box is demonstrably capable, and P-384 came
+  back clean where ML-KEM came back loud.
+
+**What the attacker-controlled screen shows:** the remote threat model (attacker varies the
+ciphertext, not the key) maps to the same-public-class pool control, which is **clean** (`|t|`
+≤ 2.9) — consistent with the ML-KEM attacker-controlled classes that pass on quiet hardware.
+
+**Claim-matrix status:** row 1 stays *not established* (dudect never *proves* constant-time),
+but the evidence is now "no signal detected, on a box that provably detects ML-KEM's signal" —
+materially stronger than the first screen.
 
 **Claim status unchanged:** *"The P-384 ECDH implementation is constant-time on the shipped
 path"* remains **NOT established** (spec 033 §7 claim-matrix row 1). This screen adds a built,
