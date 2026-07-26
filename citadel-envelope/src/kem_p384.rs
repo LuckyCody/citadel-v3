@@ -75,6 +75,12 @@ pub const MLKEM1024_CT_BYTES: usize = 1568;
 /// assumed to be acceptable here.
 pub const MLKEM_SEED_BYTES: usize = 64;
 
+/// Serialized hybrid public key: `p384_sec1[97] || mlkem1024_ek[1568]`.
+pub const P384_MLKEM1024_PUBLIC_KEY_BYTES: usize = P384_POINT_BYTES + MLKEM1024_EK_BYTES;
+
+/// Serialized hybrid secret key: `p384_scalar[48] || mlkem_seed[64]` (decision D3).
+pub const P384_MLKEM1024_SECRET_KEY_BYTES: usize = P384_SCALAR_BYTES + MLKEM_SEED_BYTES;
+
 /// ECDH output is the x-coordinate only.
 const P384_SHARED_BYTES: usize = 48;
 
@@ -113,6 +119,72 @@ impl P384MlKem1024SecretKey {
     /// every `open()`.
     fn mlkem_key(&self) -> MlKemSecretKey {
         MlKemSecretKey::from_seed(Seed::from(*self.mlkem_seed))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Key serialization (additive; parallels 0xA3's PublicKey/SecretKey to/from_bytes)
+// ---------------------------------------------------------------------------
+
+impl P384MlKem1024PublicKey {
+    /// Serialize: `p384_sec1_uncompressed[97] || mlkem1024_ek[1568]` (1665 bytes).
+    pub fn to_bytes(&self) -> [u8; P384_MLKEM1024_PUBLIC_KEY_BYTES] {
+        let mut out = [0u8; P384_MLKEM1024_PUBLIC_KEY_BYTES];
+        out[..P384_POINT_BYTES].copy_from_slice(&encode_p384_point(&self.p384));
+        out[P384_POINT_BYTES..].copy_from_slice(self.mlkem.to_bytes().as_ref());
+        out
+    }
+
+    /// Parse a serialized `0xA4` public key, validating both arms.
+    ///
+    /// The P-384 point is checked on-curve, non-identity, and uncompressed-SEC1 by
+    /// [`parse_p384_point`]; the ML-KEM-1024 encapsulation key is validated by
+    /// re-parsing its encoding. Wrong length, a bad point, or a malformed ML-KEM key
+    /// all fail closed. This is the attacker-controlled path (a peer supplies the key
+    /// you seal to), so validation happens here, not at first use.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, DecryptionError> {
+        if bytes.len() != P384_MLKEM1024_PUBLIC_KEY_BYTES {
+            return Err(DecryptionError);
+        }
+        let p384 = parse_p384_point(&bytes[..P384_POINT_BYTES]).ok_or(DecryptionError)?;
+        let mlkem_ek_bytes: [u8; MLKEM1024_EK_BYTES] = bytes[P384_POINT_BYTES..]
+            .try_into()
+            .map_err(|_| DecryptionError)?;
+        let encoded = mlkem_ek_bytes.into();
+        let mlkem = MlKemPublicKey::new(&encoded).map_err(|_| DecryptionError)?;
+        Ok(Self { p384, mlkem })
+    }
+}
+
+impl P384MlKem1024SecretKey {
+    /// Serialize: `p384_scalar[48] || mlkem_seed[64]` (112 bytes, decision D3).
+    ///
+    /// Returns a bare array. Callers storing this beyond immediate use should wrap it
+    /// in `Zeroizing::new(sk.to_bytes())` — mirrors `0xA3`'s [`crate::SecretKey::to_bytes`].
+    pub fn to_bytes(&self) -> [u8; P384_MLKEM1024_SECRET_KEY_BYTES] {
+        let mut out = [0u8; P384_MLKEM1024_SECRET_KEY_BYTES];
+        out[..P384_SCALAR_BYTES].copy_from_slice(self.p384.to_bytes().as_slice());
+        out[P384_SCALAR_BYTES..].copy_from_slice(&*self.mlkem_seed);
+        out
+    }
+
+    /// Parse a serialized `0xA4` secret key.
+    ///
+    /// The P-384 scalar is validated in range by `from_slice`. The ML-KEM half is a
+    /// 64-byte seed and `from_seed` is infallible (decision D3), so there is no
+    /// ML-KEM validation step and none is skipped.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, DecryptionError> {
+        if bytes.len() != P384_MLKEM1024_SECRET_KEY_BYTES {
+            return Err(DecryptionError);
+        }
+        let p384 =
+            P384SecretKey::from_slice(&bytes[..P384_SCALAR_BYTES]).map_err(|_| DecryptionError)?;
+        let mut seed = Zeroizing::new([0u8; MLKEM_SEED_BYTES]);
+        seed.copy_from_slice(&bytes[P384_SCALAR_BYTES..]);
+        Ok(Self {
+            p384,
+            mlkem_seed: seed,
+        })
     }
 }
 
@@ -446,5 +518,84 @@ mod p3d_point_validation_tests {
             HybridP384MlKem1024Provider::decapsulate(&sk, &ciphertext).is_err(),
             "a correctly tagged off-curve point must be rejected"
         );
+    }
+}
+
+/// Key serialization round-trips and rejection of malformed encodings.
+///
+/// `from_bytes` is the deserialization boundary a caller reaches when loading a stored
+/// or received `0xA4` key, so both the happy round-trip and fail-closed behaviour on
+/// bad input are pinned here.
+#[cfg(test)]
+mod p384_key_serialization_tests {
+    use super::*;
+    use crate::kem::KemProvider;
+
+    type P = HybridP384MlKem1024Provider;
+
+    #[test]
+    fn public_key_bytes_roundtrip_and_size() {
+        let (pk, _sk) = P::keygen();
+        let bytes = pk.to_bytes();
+        assert_eq!(bytes.len(), P384_MLKEM1024_PUBLIC_KEY_BYTES);
+        assert_eq!(bytes.len(), 1665);
+        assert_eq!(bytes[0], SEC1_TAG_UNCOMPRESSED);
+        let pk2 = P384MlKem1024PublicKey::from_bytes(&bytes).expect("parse pk");
+        assert_eq!(pk2.to_bytes(), bytes, "re-serialization must be identical");
+    }
+
+    #[test]
+    fn secret_key_bytes_roundtrip_and_size() {
+        let (_pk, sk) = P::keygen();
+        let bytes = sk.to_bytes();
+        assert_eq!(bytes.len(), P384_MLKEM1024_SECRET_KEY_BYTES);
+        assert_eq!(bytes.len(), 112);
+        let sk2 = P384MlKem1024SecretKey::from_bytes(&bytes).expect("parse sk");
+        assert_eq!(sk2.to_bytes(), bytes, "re-serialization must be identical");
+    }
+
+    /// The decisive functional test: a keypair serialized and reloaded from bytes on
+    /// both sides still seals and opens — proving the encoding preserves the actual key
+    /// material, not just its length.
+    #[test]
+    fn reserialized_keypair_still_seals_and_opens() {
+        let (pk, sk) = P::keygen();
+        let pk = P384MlKem1024PublicKey::from_bytes(&pk.to_bytes()).expect("reload pk");
+        let sk = P384MlKem1024SecretKey::from_bytes(&sk.to_bytes()).expect("reload sk");
+
+        let envelope =
+            crate::wire_v2::seal::<P>(&pk, b"reserialized", b"aad", b"ctx").expect("seal");
+        let opened = crate::wire_v2::open::<P>(&sk, &envelope, b"aad", b"ctx").expect("open");
+        assert_eq!(opened, b"reserialized");
+    }
+
+    #[test]
+    fn public_key_from_bytes_rejects_wrong_length() {
+        let (pk, _sk) = P::keygen();
+        let good = pk.to_bytes();
+        assert!(P384MlKem1024PublicKey::from_bytes(&good[..good.len() - 1]).is_err());
+        let mut long = good.to_vec();
+        long.push(0);
+        assert!(P384MlKem1024PublicKey::from_bytes(&long).is_err());
+        assert!(P384MlKem1024PublicKey::from_bytes(&[]).is_err());
+    }
+
+    /// Right length, correct `0x04` tag, `x = y = 0` is off-curve — must fail closed.
+    #[test]
+    fn public_key_from_bytes_rejects_off_curve_point() {
+        let mut bytes = [0u8; P384_MLKEM1024_PUBLIC_KEY_BYTES];
+        bytes[0] = SEC1_TAG_UNCOMPRESSED;
+        assert!(P384MlKem1024PublicKey::from_bytes(&bytes).is_err());
+    }
+
+    #[test]
+    fn secret_key_from_bytes_rejects_wrong_length() {
+        let (_pk, sk) = P::keygen();
+        let good = sk.to_bytes();
+        assert!(P384MlKem1024SecretKey::from_bytes(&good[..good.len() - 1]).is_err());
+        let mut long = good.to_vec();
+        long.push(0);
+        assert!(P384MlKem1024SecretKey::from_bytes(&long).is_err());
+        assert!(P384MlKem1024SecretKey::from_bytes(&[]).is_err());
     }
 }

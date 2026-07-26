@@ -297,7 +297,10 @@ pub use envelope::Envelope;
 pub use error::{DecryptionError, EncodingError};
 #[doc(hidden)]
 pub use kem::{HybridX25519MlKem768Provider, KemProvider, MlKem768Provider};
-pub use kem_p384::{HybridP384MlKem1024Provider, P384MlKem1024PublicKey, P384MlKem1024SecretKey};
+pub use kem_p384::{
+    HybridP384MlKem1024Provider, P384MlKem1024PublicKey, P384MlKem1024SecretKey,
+    P384_MLKEM1024_PUBLIC_KEY_BYTES, P384_MLKEM1024_SECRET_KEY_BYTES,
+};
 
 /// Deterministic envelope-v2 construction for checked-in vectors only.
 /// This module is absent from default production builds.
