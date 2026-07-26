@@ -41,7 +41,10 @@ use std::collections::HashMap;
 use std::slice;
 use std::sync::{Mutex, OnceLock};
 
-use citadel_envelope::{Aad, Citadel, Context, PublicKey, SecretKey};
+use citadel_envelope::{
+    Aad, Citadel, CitadelP384, Context, P384MlKem1024PublicKey, P384MlKem1024SecretKey, PublicKey,
+    SecretKey,
+};
 use zeroize::Zeroizing;
 
 #[cfg(test)]
@@ -161,6 +164,26 @@ pub extern "C" fn citadel_public_key_bytes() -> usize {
 #[no_mangle]
 pub extern "C" fn citadel_secret_key_bytes() -> usize {
     citadel_envelope::wire::KEM_SECRET_KEY_BYTES
+}
+
+/// Size of a serialized public key for a KEM suite.
+#[no_mangle]
+pub extern "C" fn citadel_public_key_bytes_for_suite(suite: u8) -> usize {
+    match suite {
+        0xA3 => citadel_envelope::wire::KEM_PUBLIC_KEY_BYTES,
+        0xA4 => citadel_envelope::P384_MLKEM1024_PUBLIC_KEY_BYTES,
+        _ => 0,
+    }
+}
+
+/// Size of a serialized secret key for a KEM suite.
+#[no_mangle]
+pub extern "C" fn citadel_secret_key_bytes_for_suite(suite: u8) -> usize {
+    match suite {
+        0xA3 => citadel_envelope::wire::KEM_SECRET_KEY_BYTES,
+        0xA4 => citadel_envelope::P384_MLKEM1024_SECRET_KEY_BYTES,
+        _ => 0,
+    }
 }
 
 /// Generate a new hybrid keypair.
@@ -349,6 +372,194 @@ unsafe fn citadel_open_impl(
         slice::from_raw_parts(ctx_ptr, ctx_len)
     };
     let engine = Citadel::new();
+    let plaintext = match engine.open(
+        &sk,
+        ciphertext,
+        &Aad::raw(aad_bytes),
+        &Context::raw(ctx_bytes),
+    ) {
+        Ok(pt) => pt,
+        Err(_) => return CITADEL_ERR_OPEN,
+    };
+    write_output(&plaintext, pt_out, pt_len_out)
+}
+
+/// Generate a new P-384 + ML-KEM-1024 hybrid keypair.
+///
+/// Writes public key into `*pk_out`/`*pk_len` and secret key into
+/// `*sk_out`/`*sk_len`. Caller must free both with `citadel_free`.
+///
+/// # Safety
+/// All pointer arguments must be valid, non-null, and properly aligned.
+#[no_mangle]
+pub unsafe extern "C" fn citadel_p384_keygen(
+    pk_out: *mut *mut u8,
+    pk_len: *mut usize,
+    sk_out: *mut *mut u8,
+    sk_len: *mut usize,
+) -> i32 {
+    ffi_guard(|| unsafe { citadel_p384_keygen_impl(pk_out, pk_len, sk_out, sk_len) })
+}
+
+unsafe fn citadel_p384_keygen_impl(
+    pk_out: *mut *mut u8,
+    pk_len: *mut usize,
+    sk_out: *mut *mut u8,
+    sk_len: *mut usize,
+) -> i32 {
+    if pk_out.is_null() || pk_len.is_null() || sk_out.is_null() || sk_len.is_null() {
+        return CITADEL_ERR_NULL;
+    }
+    *pk_out = std::ptr::null_mut();
+    *pk_len = 0;
+    *sk_out = std::ptr::null_mut();
+    *sk_len = 0;
+    let engine = CitadelP384::new();
+    let (pk, sk) = engine.generate_keypair();
+    let rc = write_output(&pk.to_bytes(), pk_out, pk_len);
+    if rc != CITADEL_OK {
+        return rc;
+    }
+    let sk_bytes = Zeroizing::new(sk.to_bytes());
+    write_output(&*sk_bytes, sk_out, sk_len)
+}
+
+/// Encrypt plaintext to a P-384 + ML-KEM-1024 recipient public key.
+///
+/// Caller must free `*ct_out` with `citadel_free(*ct_out, *ct_len_out)`.
+///
+/// # Safety
+/// All non-null pointer arguments must be valid and properly aligned.
+/// `aad_ptr` and `ctx_ptr` may be null (treated as empty).
+#[no_mangle]
+pub unsafe extern "C" fn citadel_p384_seal(
+    pk_ptr: *const u8,
+    pk_len: usize,
+    pt_ptr: *const u8,
+    pt_len: usize,
+    aad_ptr: *const u8,
+    aad_len: usize,
+    ctx_ptr: *const u8,
+    ctx_len: usize,
+    ct_out: *mut *mut u8,
+    ct_len_out: *mut usize,
+) -> i32 {
+    ffi_guard(|| unsafe {
+        citadel_p384_seal_impl(
+            pk_ptr, pk_len, pt_ptr, pt_len, aad_ptr, aad_len, ctx_ptr, ctx_len, ct_out, ct_len_out,
+        )
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe fn citadel_p384_seal_impl(
+    pk_ptr: *const u8,
+    pk_len: usize,
+    pt_ptr: *const u8,
+    pt_len: usize,
+    aad_ptr: *const u8,
+    aad_len: usize,
+    ctx_ptr: *const u8,
+    ctx_len: usize,
+    ct_out: *mut *mut u8,
+    ct_len_out: *mut usize,
+) -> i32 {
+    if pk_ptr.is_null() || pt_ptr.is_null() || ct_out.is_null() || ct_len_out.is_null() {
+        return CITADEL_ERR_NULL;
+    }
+    *ct_out = std::ptr::null_mut();
+    *ct_len_out = 0;
+    let pk_bytes = slice::from_raw_parts(pk_ptr, pk_len);
+    let pk = match P384MlKem1024PublicKey::from_bytes(pk_bytes) {
+        Ok(k) => k,
+        Err(_) => return CITADEL_ERR_KEY,
+    };
+    let plaintext = slice::from_raw_parts(pt_ptr, pt_len);
+    let aad_bytes = if aad_ptr.is_null() || aad_len == 0 {
+        &[][..]
+    } else {
+        slice::from_raw_parts(aad_ptr, aad_len)
+    };
+    let ctx_bytes = if ctx_ptr.is_null() || ctx_len == 0 {
+        &[][..]
+    } else {
+        slice::from_raw_parts(ctx_ptr, ctx_len)
+    };
+    let engine = CitadelP384::new();
+    let ciphertext = match engine.seal(
+        &pk,
+        plaintext,
+        &Aad::raw(aad_bytes),
+        &Context::raw(ctx_bytes),
+    ) {
+        Ok(ct) => ct,
+        Err(_) => return CITADEL_ERR_SEAL,
+    };
+    write_output(&ciphertext, ct_out, ct_len_out)
+}
+
+/// Decrypt a P-384 + ML-KEM-1024 ciphertext using the recipient secret key.
+///
+/// Caller must free `*pt_out` with `citadel_free(*pt_out, *pt_len_out)`.
+///
+/// # Safety
+/// All non-null pointer arguments must be valid and properly aligned.
+/// `aad_ptr` and `ctx_ptr` may be null (treated as empty).
+#[no_mangle]
+pub unsafe extern "C" fn citadel_p384_open(
+    sk_ptr: *const u8,
+    sk_len: usize,
+    ct_ptr: *const u8,
+    ct_len: usize,
+    aad_ptr: *const u8,
+    aad_len: usize,
+    ctx_ptr: *const u8,
+    ctx_len: usize,
+    pt_out: *mut *mut u8,
+    pt_len_out: *mut usize,
+) -> i32 {
+    ffi_guard(|| unsafe {
+        citadel_p384_open_impl(
+            sk_ptr, sk_len, ct_ptr, ct_len, aad_ptr, aad_len, ctx_ptr, ctx_len, pt_out, pt_len_out,
+        )
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe fn citadel_p384_open_impl(
+    sk_ptr: *const u8,
+    sk_len: usize,
+    ct_ptr: *const u8,
+    ct_len: usize,
+    aad_ptr: *const u8,
+    aad_len: usize,
+    ctx_ptr: *const u8,
+    ctx_len: usize,
+    pt_out: *mut *mut u8,
+    pt_len_out: *mut usize,
+) -> i32 {
+    if sk_ptr.is_null() || ct_ptr.is_null() || pt_out.is_null() || pt_len_out.is_null() {
+        return CITADEL_ERR_NULL;
+    }
+    *pt_out = std::ptr::null_mut();
+    *pt_len_out = 0;
+    let sk_bytes = slice::from_raw_parts(sk_ptr, sk_len);
+    let sk = match P384MlKem1024SecretKey::from_bytes(sk_bytes) {
+        Ok(k) => k,
+        Err(_) => return CITADEL_ERR_KEY,
+    };
+    let ciphertext = slice::from_raw_parts(ct_ptr, ct_len);
+    let aad_bytes = if aad_ptr.is_null() || aad_len == 0 {
+        &[][..]
+    } else {
+        slice::from_raw_parts(aad_ptr, aad_len)
+    };
+    let ctx_bytes = if ctx_ptr.is_null() || ctx_len == 0 {
+        &[][..]
+    } else {
+        slice::from_raw_parts(ctx_ptr, ctx_len)
+    };
+    let engine = CitadelP384::new();
     let plaintext = match engine.open(
         &sk,
         ciphertext,
@@ -629,6 +840,257 @@ mod safety_tests {
             citadel_free(pk_ptr, pk_len);
             citadel_free(sk_ptr, sk_len);
             citadel_free(ct_ptr, ct_len);
+        }
+    }
+
+    #[test]
+    fn p384_keygen_produces_valid_lengths() {
+        let mut pk_ptr: *mut u8 = std::ptr::null_mut();
+        let mut pk_len: usize = 0;
+        let mut sk_ptr: *mut u8 = std::ptr::null_mut();
+        let mut sk_len: usize = 0;
+        let rc = unsafe { citadel_p384_keygen(&mut pk_ptr, &mut pk_len, &mut sk_ptr, &mut sk_len) };
+        assert_eq!(rc, CITADEL_OK);
+        assert_eq!(pk_len, 1665);
+        assert_eq!(sk_len, 112);
+        assert!(!pk_ptr.is_null());
+        assert!(!sk_ptr.is_null());
+        unsafe {
+            citadel_free(pk_ptr, pk_len);
+            citadel_free(sk_ptr, sk_len);
+        }
+    }
+
+    #[test]
+    fn p384_seal_open_roundtrip() {
+        let mut pk_ptr: *mut u8 = std::ptr::null_mut();
+        let mut pk_len: usize = 0;
+        let mut sk_ptr: *mut u8 = std::ptr::null_mut();
+        let mut sk_len: usize = 0;
+        assert_eq!(
+            unsafe { citadel_p384_keygen(&mut pk_ptr, &mut pk_len, &mut sk_ptr, &mut sk_len) },
+            CITADEL_OK
+        );
+
+        let plaintext = b"p384 ffi roundtrip";
+        let aad = b"aad";
+        let context = b"context";
+        let mut ct_ptr: *mut u8 = std::ptr::null_mut();
+        let mut ct_len: usize = 0;
+        assert_eq!(
+            unsafe {
+                citadel_p384_seal(
+                    pk_ptr,
+                    pk_len,
+                    plaintext.as_ptr(),
+                    plaintext.len(),
+                    aad.as_ptr(),
+                    aad.len(),
+                    context.as_ptr(),
+                    context.len(),
+                    &mut ct_ptr,
+                    &mut ct_len,
+                )
+            },
+            CITADEL_OK
+        );
+
+        let mut pt_ptr: *mut u8 = std::ptr::null_mut();
+        let mut pt_len: usize = 0;
+        assert_eq!(
+            unsafe {
+                citadel_p384_open(
+                    sk_ptr,
+                    sk_len,
+                    ct_ptr,
+                    ct_len,
+                    aad.as_ptr(),
+                    aad.len(),
+                    context.as_ptr(),
+                    context.len(),
+                    &mut pt_ptr,
+                    &mut pt_len,
+                )
+            },
+            CITADEL_OK
+        );
+        assert_eq!(unsafe { slice::from_raw_parts(pt_ptr, pt_len) }, plaintext);
+        unsafe {
+            citadel_free(pk_ptr, pk_len);
+            citadel_free(sk_ptr, sk_len);
+            citadel_free(ct_ptr, ct_len);
+            citadel_free(pt_ptr, pt_len);
+        }
+    }
+
+    #[test]
+    fn p384_open_wrong_aad_returns_error() {
+        let mut pk_ptr: *mut u8 = std::ptr::null_mut();
+        let mut pk_len: usize = 0;
+        let mut sk_ptr: *mut u8 = std::ptr::null_mut();
+        let mut sk_len: usize = 0;
+        assert_eq!(
+            unsafe { citadel_p384_keygen(&mut pk_ptr, &mut pk_len, &mut sk_ptr, &mut sk_len) },
+            CITADEL_OK
+        );
+        let mut ct_ptr: *mut u8 = std::ptr::null_mut();
+        let mut ct_len: usize = 0;
+        assert_eq!(
+            unsafe {
+                citadel_p384_seal(
+                    pk_ptr,
+                    pk_len,
+                    b"data".as_ptr(),
+                    4,
+                    b"correct-aad".as_ptr(),
+                    11,
+                    std::ptr::null(),
+                    0,
+                    &mut ct_ptr,
+                    &mut ct_len,
+                )
+            },
+            CITADEL_OK
+        );
+        let mut pt_ptr: *mut u8 = std::ptr::null_mut();
+        let mut pt_len: usize = 0;
+        assert_ne!(
+            unsafe {
+                citadel_p384_open(
+                    sk_ptr,
+                    sk_len,
+                    ct_ptr,
+                    ct_len,
+                    b"wrong-aad".as_ptr(),
+                    9,
+                    std::ptr::null(),
+                    0,
+                    &mut pt_ptr,
+                    &mut pt_len,
+                )
+            },
+            CITADEL_OK
+        );
+        unsafe {
+            citadel_free(pk_ptr, pk_len);
+            citadel_free(sk_ptr, sk_len);
+            citadel_free(ct_ptr, ct_len);
+        }
+    }
+
+    #[test]
+    fn p384_keygen_null_out_returns_error() {
+        let mut pk_len: usize = 0;
+        let mut sk_ptr: *mut u8 = std::ptr::null_mut();
+        let mut sk_len: usize = 0;
+        assert_eq!(
+            unsafe {
+                citadel_p384_keygen(std::ptr::null_mut(), &mut pk_len, &mut sk_ptr, &mut sk_len)
+            },
+            CITADEL_ERR_NULL
+        );
+    }
+
+    #[test]
+    fn p384_open_wrong_sk_len_returns_error() {
+        let mut pk_ptr: *mut u8 = std::ptr::null_mut();
+        let mut pk_len: usize = 0;
+        let mut sk_ptr: *mut u8 = std::ptr::null_mut();
+        let mut sk_len: usize = 0;
+        assert_eq!(
+            unsafe { citadel_p384_keygen(&mut pk_ptr, &mut pk_len, &mut sk_ptr, &mut sk_len) },
+            CITADEL_OK
+        );
+        let mut ct_ptr: *mut u8 = std::ptr::null_mut();
+        let mut ct_len: usize = 0;
+        assert_eq!(
+            unsafe {
+                citadel_p384_seal(
+                    pk_ptr,
+                    pk_len,
+                    b"data".as_ptr(),
+                    4,
+                    b"aad".as_ptr(),
+                    3,
+                    std::ptr::null(),
+                    0,
+                    &mut ct_ptr,
+                    &mut ct_len,
+                )
+            },
+            CITADEL_OK
+        );
+        let mut pt_ptr: *mut u8 = std::ptr::null_mut();
+        let mut pt_len: usize = 0;
+        assert_ne!(
+            unsafe {
+                citadel_p384_open(
+                    sk_ptr,
+                    1,
+                    ct_ptr,
+                    ct_len,
+                    b"aad".as_ptr(),
+                    3,
+                    std::ptr::null(),
+                    0,
+                    &mut pt_ptr,
+                    &mut pt_len,
+                )
+            },
+            CITADEL_OK
+        );
+        unsafe {
+            citadel_free(pk_ptr, pk_len);
+            citadel_free(sk_ptr, sk_len);
+            citadel_free(ct_ptr, ct_len);
+        }
+    }
+
+    #[test]
+    fn suite_parameterized_key_sizes_are_correct() {
+        assert_eq!(citadel_public_key_bytes_for_suite(0xA3), 1216);
+        assert_eq!(citadel_public_key_bytes_for_suite(0xA4), 1665);
+        assert_eq!(citadel_public_key_bytes_for_suite(0x00), 0);
+        assert_eq!(citadel_secret_key_bytes_for_suite(0xA3), 2432);
+        assert_eq!(citadel_secret_key_bytes_for_suite(0xA4), 112);
+        assert_eq!(citadel_secret_key_bytes_for_suite(0x00), 0);
+    }
+
+    #[test]
+    fn p384_seal_rejects_a3_public_key() {
+        let mut pk_ptr: *mut u8 = std::ptr::null_mut();
+        let mut pk_len: usize = 0;
+        let mut sk_ptr: *mut u8 = std::ptr::null_mut();
+        let mut sk_len: usize = 0;
+        assert_eq!(
+            unsafe { citadel_keygen(&mut pk_ptr, &mut pk_len, &mut sk_ptr, &mut sk_len) },
+            CITADEL_OK
+        );
+        assert_eq!(pk_len, 1216);
+        let mut ct_ptr: *mut u8 = std::ptr::null_mut();
+        let mut ct_len: usize = 0;
+        assert_eq!(
+            unsafe {
+                citadel_p384_seal(
+                    pk_ptr,
+                    pk_len,
+                    b"data".as_ptr(),
+                    4,
+                    std::ptr::null(),
+                    0,
+                    std::ptr::null(),
+                    0,
+                    &mut ct_ptr,
+                    &mut ct_len,
+                )
+            },
+            CITADEL_ERR_KEY
+        );
+        assert!(ct_ptr.is_null());
+        assert_eq!(ct_len, 0);
+        unsafe {
+            citadel_free(pk_ptr, pk_len);
+            citadel_free(sk_ptr, sk_len);
         }
     }
 }
