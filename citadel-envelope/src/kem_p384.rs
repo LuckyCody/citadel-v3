@@ -281,6 +281,29 @@ fn encode_p384_point(pk: &P384PublicKey) -> Vec<u8> {
 // Provider
 // ---------------------------------------------------------------------------
 
+/// Diagnostic-only: the P-384 ECDH half of `0xA4` decapsulation, isolated from ML-KEM.
+///
+/// Mirrors [`crate::kem::diagnostic_x25519_decapsulate_only`] for the classical arm so a
+/// dudect screen can attribute a timing signal to the `p384` crate specifically, rather than
+/// to the ML-KEM-1024 arm. This is the exact ECDH `decapsulate` performs — parse the
+/// ephemeral point, `diffie_hellman` with the static scalar, return the 48-byte x-coordinate.
+/// Feature-gated out of production builds; never call it there.
+#[doc(hidden)]
+#[cfg(feature = "timing-diagnostics")]
+pub fn diagnostic_p384_ecdh_only(
+    sk: &P384MlKem1024SecretKey,
+    ct: &[u8],
+) -> Result<[u8; P384_SHARED_BYTES], DecryptionError> {
+    if ct.len() != P384_POINT_BYTES + MLKEM1024_CT_BYTES {
+        return Err(DecryptionError);
+    }
+    let ephemeral_pk = parse_p384_point(&ct[..P384_POINT_BYTES]).ok_or(DecryptionError)?;
+    let p384_ss = diffie_hellman(sk.p384.to_nonzero_scalar(), ephemeral_pk.as_affine());
+    let mut out = [0u8; P384_SHARED_BYTES];
+    out.copy_from_slice(p384_ss.raw_secret_bytes());
+    Ok(out)
+}
+
 /// Hybrid P-384 + ML-KEM-1024 provider (suite `0xA4`).
 pub struct HybridP384MlKem1024Provider;
 

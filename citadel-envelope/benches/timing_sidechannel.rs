@@ -28,7 +28,10 @@ use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::time::Instant;
 
-use citadel_envelope::{timing_diagnostics, wire, Aad, Citadel, Context, PublicKey, SecretKey};
+use citadel_envelope::{
+    timing_diagnostics, wire, Aad, Citadel, CitadelP384, Context, P384MlKem1024PublicKey,
+    P384MlKem1024SecretKey, PublicKey, SecretKey,
+};
 use libcrux_ml_kem::mlkem768 as libcrux_mlkem768;
 use ml_kem::{
     kem::{Decapsulate, Encapsulate, Kem},
@@ -1256,6 +1259,128 @@ fn run_independent_isolated_sample(mode: &str, count: usize, output: &PathBuf) {
     );
 }
 
+// ---------------------------------------------------------------------------
+// P-384 arm (suite 0xA4) — dudect screens for the NEW classical primitive.
+// The ML-KEM-1024 arm is the same family as 768 (already characterized in TIMING.md);
+// what 0xA4 adds is pure-Rust p384 ECDH, isolated here via `p384_ecdh_only`.
+// ---------------------------------------------------------------------------
+
+fn p384_fixture_kem_ct(pk: &P384MlKem1024PublicKey, label: &str, index: usize) -> Vec<u8> {
+    let (_, kem_ct) = timing_diagnostics::p384_encapsulate(pk)
+        .unwrap_or_else(|_| panic!("{label} p384 encapsulation failed at fixture index {index}"));
+    assert_eq!(
+        kem_ct.len(),
+        1665,
+        "{label} p384 kem ct length mismatch at index {index}"
+    );
+    kem_ct
+}
+
+/// Static-key-material screen on the P-384 ECDH: two keys A/B, does decapsulation timing
+/// distinguish the key? This is the class the ML-KEM finding flagged (Hertzbleed-class); it
+/// is NOT attacker-varyable per query. Interpret only with the same-key pool control below.
+fn bench_stage_p384_ecdh_key_a_vs_key_b_success(runner: &mut CtRunner, rng: &mut BenchRng) {
+    let cit = CitadelP384::new();
+    let (pk_a, sk_a) = cit.generate_keypair();
+    let (pk_b, sk_b) = cit.generate_keypair();
+    let sk_a_bytes = sk_a.to_bytes();
+    let sk_b_bytes = sk_b.to_bytes();
+    let mut samples = Vec::new();
+    for i in 0..4096 {
+        let sk = P384MlKem1024SecretKey::from_bytes(&sk_a_bytes).unwrap();
+        samples.push((Class::Left, sk, p384_fixture_kem_ct(&pk_a, "p384-key-a", i)));
+        let sk = P384MlKem1024SecretKey::from_bytes(&sk_b_bytes).unwrap();
+        samples.push((
+            Class::Right,
+            sk,
+            p384_fixture_kem_ct(&pk_b, "p384-key-b", i),
+        ));
+    }
+    for _ in 0..100_000 {
+        let sample = &samples[rng.gen_range(0..samples.len())];
+        runner.run_one(sample.0, || {
+            let _ = black_box(timing_diagnostics::p384_ecdh_only(
+                &sample.1,
+                black_box(&sample.2),
+            ));
+        });
+    }
+}
+
+/// Null control for the screen above: ONE key, two independent ciphertext pools assigned to
+/// Left/Right. If this exceeds |t| ≥ 4.5, the key-A-vs-key-B result is confounded by
+/// pool/layout effects and must be marked REVIEW, not treated as a key-material leak.
+fn bench_stage_p384_ecdh_same_key_pool_a_vs_pool_b_control(
+    runner: &mut CtRunner,
+    rng: &mut BenchRng,
+) {
+    let cit = CitadelP384::new();
+    let (pk, sk) = cit.generate_keypair();
+    let sk_bytes = sk.to_bytes();
+    let mut samples = Vec::new();
+    for i in 0..4096 {
+        let sk_l = P384MlKem1024SecretKey::from_bytes(&sk_bytes).unwrap();
+        samples.push((
+            Class::Left,
+            sk_l,
+            p384_fixture_kem_ct(&pk, "p384-pool-a", i),
+        ));
+        let sk_r = P384MlKem1024SecretKey::from_bytes(&sk_bytes).unwrap();
+        samples.push((
+            Class::Right,
+            sk_r,
+            p384_fixture_kem_ct(&pk, "p384-pool-b", i),
+        ));
+    }
+    for _ in 0..100_000 {
+        let sample = &samples[rng.gen_range(0..samples.len())];
+        runner.run_one(sample.0, || {
+            let _ = black_box(timing_diagnostics::p384_ecdh_only(
+                &sample.1,
+                black_box(&sample.2),
+            ));
+        });
+    }
+}
+
+/// INFORMATIONAL — not a gate. SAME key; one *identical* ciphertext repeated (Left) vs varying
+/// valid ciphertexts (Right). This is deliberately NOT a same-public-class comparison, so it is
+/// confounded by the classic dudect fixed-input artifact: a repeated identical input stays
+/// cache/branch-predictor-hot and runs faster regardless of secrets. Measured `|t| ≈ 106`,
+/// which is the artifact, not a leak — the same-public-class control below
+/// (`..._same_key_pool_a_vs_pool_b_control`, varying-vs-varying) stays `< 4.5`. Kept as a
+/// demonstration of why TIMING.md requires same-public-class benches; the remote-relevant
+/// attacker-controlled screen is the pool control, not this.
+fn bench_info_p384_ecdh_fixed_vs_random_ciphertext(runner: &mut CtRunner, rng: &mut BenchRng) {
+    let cit = CitadelP384::new();
+    let (pk, sk) = cit.generate_keypair();
+    let sk_bytes = sk.to_bytes();
+    let sk_fixed = P384MlKem1024SecretKey::from_bytes(&sk_bytes).unwrap();
+    let fixed_ct = p384_fixture_kem_ct(&pk, "p384-fixed-ct", 0);
+    let mut random_cts = Vec::with_capacity(4096);
+    for i in 0..4096 {
+        random_cts.push(p384_fixture_kem_ct(&pk, "p384-random-ct", i + 1));
+    }
+
+    let mut random_idx = 0usize;
+    for _ in 0..100_000 {
+        if rng.gen::<bool>() {
+            runner.run_one(Class::Left, || {
+                let _ = black_box(timing_diagnostics::p384_ecdh_only(
+                    &sk_fixed,
+                    black_box(&fixed_ct),
+                ));
+            });
+        } else {
+            let ct = &random_cts[random_idx % random_cts.len()];
+            random_idx += 1;
+            runner.run_one(Class::Right, || {
+                let _ = black_box(timing_diagnostics::p384_ecdh_only(&sk_fixed, black_box(ct)));
+            });
+        }
+    }
+}
+
 fn main() {
     let mut opts = BenchOpts::default();
     let mut args = std::env::args().skip(1).peekable();
@@ -1449,6 +1574,21 @@ fn main() {
             name: BenchName("bench_info_valid_vs_short_public_format"),
             seed: None,
             benchfn: bench_info_valid_vs_short_public_format,
+        },
+        BenchMetadata {
+            name: BenchName("bench_stage_p384_ecdh_key_a_vs_key_b_success"),
+            seed: None,
+            benchfn: bench_stage_p384_ecdh_key_a_vs_key_b_success,
+        },
+        BenchMetadata {
+            name: BenchName("bench_stage_p384_ecdh_same_key_pool_a_vs_pool_b_control"),
+            seed: None,
+            benchfn: bench_stage_p384_ecdh_same_key_pool_a_vs_pool_b_control,
+        },
+        BenchMetadata {
+            name: BenchName("bench_info_p384_ecdh_fixed_vs_random_ciphertext"),
+            seed: None,
+            benchfn: bench_info_p384_ecdh_fixed_vs_random_ciphertext,
         },
     ];
 
