@@ -23,6 +23,15 @@ ml-kem = { version = "=0.3.2", default-features = false, features = ["getrandom"
 # X25519 ECDH - classical KEM for hybrid defense-in-depth
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 
+# P-384 ECDH — classical arm of suite 0xA4 (CNSA 2.0 category 5 pairing).
+# `default-features = false` deliberately: the default set pulls ecdsa + pkcs8 + pem,
+# none of which this crate uses. Suite 0xA4 does ECDH and nothing else, so signing and
+# key-serialization code that would otherwise land in the audit surface stays out of the
+# build entirely. Feature set measured in the P1 supply-chain probe
+# (eem/033R_P1_supply_chain_receipt.md): 50 crates scanned, zero advisories, and p384
+# resolves onto the same RustCrypto generation ml-kem 0.3.2 already pins.
+p384 = { version = "0.14", default-features = false, features = ["ecdh", "arithmetic", "alloc"] }
+
 # Symmetric cryptography. `zeroize` is enabled down the whole cipher stack so the
 # AES-GCM keyed state is ZeroizeOnDrop (028-R P3 / 029-R / 030-R — CLOSED):
 # - aes 0.9 is ZeroizeOnDrop on all backends → AES round-key schedule wiped on drop.

@@ -291,6 +291,92 @@ impl Citadel {
 }
 
 // ---------------------------------------------------------------------------
+// CNSA-aligned suite engine (0xA4) — additive; the frozen 0xA3 Citadel is untouched
+// ---------------------------------------------------------------------------
+
+/// Citadel encryption engine for the P-384 + ML-KEM-1024 suite (wire `0xA4`).
+///
+/// Hybrid P-384 ECDH + ML-KEM-1024 (the CNSA 2.0 category-5 pairing); security holds
+/// if *either* primitive remains secure. This is a **separate, additive** engine from
+/// [`Citadel`] — the frozen X25519 + ML-KEM-768 suite — with its own key types
+/// ([`P384MlKem1024PublicKey`](crate::P384MlKem1024PublicKey) /
+/// [`P384MlKem1024SecretKey`](crate::P384MlKem1024SecretKey)). It shares [`Aad`],
+/// [`Context`], [`SealError`], and [`OpenError`], which are suite-agnostic.
+///
+/// The name deliberately states the algorithms, not "CNSA": implementing the CNSA 2.0
+/// algorithms is **not** CNSA compliance (as FIPS 203/204 algorithms are not FIPS 140-3
+/// validation), and that claim is prohibited (packet 033 spec §7).
+///
+/// Envelopes produced here are `0xA4` on the wire; [`Citadel`] cannot open them and this
+/// engine cannot open `0xA3` envelopes — the key types differ and the codec rejects
+/// cross-suite use before any crypto runs.
+///
+/// # Note on this slice
+///
+/// This exposes in-process seal/open/keygen. Serializing the `0xA4` key types for
+/// storage or transmission (`to_bytes`/`from_bytes`) and the C FFI surface are separate
+/// follow-on additions, not part of this type yet.
+pub struct CitadelP384 {
+    inner: crate::CitadelP384Engine,
+}
+
+impl Default for CitadelP384 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CitadelP384 {
+    /// Create a new P-384 + ML-KEM-1024 engine.
+    pub fn new() -> Self {
+        Self {
+            inner: crate::CitadelP384Engine::new(),
+        }
+    }
+
+    /// Generate a new `0xA4` (P-384 + ML-KEM-1024) keypair.
+    ///
+    /// The public key can be shared freely; the secret key must be protected and
+    /// zeroizes on drop via its component types.
+    pub fn generate_keypair(
+        &self,
+    ) -> (crate::P384MlKem1024PublicKey, crate::P384MlKem1024SecretKey) {
+        self.inner.keygen()
+    }
+
+    /// Encrypt (seal) plaintext to a `0xA4` public key.
+    ///
+    /// Both `aad` and `context` are bound to the ciphertext and must match on open.
+    /// Produces a self-describing `0xA4` envelope (minimum 1779 bytes).
+    pub fn seal(
+        &self,
+        pk: &crate::P384MlKem1024PublicKey,
+        plaintext: &[u8],
+        aad: &Aad,
+        context: &Context,
+    ) -> Result<Vec<u8>, SealError> {
+        self.inner
+            .encrypt(pk, plaintext, aad.as_bytes(), context.as_bytes())
+    }
+
+    /// Decrypt (open) a `0xA4` ciphertext.
+    ///
+    /// Returns an opaque [`OpenError`] for every failure mode — wrong key, wrong AAD,
+    /// wrong context, tampered or malformed input — identical to [`Citadel::open`], so
+    /// decryption failures stay indistinguishable.
+    pub fn open(
+        &self,
+        sk: &crate::P384MlKem1024SecretKey,
+        ciphertext: &[u8],
+        aad: &Aad,
+        context: &Context,
+    ) -> Result<Vec<u8>, OpenError> {
+        self.inner
+            .decrypt(sk, ciphertext, aad.as_bytes(), context.as_bytes())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Inspection utilities (for ops/debugging)
 // ---------------------------------------------------------------------------
 
@@ -351,9 +437,22 @@ pub fn inspect(ciphertext: &[u8]) -> Result<CiphertextInfo, OpenError> {
     // the historical byte-based stream-v2 dispatch.
     if ciphertext.starts_with(crate::wire_v2::MAGIC) {
         let parts = crate::wire_v2::decode(ciphertext)?;
+        // Read the suite from the decoded envelope, not from a constant. This was
+        // hardcoded to the X25519 string, which was correct while 0xA3 was the only v2
+        // suite and became a wrong answer the moment 0xA4 joined SUITE_TABLE. The
+        // legacy branches below have always done it this way.
+        //
+        // `decode` already rejects any suite absent from SUITE_TABLE, so the fallback
+        // arm is unreachable today; it is here so that adding a table row without
+        // touching this match produces "unknown" rather than a confident lie.
+        let kem_suite = match parts.suite.suite_kem {
+            SUITE_KEM_HYBRID_X25519_MLKEM768 => "X25519+ML-KEM-768",
+            crate::wire::SUITE_KEM_HYBRID_P384_MLKEM1024 => "P-384+ML-KEM-1024",
+            _ => "unknown",
+        };
         return Ok(CiphertextInfo {
             version: crate::wire_v2::VERSION,
-            kem_suite: "X25519+ML-KEM-768",
+            kem_suite,
             aead_suite: "AES-256-GCM",
             total_bytes: ciphertext.len(),
             plaintext_bytes: parts.plaintext_len,
@@ -436,3 +535,116 @@ pub const ENVELOPE_VERSION: u8 = crate::wire_v2::VERSION;
 
 /// Minimum current envelope-v2 size (empty plaintext).
 pub const MIN_ENVELOPE_V2_BYTES: usize = crate::wire_v2::MIN_ENVELOPE_LEN;
+
+/// `inspect()` must report the suite it actually decoded.
+///
+/// Filed as F-2 in packet 033: the v2 branch returned the X25519 string unconditionally,
+/// so a `0xA4` envelope was reported as `X25519+ML-KEM-768`. `cli.rs` prints this field to
+/// a human, which makes a wrong answer here worse than a missing one.
+///
+/// The `0xA3` assertion is as load-bearing as the `0xA4` one: it pins that this fix did
+/// not change what `inspect` already reported for the frozen suite.
+#[cfg(test)]
+mod p3d_inspect_suite_label_tests {
+    use crate::kem::{HybridX25519MlKem768Provider as P3, KemProvider};
+    use crate::kem_p384::HybridP384MlKem1024Provider as P4;
+
+    #[test]
+    fn p3d_inspect_reports_a4_envelopes_as_p384_mlkem1024() {
+        let (pk4, _sk4) = P4::keygen();
+        let envelope = crate::wire_v2::seal::<P4>(&pk4, b"a message", b"", b"ctx").expect("seal");
+        let info = crate::inspect(&envelope).expect("inspect a4");
+        assert_eq!(info.kem_suite, "P-384+ML-KEM-1024");
+        assert_eq!(info.plaintext_bytes, 9);
+        assert!(!info.streaming);
+    }
+
+    #[test]
+    fn p3d_inspect_still_reports_a3_envelopes_as_x25519_mlkem768() {
+        let (pk3, _sk3) = P3::keygen();
+        let envelope = crate::wire_v2::seal::<P3>(&pk3, b"a message", b"", b"ctx").expect("seal");
+        let info = crate::inspect(&envelope).expect("inspect a3");
+        assert_eq!(info.kem_suite, "X25519+ML-KEM-768");
+    }
+}
+
+/// `CitadelP384` — the additive `0xA4` SDK engine.
+///
+/// These prove `0xA4` is reachable through the public SDK (closing the caller-facing
+/// half of finding F-1 for in-process use) and that it stays isolated from the frozen
+/// `0xA3` engine.
+#[cfg(test)]
+mod cnsa_engine_tests {
+    use super::{Aad, Citadel, CitadelP384, Context};
+
+    #[test]
+    fn p384_seal_open_roundtrip() {
+        let citadel = CitadelP384::new();
+        let (pk, sk) = citadel.generate_keypair();
+        let aad = Aad::raw(b"cnsa-aad");
+        let ctx = Context::raw(b"cnsa-ctx");
+        let ct = citadel.seal(&pk, b"cnsa secret", &aad, &ctx).expect("seal");
+        let pt = citadel.open(&sk, &ct, &aad, &ctx).expect("open");
+        assert_eq!(pt, b"cnsa secret");
+    }
+
+    #[test]
+    fn p384_open_with_wrong_context_fails() {
+        let citadel = CitadelP384::new();
+        let (pk, sk) = citadel.generate_keypair();
+        let aad = Aad::empty();
+        let ct = citadel
+            .seal(&pk, b"data", &aad, &Context::raw(b"ctx-a"))
+            .expect("seal");
+        assert!(citadel
+            .open(&sk, &ct, &aad, &Context::raw(b"ctx-b"))
+            .is_err());
+    }
+
+    #[test]
+    fn p384_open_with_wrong_key_fails() {
+        let citadel = CitadelP384::new();
+        let (pk, _sk) = citadel.generate_keypair();
+        let (_pk2, sk2) = citadel.generate_keypair();
+        let aad = Aad::empty();
+        let ctx = Context::raw(b"ctx");
+        let ct = citadel.seal(&pk, b"data", &aad, &ctx).expect("seal");
+        assert!(citadel.open(&sk2, &ct, &aad, &ctx).is_err());
+    }
+
+    #[test]
+    fn p384_produces_a4_envelopes() {
+        let citadel = CitadelP384::new();
+        let (pk, _sk) = citadel.generate_keypair();
+        let ct = citadel
+            .seal(&pk, b"hello", &Aad::empty(), &Context::raw(b"c"))
+            .expect("seal");
+        let info = crate::inspect(&ct).expect("inspect");
+        assert_eq!(info.kem_suite, "P-384+ML-KEM-1024");
+        assert_eq!(info.plaintext_bytes, 5);
+    }
+
+    /// The two engines are wire-isolated: a `0xA4` envelope is not openable by the
+    /// frozen `0xA3` `Citadel`, and the classic engine still round-trips its own suite.
+    #[test]
+    fn p384_and_classic_engines_are_independent() {
+        let p384 = CitadelP384::new();
+        let (pk4, _sk4) = p384.generate_keypair();
+        let aad = Aad::empty();
+        let ctx = Context::raw(b"ctx");
+        let a4 = p384.seal(&pk4, b"cnsa", &aad, &ctx).expect("seal a4");
+
+        // The classic engine round-trips its own suite unchanged.
+        let classic = Citadel::new();
+        let (pk3, sk3) = classic.generate_keypair();
+        let a3 = classic.seal(&pk3, b"classic", &aad, &ctx).expect("seal a3");
+        assert_eq!(
+            classic.open(&sk3, &a3, &aad, &ctx).expect("open a3"),
+            b"classic"
+        );
+
+        // The two envelopes carry different wire suites.
+        assert_eq!(crate::inspect(&a4).unwrap().kem_suite, "P-384+ML-KEM-1024");
+        assert_eq!(crate::inspect(&a3).unwrap().kem_suite, "X25519+ML-KEM-768");
+    }
+}

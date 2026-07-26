@@ -54,6 +54,7 @@ mod aead;
 mod error;
 mod kdf;
 mod kem;
+mod kem_p384;
 mod wire_v2;
 
 #[doc(hidden)]
@@ -75,12 +76,18 @@ pub mod stream_v3;
 mod sdk;
 
 pub use sdk::{
-    inspect, Aad, CiphertextInfo, Citadel, Context, OpenError, PublicKey, SealError, SecretKey,
-    ENVELOPE_VERSION, MIN_CIPHERTEXT_BYTES, MIN_ENVELOPE_V2_BYTES, PROTOCOL_VERSION, VERSION,
+    inspect, Aad, CiphertextInfo, Citadel, CitadelP384, Context, OpenError, PublicKey, SealError,
+    SecretKey, ENVELOPE_VERSION, MIN_CIPHERTEXT_BYTES, MIN_ENVELOPE_V2_BYTES, PROTOCOL_VERSION,
+    VERSION,
 };
 
 pub(crate) type CitadelEngine =
     crate::kem_engine::Citadel<crate::kem::HybridX25519MlKem768Provider>;
+
+/// Engine instantiation for the additive `0xA4` (P-384 + ML-KEM-1024) suite.
+/// Parallel to [`CitadelEngine`]; the frozen `0xA3` engine is unchanged.
+pub(crate) type CitadelP384Engine =
+    crate::kem_engine::Citadel<crate::kem_p384::HybridP384MlKem1024Provider>;
 
 #[doc(hidden)]
 #[cfg(feature = "timing-diagnostics")]
@@ -290,6 +297,10 @@ pub use envelope::Envelope;
 pub use error::{DecryptionError, EncodingError};
 #[doc(hidden)]
 pub use kem::{HybridX25519MlKem768Provider, KemProvider, MlKem768Provider};
+pub use kem_p384::{
+    HybridP384MlKem1024Provider, P384MlKem1024PublicKey, P384MlKem1024SecretKey,
+    P384_MLKEM1024_PUBLIC_KEY_BYTES, P384_MLKEM1024_SECRET_KEY_BYTES,
+};
 
 /// Deterministic envelope-v2 construction for checked-in vectors only.
 /// This module is absent from default production builds.
@@ -298,10 +309,18 @@ pub use kem::{HybridX25519MlKem768Provider, KemProvider, MlKem768Provider};
 pub mod v2_test_vectors {
     use alloc::vec::Vec;
 
-    use crate::error::EncodingError;
+    use crate::error::{DecryptionError, EncodingError};
     use crate::kem::{HybridX25519MlKem768Provider, PublicKey, SecretKey};
 
     pub type DeterministicEnvelope = (PublicKey, SecretKey, Vec<u8>, Vec<u8>, Vec<u8>);
+
+    pub type DeterministicEnvelopeA4 = (
+        crate::kem_p384::P384MlKem1024PublicKey,
+        crate::kem_p384::P384MlKem1024SecretKey,
+        Vec<u8>,
+        Vec<u8>,
+        Vec<u8>,
+    );
 
     #[allow(clippy::too_many_arguments)]
     pub fn deterministic_envelope(
@@ -335,5 +354,52 @@ pub mod v2_test_vectors {
             &nonce,
         )?;
         Ok((pk, sk, shared_secret.to_vec(), kem_ct, envelope))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn deterministic_envelope_a4(
+        recipient_p384_scalar: [u8; 48],
+        mlkem_d: [u8; 32],
+        mlkem_z: [u8; 32],
+        ephemeral_p384_scalar: [u8; 48],
+        mlkem_m: [u8; 32],
+        nonce: [u8; 12],
+        plaintext: &[u8],
+        aad: &[u8],
+        context: &[u8],
+    ) -> Result<DeterministicEnvelopeA4, EncodingError> {
+        let (pk, sk) = crate::kem_p384::HybridP384MlKem1024Provider::kat_hybrid_keygen(
+            recipient_p384_scalar,
+            mlkem_d,
+            mlkem_z,
+        );
+        let (shared_secret, kem_ct) =
+            crate::kem_p384::HybridP384MlKem1024Provider::kat_hybrid_encapsulate(
+                &pk,
+                ephemeral_p384_scalar,
+                mlkem_m,
+            )?;
+        let envelope =
+            crate::wire_v2::seal_with_material::<crate::kem_p384::HybridP384MlKem1024Provider>(
+                &pk,
+                plaintext,
+                aad,
+                context,
+                &shared_secret,
+                &kem_ct,
+                &nonce,
+            )?;
+        Ok((pk, sk, shared_secret.to_vec(), kem_ct, envelope))
+    }
+
+    pub fn open_a4(
+        sk: &crate::kem_p384::P384MlKem1024SecretKey,
+        ciphertext: &[u8],
+        aad: &[u8],
+        context: &[u8],
+    ) -> Result<Vec<u8>, DecryptionError> {
+        crate::wire_v2::open::<crate::kem_p384::HybridP384MlKem1024Provider>(
+            sk, ciphertext, aad, context,
+        )
     }
 }
