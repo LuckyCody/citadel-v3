@@ -300,10 +300,18 @@ pub use kem_p384::{HybridP384MlKem1024Provider, P384MlKem1024PublicKey, P384MlKe
 pub mod v2_test_vectors {
     use alloc::vec::Vec;
 
-    use crate::error::EncodingError;
+    use crate::error::{DecryptionError, EncodingError};
     use crate::kem::{HybridX25519MlKem768Provider, PublicKey, SecretKey};
 
     pub type DeterministicEnvelope = (PublicKey, SecretKey, Vec<u8>, Vec<u8>, Vec<u8>);
+
+    pub type DeterministicEnvelopeA4 = (
+        crate::kem_p384::P384MlKem1024PublicKey,
+        crate::kem_p384::P384MlKem1024SecretKey,
+        Vec<u8>,
+        Vec<u8>,
+        Vec<u8>,
+    );
 
     #[allow(clippy::too_many_arguments)]
     pub fn deterministic_envelope(
@@ -337,5 +345,52 @@ pub mod v2_test_vectors {
             &nonce,
         )?;
         Ok((pk, sk, shared_secret.to_vec(), kem_ct, envelope))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn deterministic_envelope_a4(
+        recipient_p384_scalar: [u8; 48],
+        mlkem_d: [u8; 32],
+        mlkem_z: [u8; 32],
+        ephemeral_p384_scalar: [u8; 48],
+        mlkem_m: [u8; 32],
+        nonce: [u8; 12],
+        plaintext: &[u8],
+        aad: &[u8],
+        context: &[u8],
+    ) -> Result<DeterministicEnvelopeA4, EncodingError> {
+        let (pk, sk) = crate::kem_p384::HybridP384MlKem1024Provider::kat_hybrid_keygen(
+            recipient_p384_scalar,
+            mlkem_d,
+            mlkem_z,
+        );
+        let (shared_secret, kem_ct) =
+            crate::kem_p384::HybridP384MlKem1024Provider::kat_hybrid_encapsulate(
+                &pk,
+                ephemeral_p384_scalar,
+                mlkem_m,
+            )?;
+        let envelope =
+            crate::wire_v2::seal_with_material::<crate::kem_p384::HybridP384MlKem1024Provider>(
+                &pk,
+                plaintext,
+                aad,
+                context,
+                &shared_secret,
+                &kem_ct,
+                &nonce,
+            )?;
+        Ok((pk, sk, shared_secret.to_vec(), kem_ct, envelope))
+    }
+
+    pub fn open_a4(
+        sk: &crate::kem_p384::P384MlKem1024SecretKey,
+        ciphertext: &[u8],
+        aad: &[u8],
+        context: &[u8],
+    ) -> Result<Vec<u8>, DecryptionError> {
+        crate::wire_v2::open::<crate::kem_p384::HybridP384MlKem1024Provider>(
+            sk, ciphertext, aad, context,
+        )
     }
 }

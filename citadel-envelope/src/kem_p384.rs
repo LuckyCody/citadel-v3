@@ -116,6 +116,55 @@ impl P384MlKem1024SecretKey {
     }
 }
 
+impl HybridP384MlKem1024Provider {
+    /// Deterministic complete hybrid keypair for envelope-v2 vectors only.
+    #[doc(hidden)]
+    pub fn kat_hybrid_keygen(
+        p384_scalar: [u8; P384_SCALAR_BYTES],
+        d: [u8; 32],
+        z: [u8; 32],
+    ) -> (P384MlKem1024PublicKey, P384MlKem1024SecretKey) {
+        let p384 =
+            P384SecretKey::from_slice(&p384_scalar).expect("fixed P-384 KAT scalar must be valid");
+        let mut seed = [0u8; MLKEM_SEED_BYTES];
+        seed[..32].copy_from_slice(&d);
+        seed[32..].copy_from_slice(&z);
+        let mlkem = MlKemSecretKey::from_seed(Seed::from(seed));
+        let public = P384MlKem1024PublicKey {
+            p384: p384.public_key(),
+            mlkem: mlkem.encapsulation_key().clone(),
+        };
+        let secret = P384MlKem1024SecretKey {
+            p384,
+            mlkem_seed: Zeroizing::new(seed),
+        };
+        (public, secret)
+    }
+
+    /// Deterministic complete hybrid encapsulation for envelope-v2 vectors only.
+    #[doc(hidden)]
+    pub fn kat_hybrid_encapsulate(
+        pk: &P384MlKem1024PublicKey,
+        p384_ephemeral_scalar: [u8; P384_SCALAR_BYTES],
+        m: [u8; 32],
+    ) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), EncodingError> {
+        let ephemeral =
+            P384SecretKey::from_slice(&p384_ephemeral_scalar).map_err(|_| EncodingError)?;
+        let ephemeral_public = ephemeral.public_key();
+        let p384_ss = diffie_hellman(ephemeral.to_nonzero_scalar(), pk.p384.as_affine());
+        let (mlkem_ct, mlkem_ss) = pk.mlkem.encapsulate_deterministic(&m.into());
+
+        let mut shared = Zeroizing::new(Vec::with_capacity(P384_SHARED_BYTES + MLKEM_SHARED_BYTES));
+        shared.extend_from_slice(p384_ss.raw_secret_bytes());
+        shared.extend_from_slice(mlkem_ss.as_ref());
+
+        let mut kem_ct = Vec::with_capacity(HybridP384MlKem1024Provider::KEM_CIPHERTEXT_BYTES);
+        kem_ct.extend_from_slice(&encode_p384_point(&ephemeral_public));
+        kem_ct.extend_from_slice(mlkem_ct.as_ref());
+        Ok((shared, kem_ct))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // SEC1 parsing
 // ---------------------------------------------------------------------------
