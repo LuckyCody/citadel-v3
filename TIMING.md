@@ -218,27 +218,43 @@ scalar, return the 48-byte x-coordinate. Two benches in `benches/timing_sidechan
 | Bench | Tier | Leak it catches |
 |---|---|---|
 | `bench_stage_p384_ecdh_key_a_vs_key_b_success` | Diagnostic | Static-key-material-dependent timing in P-384 ECDH. Not attacker-varyable per query. |
-| `bench_stage_p384_ecdh_same_key_pool_a_vs_pool_b_control` | Harness control | Two ciphertext pools for the *same* key. If it exceeds threshold, the key-A-vs-key-B result is confounded and must be marked REVIEW, not a leak. |
+| `bench_stage_p384_ecdh_same_key_pool_a_vs_pool_b_control` | Harness control / attacker-controlled screen | Two pools of *varying* valid ciphertexts, same key — same public class. This is both the null control AND the remote-relevant ciphertext-variation screen. |
+| `bench_info_p384_ecdh_fixed_vs_random_ciphertext` | Informational | One *identical* ciphertext repeated vs varying — deliberately NOT same-public-class; demonstrates the fixed-input cache artifact. Not a gate. |
 
 ### Preliminary screen — 2026-07-26 (NOT authoritative)
 
 Run on a **noisy WSL2-on-Windows dev box** (release, `--features timing-diagnostics`), which
-is explicitly *not* the quiet dedicated Linux the ML-KEM results above used:
+is explicitly *not* the quiet dedicated Linux the ML-KEM results above used. Sub-threshold
+values drift run-to-run on this box (e.g. key-A-vs-key-B read 1.51 then 2.15) but stay `< 4.5`:
 
-| Bench | max \|t\| | n (post-crop) | dudect sufficiency est. |
+| Bench | max \|t\| | n (post-crop) | verdict |
 |---|---|---|---|
-| `..._key_a_vs_key_b_success` | **1.51** | ~13K | `(5/tau)^2 ≈ 142K` |
-| `..._same_key_pool_a_vs_pool_b_control` | **1.42** | 100K | — |
+| `..._key_a_vs_key_b_success` | ~1.5–2.2 | ~13K (est. ~70–142K needed) | no signal, but **underpowered** |
+| `..._same_key_pool_a_vs_pool_b_control` | ~1.4–2.5 | ~43–100K | no signal (same-public-class) |
+| `bench_info_..._fixed_vs_random_ciphertext` | **~106** | 46K | **artifact, not a leak** (see below) |
 
-Both are under the `\|t\| < 4.5` threshold, and the control passed — **this run detected no
-timing signal**. But this is **not** a constant-time validation:
+**The `~106` is not a leak — and reading it correctly is the whole point.** That bench compares
+one *identical* ciphertext repeated against varying ciphertexts, which is not a same-public-class
+comparison: the fixed input stays cache/branch-predictor-hot and runs systematically faster,
+regardless of any secret. The decisive disambiguator is the same-public-class control immediately
+above it — *varying-vs-varying valid ciphertexts, same key* — which stays `< 4.5`. If the ECDH
+leaked on ciphertext value or key material, that control would move; it does not. So the huge `t`
+localizes to the fixed-input measurement artifact and confirms this file's "same-public-class
+only" rule, rather than indicating a timing oracle.
 
-- The key-A-vs-key-B run cropped to ~13K samples against dudect's own ~142K sufficiency
-  estimate — **underpowered**. A `\|t\|` below threshold at 1/10th the needed sample count is
+This is still **not** a constant-time validation of the key-material class:
+
+- The key-A-vs-key-B run cropped to ~13K samples against dudect's own sufficiency estimate —
+  **underpowered**. A `\|t\|` below threshold at a fraction of the needed sample count is
   "insufficient data," not "passed."
 - Noisy hardware inflates variance, which *lowers* dudect's sensitivity — a noisy box is the
   least likely to surface a real leak. The ML-KEM signals above were only clean on dedicated
   quiet hardware.
+
+**What the attacker-controlled screen does show:** the remote threat model (an attacker varies
+the ciphertext, not the key) maps to the same-public-class pool control, which shows **no signal**
+in this run — consistent with, though not as strongly powered as, the ML-KEM attacker-controlled
+classes that pass on quiet hardware.
 
 **Claim status unchanged:** *"The P-384 ECDH implementation is constant-time on the shipped
 path"* remains **NOT established** (spec 033 §7 claim-matrix row 1). This screen adds a built,

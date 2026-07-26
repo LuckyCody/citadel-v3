@@ -1343,6 +1343,44 @@ fn bench_stage_p384_ecdh_same_key_pool_a_vs_pool_b_control(
     }
 }
 
+/// INFORMATIONAL — not a gate. SAME key; one *identical* ciphertext repeated (Left) vs varying
+/// valid ciphertexts (Right). This is deliberately NOT a same-public-class comparison, so it is
+/// confounded by the classic dudect fixed-input artifact: a repeated identical input stays
+/// cache/branch-predictor-hot and runs faster regardless of secrets. Measured `|t| ≈ 106`,
+/// which is the artifact, not a leak — the same-public-class control below
+/// (`..._same_key_pool_a_vs_pool_b_control`, varying-vs-varying) stays `< 4.5`. Kept as a
+/// demonstration of why TIMING.md requires same-public-class benches; the remote-relevant
+/// attacker-controlled screen is the pool control, not this.
+fn bench_info_p384_ecdh_fixed_vs_random_ciphertext(runner: &mut CtRunner, rng: &mut BenchRng) {
+    let cit = CitadelP384::new();
+    let (pk, sk) = cit.generate_keypair();
+    let sk_bytes = sk.to_bytes();
+    let sk_fixed = P384MlKem1024SecretKey::from_bytes(&sk_bytes).unwrap();
+    let fixed_ct = p384_fixture_kem_ct(&pk, "p384-fixed-ct", 0);
+    let mut random_cts = Vec::with_capacity(4096);
+    for i in 0..4096 {
+        random_cts.push(p384_fixture_kem_ct(&pk, "p384-random-ct", i + 1));
+    }
+
+    let mut random_idx = 0usize;
+    for _ in 0..100_000 {
+        if rng.gen::<bool>() {
+            runner.run_one(Class::Left, || {
+                let _ = black_box(timing_diagnostics::p384_ecdh_only(
+                    &sk_fixed,
+                    black_box(&fixed_ct),
+                ));
+            });
+        } else {
+            let ct = &random_cts[random_idx % random_cts.len()];
+            random_idx += 1;
+            runner.run_one(Class::Right, || {
+                let _ = black_box(timing_diagnostics::p384_ecdh_only(&sk_fixed, black_box(ct)));
+            });
+        }
+    }
+}
+
 fn main() {
     let mut opts = BenchOpts::default();
     let mut args = std::env::args().skip(1).peekable();
@@ -1546,6 +1584,11 @@ fn main() {
             name: BenchName("bench_stage_p384_ecdh_same_key_pool_a_vs_pool_b_control"),
             seed: None,
             benchfn: bench_stage_p384_ecdh_same_key_pool_a_vs_pool_b_control,
+        },
+        BenchMetadata {
+            name: BenchName("bench_info_p384_ecdh_fixed_vs_random_ciphertext"),
+            seed: None,
+            benchfn: bench_info_p384_ecdh_fixed_vs_random_ciphertext,
         },
     ];
 
