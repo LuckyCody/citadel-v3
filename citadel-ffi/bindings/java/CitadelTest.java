@@ -36,6 +36,7 @@ public class CitadelTest {
         testWrongContextFails();
         testEmptyAadAndContext();
         testKeySizes();
+        testP384Suite();
         testUnicodeData();
         testNullHandling();
 
@@ -165,6 +166,34 @@ public class CitadelTest {
         System.out.println("\n── 7. Key Size Constants ──────────────────────────");
         check("PUBLIC_KEY_BYTES is 1216", Citadel.PUBLIC_KEY_BYTES == 1216);
         check("SECRET_KEY_BYTES is 2432", Citadel.SECRET_KEY_BYTES == 2432);
+    }
+
+    static void testP384Suite() {
+        System.out.println("\n-- 7b. 0xA4 (P-384 + ML-KEM-1024) --");
+        check("P384_PUBLIC_KEY_BYTES is 1665", Citadel.P384_PUBLIC_KEY_BYTES == 1665);
+        check("P384_SECRET_KEY_BYTES is 112", Citadel.P384_SECRET_KEY_BYTES == 112);
+
+        KeyPair kp = Citadel.generateP384KeyPair();
+        check("p384 pk is 1665 bytes", kp.publicKey.length == 1665);
+        check("p384 sk is 112 bytes", kp.secretKey.length == 112);
+
+        byte[] pt  = "java-p384 (CNSA category-5)".getBytes();
+        byte[] aad = "record-042".getBytes();
+        byte[] ctx = "emr".getBytes();
+
+        byte[] ct = Citadel.sealP384(kp.publicKey, pt, aad, ctx);
+        check("p384 seal returns ciphertext", ct != null && ct.length > pt.length);
+        check("p384 plaintext not in ciphertext", !contains(ct, pt));
+
+        byte[] dec = Citadel.openP384(kp.secretKey, ct, aad, ctx);
+        check("p384 roundtrip recovers plaintext", Arrays.equals(dec, pt));
+
+        try {
+            Citadel.openP384(kp.secretKey, ct, "wrong".getBytes(), ctx);
+            check("p384 wrong-AAD throws", false);
+        } catch (CitadelException e) {
+            check("p384 wrong-AAD throws CitadelException", true);
+        }
     }
 
     static void testUnicodeData() {
