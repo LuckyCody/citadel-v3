@@ -101,7 +101,27 @@ pub mod timing_diagnostics {
         diagnostic_x25519_decapsulate_only, HybridX25519MlKem768Provider, KemProvider, PublicKey,
         SecretKey,
     };
+    use crate::kem_p384::{
+        diagnostic_p384_ecdh_only, HybridP384MlKem1024Provider, P384MlKem1024PublicKey,
+        P384MlKem1024SecretKey,
+    };
     use crate::{aead, kdf, wire, wire_v2};
+
+    /// Build `0xA4` KEM material for timing fixtures (parallel to `hybrid_encapsulate`).
+    pub fn p384_encapsulate(
+        pk: &P384MlKem1024PublicKey,
+    ) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), EncodingError> {
+        HybridP384MlKem1024Provider::encapsulate(pk)
+    }
+
+    /// The isolated P-384 ECDH step of `0xA4` decapsulation — the new classical primitive.
+    /// Returns the 48-byte x-coordinate.
+    pub fn p384_ecdh_only(
+        sk: &P384MlKem1024SecretKey,
+        kem_ct: &[u8],
+    ) -> Result<[u8; 48], DecryptionError> {
+        diagnostic_p384_ecdh_only(sk, kem_ct)
+    }
 
     pub fn hybrid_decapsulate(
         sk: &SecretKey,

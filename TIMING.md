@@ -206,6 +206,50 @@ opaque errors and a response floor — not inside the crypto primitive.
    Retain |t|-only gating for attacker-controlled-input classes where zero
    tolerance is correct.
 
+## P-384 ECDH arm (suite `0xA4`) — harness + preliminary screen
+
+Suite `0xA4` adds one new secret-dependent primitive over `0xA3`: **P-384 ECDH** via the
+pure-Rust `p384` crate (the ML-KEM-1024 arm is the same family as the already-characterized
+ML-KEM-768). The classical arm is isolated for dudect by
+`kem_p384::diagnostic_p384_ecdh_only` (feature `timing-diagnostics`), which runs exactly the
+ECDH `decapsulate` performs — parse the ephemeral point, `diffie_hellman` with the static
+scalar, return the 48-byte x-coordinate. Two benches in `benches/timing_sidechannel.rs`:
+
+| Bench | Tier | Leak it catches |
+|---|---|---|
+| `bench_stage_p384_ecdh_key_a_vs_key_b_success` | Diagnostic | Static-key-material-dependent timing in P-384 ECDH. Not attacker-varyable per query. |
+| `bench_stage_p384_ecdh_same_key_pool_a_vs_pool_b_control` | Harness control | Two ciphertext pools for the *same* key. If it exceeds threshold, the key-A-vs-key-B result is confounded and must be marked REVIEW, not a leak. |
+
+### Preliminary screen — 2026-07-26 (NOT authoritative)
+
+Run on a **noisy WSL2-on-Windows dev box** (release, `--features timing-diagnostics`), which
+is explicitly *not* the quiet dedicated Linux the ML-KEM results above used:
+
+| Bench | max \|t\| | n (post-crop) | dudect sufficiency est. |
+|---|---|---|---|
+| `..._key_a_vs_key_b_success` | **1.51** | ~13K | `(5/tau)^2 ≈ 142K` |
+| `..._same_key_pool_a_vs_pool_b_control` | **1.42** | 100K | — |
+
+Both are under the `\|t\| < 4.5` threshold, and the control passed — **this run detected no
+timing signal**. But this is **not** a constant-time validation:
+
+- The key-A-vs-key-B run cropped to ~13K samples against dudect's own ~142K sufficiency
+  estimate — **underpowered**. A `\|t\|` below threshold at 1/10th the needed sample count is
+  "insufficient data," not "passed."
+- Noisy hardware inflates variance, which *lowers* dudect's sensitivity — a noisy box is the
+  least likely to surface a real leak. The ML-KEM signals above were only clean on dedicated
+  quiet hardware.
+
+**Claim status unchanged:** *"The P-384 ECDH implementation is constant-time on the shipped
+path"* remains **NOT established** (spec 033 §7 claim-matrix row 1). This screen adds a built,
+reproducible harness and a preliminary no-detection, nothing stronger.
+
+**Authoritative next step (Andre / dedicated hardware):** run both benches — plus the
+attacker-controlled ciphertext-variation class, which is the one that matters for the remote
+API — on a quiet Intel/AMD/ARM Linux box with frequency pinning, per the "Quiet-machine
+validation run procedure" below, at full 100K+ samples. Only then can the P-384 arm be
+characterized the way ML-KEM-768 was.
+
 ## Dudect bench policy
 
 Hard-gated dudect benches compare only same-public-class inputs: same public wire shape, same parse outcome, and same observable success/failure class. A gated pair must name the leak it would catch.
