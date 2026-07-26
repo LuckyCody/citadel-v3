@@ -76,12 +76,18 @@ pub mod stream_v3;
 mod sdk;
 
 pub use sdk::{
-    inspect, Aad, CiphertextInfo, Citadel, Context, OpenError, PublicKey, SealError, SecretKey,
-    ENVELOPE_VERSION, MIN_CIPHERTEXT_BYTES, MIN_ENVELOPE_V2_BYTES, PROTOCOL_VERSION, VERSION,
+    inspect, Aad, CiphertextInfo, Citadel, CitadelP384, Context, OpenError, PublicKey, SealError,
+    SecretKey, ENVELOPE_VERSION, MIN_CIPHERTEXT_BYTES, MIN_ENVELOPE_V2_BYTES, PROTOCOL_VERSION,
+    VERSION,
 };
 
 pub(crate) type CitadelEngine =
     crate::kem_engine::Citadel<crate::kem::HybridX25519MlKem768Provider>;
+
+/// Engine instantiation for the additive `0xA4` (P-384 + ML-KEM-1024) suite.
+/// Parallel to [`CitadelEngine`]; the frozen `0xA3` engine is unchanged.
+pub(crate) type CitadelP384Engine =
+    crate::kem_engine::Citadel<crate::kem_p384::HybridP384MlKem1024Provider>;
 
 #[doc(hidden)]
 #[cfg(feature = "timing-diagnostics")]
