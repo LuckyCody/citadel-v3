@@ -9,7 +9,7 @@ package io.reposignal.citadel;
 import com.sun.jna.Library;
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
-import com.sun.jna.ptr.IntByReference;
+import com.sun.jna.ptr.LongByReference;
 import com.sun.jna.ptr.PointerByReference;
 
 import java.nio.file.Files;
@@ -78,33 +78,61 @@ public final class Citadel {
     /** Size of a serialized secret key in bytes (2432). */
     public static final int SECRET_KEY_BYTES = 2432;
 
+    /** Size of a serialized 0xA4 (P-384 + ML-KEM-1024) public key in bytes (1665). */
+    public static final int P384_PUBLIC_KEY_BYTES = 1665;
+
+    /** Size of a serialized 0xA4 (P-384 + ML-KEM-1024) secret key in bytes (112). */
+    public static final int P384_SECRET_KEY_BYTES = 112;
+
     // ── JNA interface ─────────────────────────────────────────────────────
 
     interface NativeLib extends Library {
         int citadel_keygen(
-            PointerByReference pkOut, IntByReference pkLen,
-            PointerByReference skOut, IntByReference skLen
+            PointerByReference pkOut, LongByReference pkLen,
+            PointerByReference skOut, LongByReference skLen
         );
 
         int citadel_seal(
-            byte[] pkPtr,  int pkLen,
-            byte[] ptPtr,  int ptLen,
-            byte[] aadPtr, int aadLen,
-            byte[] ctxPtr, int ctxLen,
-            PointerByReference ctOut, IntByReference ctLenOut
+            byte[] pkPtr,  long pkLen,
+            byte[] ptPtr,  long ptLen,
+            byte[] aadPtr, long aadLen,
+            byte[] ctxPtr, long ctxLen,
+            PointerByReference ctOut, LongByReference ctLenOut
         );
 
         int citadel_open(
-            byte[] skPtr,  int skLen,
-            byte[] ctPtr,  int ctLen,
-            byte[] aadPtr, int aadLen,
-            byte[] ctxPtr, int ctxLen,
-            PointerByReference ptOut, IntByReference ptLenOut
+            byte[] skPtr,  long skLen,
+            byte[] ctPtr,  long ctLen,
+            byte[] aadPtr, long aadLen,
+            byte[] ctxPtr, long ctxLen,
+            PointerByReference ptOut, LongByReference ptLenOut
         );
 
-        void citadel_free(Pointer ptr, int len);
+        void citadel_free(Pointer ptr, long len);
 
         String citadel_error_string(int code);
+
+        // 0xA4 (P-384 + ML-KEM-1024) additive symbols; 0xA3 above unchanged.
+        int citadel_p384_keygen(
+            PointerByReference pkOut, LongByReference pkLen,
+            PointerByReference skOut, LongByReference skLen
+        );
+
+        int citadel_p384_seal(
+            byte[] pkPtr,  long pkLen,
+            byte[] ptPtr,  long ptLen,
+            byte[] aadPtr, long aadLen,
+            byte[] ctxPtr, long ctxLen,
+            PointerByReference ctOut, LongByReference ctLenOut
+        );
+
+        int citadel_p384_open(
+            byte[] skPtr,  long skLen,
+            byte[] ctPtr,  long ctLen,
+            byte[] aadPtr, long aadLen,
+            byte[] ctxPtr, long ctxLen,
+            PointerByReference ptOut, LongByReference ptLenOut
+        );
     }
 
     private static volatile NativeLib LIB = null;
@@ -163,9 +191,9 @@ public final class Citadel {
      */
     public static KeyPair generateKeyPair() {
         PointerByReference pkRef = new PointerByReference();
-        IntByReference     pkLen = new IntByReference();
+        LongByReference     pkLen = new LongByReference();
         PointerByReference skRef = new PointerByReference();
-        IntByReference     skLen = new IntByReference();
+        LongByReference     skLen = new LongByReference();
 
         int rc = lib().citadel_keygen(pkRef, pkLen, skRef, skLen);
         checkError(rc, "keygen");
@@ -207,7 +235,7 @@ public final class Citadel {
         byte[] ctxSafe = context != null ? context : new byte[0];
 
         PointerByReference ctRef = new PointerByReference();
-        IntByReference     ctLen = new IntByReference();
+        LongByReference     ctLen = new LongByReference();
 
         int rc = lib().citadel_seal(
             publicKey,  publicKey.length,
@@ -247,7 +275,7 @@ public final class Citadel {
         byte[] ctxSafe = context != null ? context : new byte[0];
 
         PointerByReference ptRef = new PointerByReference();
-        IntByReference     ptLen = new IntByReference();
+        LongByReference     ptLen = new LongByReference();
 
         int rc = lib().citadel_open(
             secretKey,  secretKey.length,
@@ -260,12 +288,75 @@ public final class Citadel {
         return readAndFree(ptRef, ptLen);
     }
 
+    // 0xA4 (P-384 + ML-KEM-1024) API — additive; the 0xA3 methods above are unchanged.
+
+    /**
+     * Generate a new 0xA4 (P-384 + ML-KEM-1024, CNSA category-5) keypair.
+     * Keys are {@link #P384_PUBLIC_KEY_BYTES} / {@link #P384_SECRET_KEY_BYTES} bytes.
+     * The name states the algorithms, not "CNSA": implementing the algorithms is not
+     * CNSA compliance.
+     */
+    public static KeyPair generateP384KeyPair() {
+        PointerByReference pkRef = new PointerByReference();
+        LongByReference    pkLen = new LongByReference();
+        PointerByReference skRef = new PointerByReference();
+        LongByReference    skLen = new LongByReference();
+
+        int rc = lib().citadel_p384_keygen(pkRef, pkLen, skRef, skLen);
+        checkError(rc, "p384 keygen");
+        return new KeyPair(readAndFree(pkRef, pkLen), readAndFree(skRef, skLen));
+    }
+
+    /** Encrypt to a 0xA4 public key. See {@link #seal} for the aad/context semantics. */
+    public static byte[] sealP384(byte[] publicKey, byte[] plaintext, byte[] aad, byte[] context) {
+        if (publicKey == null) throw new CitadelException("publicKey is null", CITADEL_ERR_NULL);
+        if (plaintext == null) throw new CitadelException("plaintext is null", CITADEL_ERR_NULL);
+
+        byte[] aadSafe = aad     != null ? aad     : new byte[0];
+        byte[] ctxSafe = context != null ? context : new byte[0];
+
+        PointerByReference ctRef = new PointerByReference();
+        LongByReference    ctLen = new LongByReference();
+
+        int rc = lib().citadel_p384_seal(
+            publicKey, publicKey.length,
+            plaintext, plaintext.length,
+            aadSafe,   aadSafe.length,
+            ctxSafe,   ctxSafe.length,
+            ctRef, ctLen
+        );
+        checkError(rc, "p384 seal");
+        return readAndFree(ctRef, ctLen);
+    }
+
+    /** Decrypt a 0xA4 ciphertext. See {@link #open} for the aad/context semantics. */
+    public static byte[] openP384(byte[] secretKey, byte[] ciphertext, byte[] aad, byte[] context) {
+        if (secretKey  == null) throw new CitadelException("secretKey is null",  CITADEL_ERR_NULL);
+        if (ciphertext == null) throw new CitadelException("ciphertext is null", CITADEL_ERR_NULL);
+
+        byte[] aadSafe = aad     != null ? aad     : new byte[0];
+        byte[] ctxSafe = context != null ? context : new byte[0];
+
+        PointerByReference ptRef = new PointerByReference();
+        LongByReference    ptLen = new LongByReference();
+
+        int rc = lib().citadel_p384_open(
+            secretKey,  secretKey.length,
+            ciphertext, ciphertext.length,
+            aadSafe,    aadSafe.length,
+            ctxSafe,    ctxSafe.length,
+            ptRef, ptLen
+        );
+        checkError(rc, "p384 open");
+        return readAndFree(ptRef, ptLen);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
-    private static byte[] readAndFree(PointerByReference ref, IntByReference len) {
+    private static byte[] readAndFree(PointerByReference ref, LongByReference len) {
         Pointer ptr = ref.getValue();
-        int     n   = len.getValue();
-        byte[]  buf = ptr.getByteArray(0, n);
+        long    n   = len.getValue();
+        byte[]  buf = ptr.getByteArray(0, (int) n);
         lib().citadel_free(ptr, n);
         return buf;
     }
