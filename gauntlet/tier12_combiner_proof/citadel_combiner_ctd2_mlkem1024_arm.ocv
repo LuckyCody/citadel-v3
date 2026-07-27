@@ -1,0 +1,132 @@
+(* Citadel hybrid combiner — ML-KEM-1024 arm, ACTIVE CTD2 construction (packet 033 / P5,
+   suite 0xA4 = P-384 + ML-KEM-1024). 1024-instanced copy of
+   citadel_combiner_ctd2_mlkem_arm.ocv for the CNSA-aligned suite.
+
+   The model is INSTANCE-INDEPENDENT: ML-KEM is abstracted as its IND-CCA2 premise
+   (`mlkem_indcca2_assumption`), so moving from ML-KEM-768 to ML-KEM-1024 is a strictly
+   STRONGER instance of the SAME assumption (higher NIST category, category 5 vs 3). The
+   proof STRUCTURE is unchanged from the 0xA3 arm; only the premise INSTANCE the receipt
+   rests on changes (768 -> 1024), and the broken classical component is now P-384 rather
+   than X25519. P-384's ciphertext enters the transcript as the abstract `x_ciphertext`
+   [fixed] type exactly as X25519's did; since the classical component is FULLY BROKEN
+   (adversary-chosen secret + ciphertext), its concrete identity is immaterial to this
+   arm's secrecy theorem. (spec eem/033 §5: "premise instance changes ... proof structure
+   unchanged; re-run and re-receipt only.")
+
+   CTD2 KDF (wire_v2.rs:30-32, 91-107, 138-145), 0xA4 instance:
+     salt       = SHA256("citadel-envelope-v2/extract-salt")           (fixed const)
+     transcript = "citadel-envelope-v2/kdf\0"
+                  || len(header) || header
+                  || len(kem_ct) || kem_ct        (* FULL 1665-byte 0xA4 KEM ct, both comps *)
+                  || len(context)|| context
+     K          = HKDF-SHA256(salt, ikm = p384_ss(48) || mlkem_ss(32), info = transcript)
+
+   Theorem: if ML-KEM-1024 is IND-CCA2, the CTD2 combiner key K is secret under full
+   hybrid-ciphertext CCA even if P-384 is fully broken (adversary CHOOSES ss1, the
+   P-384 challenge ciphertext, and the header). ROM model of HKDF; ciphertext bound
+   DIRECTLY (full kem_ct, length-delimited/injective), no SHA3 term. *)
+
+type ml_keyseed    [fixed, large].
+type ml_pkey       [bounded].
+type ml_skey       [bounded].
+type ml_encapseed  [bounded].
+type ml_secret     [fixed, large].
+type ml_ciphertext [bounded].
+type ml_output     [bounded].
+
+proba P_ml_indcca2.
+proba P_ml_keycoll.
+proba P_ml_ctcoll.
+
+expand KEM_all_args(
+  ml_keyseed, ml_pkey, ml_skey, ml_encapseed, ml_secret,
+  ml_ciphertext, ml_output,
+  ml_pkgen, ml_skgen, ml_encap, ml_encap_r, ml_pair, ml_decap,
+  ml_injbot, P_ml_keycoll, P_ml_ctcoll).
+
+param N_keys, N_enc, N_dec.
+table ML_challenge(N_keys, ml_ciphertext, ml_secret).
+
+equiv(mlkem_indcca2_assumption)
+  foreach i <= N_keys do seed <-R ml_keyseed; (
+    PublicKey() := return(ml_pkgen(seed))
+  | foreach id <= N_dec do
+      Decap(c: ml_ciphertext) := return(ml_decap(c, ml_skgen(seed))) )
+  | foreach ie <= N_enc do
+      Encaps(pk: ml_pkey) := r <-R ml_encapseed; return(ml_encap_r(pk, r)) [all]
+  <=(P_ml_indcca2(time, N_keys, #Encaps, #Decap))=>
+  foreach i <= N_keys do seed <-R ml_keyseed; (
+    PublicKey() := return(ml_pkgen(seed))
+  | foreach id <= N_dec do
+      Decap(c: ml_ciphertext) :=
+        get ML_challenge(=i, =c, s) in return(ml_injbot(s))
+        else return(ml_decap(c, ml_skgen(seed))) )
+  | foreach ie <= N_enc do
+      Encaps(pk: ml_pkey) :=
+        find i2 <= N_keys suchthat defined(seed[i2]) && pk = ml_pkgen(seed[i2]) then (
+          r <-R ml_encapseed;
+          let ml_pair(junk, c) = ml_encap_r(pk, r) in
+          s <-R ml_secret;
+          insert ML_challenge(i2, c, s);
+          return(ml_pair(s, c)) )
+        else ( r <-R ml_encapseed; return(ml_encap_r(pk, r)) ).
+
+(* CTD2 length-delimited transcript, 0xA4 PRODUCTION ORDER: P-384 ciphertext first
+   (abstract x_ciphertext), ML-KEM-1024 ciphertext second. The [data] constructor is
+   injective, exactly modeling the unambiguous length-prefixed parsing of
+   wire_v2::kdf_transcript over the full 1665-byte kem_ct. The full kem_ct is bound
+   directly (both components), so NO SHA3 collision assumption is needed. The fixed
+   KDF_LABEL/salt are constants and absorbed into the ROM. *)
+type x_ciphertext [fixed].          (* broken P-384 ciphertext component (abstract) *)
+type header_t     [fixed].
+fun ctd2_transcript(header_t, x_ciphertext, ml_ciphertext, bitstring): bitstring [data].
+
+(* Combiner KDF (HKDF-SHA256, fixed salt) as a random oracle over
+   (ikm = p384_ss || mlkem_ss, info = transcript). P-384 secret first. *)
+type hashkey [fixed].
+type kdfkey  [fixed, large].
+expand ROM_hash_3(hashkey, bitstring, ml_secret, bitstring, kdfkey, kdf, kdf_oracle, N_kdf).
+
+query secret K.
+
+proof {
+  crypto mlkem_indcca2_assumption;
+  crypto rom(kdf);
+  simplify;
+  success
+}
+
+process
+  Ostart(ct1star: x_ciphertext, hdrstar: header_t) :=
+    hk  <-R hashkey;
+    seed <-R ml_keyseed;
+    let pk = ml_pkgen(seed) in
+    r <-R ml_encapseed;
+    let ml_pair(ss2: ml_secret, ct: ml_ciphertext) = ml_encap_r(pk, r) in
+    (* P-384 fully broken: the ADVERSARY supplies the P-384 challenge ciphertext
+       ct1star and the header hdrstar, committed at setup (challenge ciphertext fixed
+       before decap queries, per IND-CCA2). *)
+    return(pk, ct, ct1star, hdrstar);
+  (
+    (run kdf_oracle(hk))
+  | (* Full hybrid-ciphertext CCA decapsulation over the CTD2 transcript. The
+       adversary submits a full envelope (header, P-384 ct, ML-KEM ct, context) plus
+       the broken P-384 secret ss1q. Rejects ONLY the exact challenge KEM pair
+       (ct1star, ct); permits (ct1' != ct1star, ct) and everything else, answering
+       via the ciphertext-bound CTD2 KDF. *)
+    (foreach id <= N_dec do
+      ODecap(hdrq: header_t, ct1q: x_ciphertext, ss1q: bitstring,
+             c: ml_ciphertext, ctxq: bitstring) :=
+        if ct1q = ct1star && c = ct then yield else
+        let ml_injbot(ss2q: ml_secret) = ml_decap(c, ml_skgen(seed)) in (
+          let tq: bitstring = ctd2_transcript(hdrq, ct1q, c, ctxq) in
+          return(kdf(hk, ss1q, ss2q, tq))
+        ) else yield)
+  | (* One challenge: adversary supplies ss1 (broken P-384 secret) and context; the
+       CTD2 transcript binds the committed header + both ciphertexts + context.
+       Adversary gets ct (published), never K. *)
+    (OChal(ss1: bitstring, context: bitstring) :=
+      let t: bitstring = ctd2_transcript(hdrstar, ct1star, ct, context) in
+      let K: kdfkey = kdf(hk, ss1, ss2, t) in
+      yield)
+  )

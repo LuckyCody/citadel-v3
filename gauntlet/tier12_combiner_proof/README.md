@@ -13,6 +13,36 @@ collision resistance), each resting on its component KEM's IND-CCA2 premise.
 | X25519 secrets-only (Option A) | `citadel_combiner_x25519_arm.ocv` | VERIFIED | X25519-DHKEM IND-CCA2 (published GDH+ROM) |
 | **X25519 FAITHFUL + explicit SHA3-CR** | `citadel_combiner_x25519_arm_hybrid.ocv` | **VERIFIED** | X25519-DHKEM IND-CCA2 + SHA3-256 CR |
 | X25519 raw-GDH (abstract) | `citadel_combiner_x25519_gdh_attempt.ocv` | ⛔ PARKED | abstract prime-order Gap-DH — known Curve25519 fidelity gap |
+| **P-384 CTD2 arm (suite `0xA4`)** | `citadel_combiner_ctd2_p384_arm.ocv` | **VERIFIED** | P-384-DHKEM IND-CCA2 — prime-order abstraction **faithful** (cofactor 1) |
+| **ML-KEM-1024 CTD2 arm (suite `0xA4`)** | `citadel_combiner_ctd2_mlkem1024_arm.ocv` | **VERIFIED** | ML-KEM-1024 IND-CCA2 (FIPS 203, category 5) |
+
+## Suite `0xA4` (P-384 + ML-KEM-1024) — packet 033 phase P5
+
+Both arms of the CNSA-aligned suite are machine-checked at the CTD2 (production
+`wire_v2`) level, exit code 0, no `admit`/`assume`. Receipts:
+`receipt_ctd2_p384_arm.txt`, `receipt_ctd2_mlkem1024_arm.txt`.
+
+```text
+P-384 arm:       RESULT Proved secrecy of K up to probability
+                   2 * N_kdf / |dh_secret| + 2 * P_dh_indcca2(time_1, 1, 1, N_dec)
+ML-KEM-1024 arm: RESULT Proved secrecy of K up to probability
+                   2 * N_kdf / |ml_secret| + 2 * P_ml_indcca2(time_1, 1, 1, N_dec)
+```
+
+- **ML-KEM-1024 arm** is instance-independent: ML-KEM is abstracted as its IND-CCA2
+  premise, so 768→1024 is a strictly stronger instance of the same assumption (category
+  5 vs 3). Proof structure identical to the `0xA3` ML-KEM arm; the broken classical
+  component is P-384 rather than X25519 but enters as the same abstract `[fixed]`
+  ciphertext type, immaterial to the secrecy theorem since it is fully broken. This is
+  the "re-run and re-receipt only" of spec `eem/033` §5.
+- **P-384 arm is an upgrade over the X25519 arm, not just a relabel.** CryptoVerif's
+  prime-order/DHKEM abstraction is *unfaithful* to Curve25519 (cofactor 8, low-order
+  points), which is exactly why `citadel_combiner_x25519_gdh_attempt.ocv` stays PARKED
+  as an idealization. **P-384 has cofactor 1** — a prime-order group with no low-order
+  subgroup — so the abstract model is faithful to the shipped curve and that fidelity
+  gap does not exist. The X25519 arm's seven-point low-order rejection suite has no
+  P-384 analogue and needs none; SEC1 on-curve/not-identity validation in
+  `from_sec1_bytes` covers what `was_contributory()` covered for X25519.
 
 The verified arms establish: **the combiner key K is secret if the surviving
 component KEM is IND-CCA2, even if the other component is fully broken**, now under

@@ -319,11 +319,53 @@ a DigitalOcean Intel vCPU): root for `cpupower frequency-set -g performance` + t
 — *not* WSL. Rust `1.9x`, `cargo bench --bench timing_sidechannel -p citadel-envelope --features
 timing-diagnostics -- --filter p384` (and the ML-KEM baseline as the capability control).
 
-**Authoritative next step (Andre / dedicated hardware):** run both benches — plus the
+**Dedicated-hardware run (Andre / optional, additive):** running both benches — plus the
 attacker-controlled ciphertext-variation class, which is the one that matters for the remote
 API — on a quiet Intel/AMD/ARM Linux box with frequency pinning, per the "Quiet-machine
-validation run procedure" below, at full 100K+ samples. Only then can the P-384 arm be
-characterized the way ML-KEM-768 was.
+validation run procedure" below, at full 100K+ samples, would lower the noise floor enough to
+resolve the ~2–7 band **empirically**. But see the next subsection: dudect can only ever *fail
+to reject* constant-time, so that run is additive evidence, not the authoritative resolver of the
+claim. It is worth doing to move the empirical row from *inconclusive* toward *consistent-with-CT*;
+it cannot move the claim past the provider's own ceiling.
+
+### Authoritative resolution — the design guarantee is the ceiling (2026-07-27)
+
+The framing above treated the dedicated-hardware dudect run as the authoritative determination.
+That is the wrong epistemics and is corrected here. **dudect is a one-sided test: it can detect a
+timing signal (reject the constant-time null), but a clean result never *proves* constant-time — it
+only fails to reject.** So no amount of timing data, on any box, can be the authoritative source for
+a *positive* "is constant-time" claim. The authoritative source is what the provider **designs,
+implements, and documents**, verified by source inspection. Both were checked (facts, not vibes):
+
+1. **Provider design posture — `p384` 0.14.0 `README.md` "⚠️ Security Warning" (verbatim):**
+   > "This crate has been designed with the goal of ensuring that secret-dependent operations are
+   > performed in constant time (using the `subtle` crate and constant-time formulas). However, it
+   > has not been thoroughly assessed to ensure that generated assembly is constant time on common
+   > CPU architectures. […] This crate has not been independently audited!"
+
+2. **Shipped path — source-inspected.** The `0xA4` ECDH shared secret is computed via
+   `elliptic_curve::ecdh::diffie_hellman` (0.14.1), whose body is
+   `let secret_point = (public_point * secret_key.borrow().as_ref()).to_affine();` — the
+   **constant-time `Mul`** on `ProjectivePoint` (secret scalar × attacker-supplied point). RustCrypto's
+   variable-time routines are the *explicitly named* `*_vartime` / `lincomb_vartime` methods; **none
+   appear on this path.** Point validation (`from_sec1_bytes`) rejects off-curve / identity inputs
+   before the multiply. So the shipped path uses the constant-time formula the README describes.
+
+**Claim resolution (this is the true ceiling for a pure-Rust, unaudited provider):**
+
+| Level | Status | Basis |
+|---|---|---|
+| **Source / algorithm** (secret-dependent ops use constant-time formulas + `subtle`; shipped path is the CT `Mul`, no `_vartime`) | **Established** | `p384` 0.14.0 README + code inspection of `diffie_hellman` (above) |
+| **Generated assembly on specific CPUs** | **Not vendor-assessed** | provider states it explicitly; same status already recorded for `ml-kem 0.3.2` |
+| **Independent audit** | **False** | provider states "not been independently audited" |
+| **Empirical (dudect, this box)** | **Inconclusive, consistent-with-CT** | well-powered 1M×4 shows no signal above the ~2–7 noise floor that resolves ML-KEM's real 27–38 signal; one-sided test, so this is *supporting*, never *proof* |
+
+The dedicated-hardware run remains available and would strengthen the empirical row, but the
+**overall claim cannot advance past "designed and implemented constant-time (source-verified);
+assembly not vendor-assessed; not independently audited"** without a third-party assembly/side-channel
+audit — which is the same audit gate already tracked for the ML-KEM provider and for Citadel overall.
+P6 is therefore resolved to its ceiling: the claim is recorded at exactly what the evidence supports,
+and the open dependency is the audit, not a timing box.
 
 ## Dudect bench policy
 
