@@ -294,6 +294,31 @@ runs (`|t|` ≤ 2.9, 1.45 at 1M), consistent with ML-KEM's attacker-controlled c
 (spec 033 §7 row 1) — and now explicitly *inconclusive, not clean*: the well-powered run neither
 confirmed nor excluded a weak key-material effect. The remote/attacker-controlled class is clean.
 
+### Can this box be salvaged with core-pinning? No (2026-07-26)
+
+Tried the only no-root lever available on WSL: `taskset` the bench to an isolated core (core 15
+of 16). It did **not** tighten P-384 — it made it *more* erratic:
+
+| pinned P-384 `key_a_vs_key_b` @ 1M | \|t\| | n (post-crop) |
+|---|---|---|
+| run 1 | 1.93 | 242K |
+| run 2 | **22.48** | 67K (93% cropped) |
+| run 3 | 3.43 | 67K |
+| control | 2.19 | 621K |
+| ML-KEM sanity | **82.0** | 43K |
+
+The run-2 spike arrived with dudect discarding 93% of samples as outliers — a scheduling-jitter
+artifact, not a reproducible effect (runs 1/3 stayed low). ML-KEM stayed rock-solid at 82. A real
+key-material signal is reproducible and survives cropping; P-384's is neither. **Conclusion: the
+WSL-on-Windows virtualization noise floor is not removable without root (`cpupower`/turbo/isolcpus)
+or a different host. This box cannot resolve P-384 — confirmed empirically, pinned and unpinned.**
+
+Authoritative determination requires a **quiet, dedicated Ubuntu** (the ML-KEM numbers above used
+a DigitalOcean Intel vCPU): root for `cpupower frequency-set -g performance` + turbo disable +
+`taskset`/`isolcpus`, no competing load, `--samples`≥1M. Native/bare-metal or a throwaway cloud VM
+— *not* WSL. Rust `1.9x`, `cargo bench --bench timing_sidechannel -p citadel-envelope --features
+timing-diagnostics -- --filter p384` (and the ML-KEM baseline as the capability control).
+
 **Authoritative next step (Andre / dedicated hardware):** run both benches — plus the
 attacker-controlled ciphertext-variation class, which is the one that matters for the remote
 API — on a quiet Intel/AMD/ARM Linux box with frequency pinning, per the "Quiet-machine
