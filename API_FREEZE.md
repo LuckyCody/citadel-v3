@@ -37,6 +37,7 @@ New methods/variants may be added, but existing ones won't change:
 | `SealError` | May add error variants (non-exhaustive) |
 | `OpenError` | Will remain opaque (no variants exposed) |
 | `CiphertextInfo` fields | May add fields |
+| `0xA4` suite surface (added, packets 033/034) | `CitadelP384` engine, `P384MlKem1024PublicKey`/`SecretKey` + size consts, and FFI `citadel_p384_{keygen,seal,open}` + `citadel_{public,secret}_key_bytes_for_suite`. New symbols only; Tier-1 `0xA3` items and `citadel_{public,secret}_key_bytes()` remain byte-identical. `tests/vectors/` diff verified empty. |
 
 ### Tier 3: Internal (No Guarantees)
 

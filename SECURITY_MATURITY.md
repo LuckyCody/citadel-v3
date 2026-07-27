@@ -30,7 +30,7 @@
 
 - **Mission-critical production without external audit**
   - No independent cryptographic review
-  - No formal verification
+  - No formal verification *of the full implementation* (the hybrid-combiner secrecy theorem is machine-checked as an abstract model, but the model↔Rust gap and all other components are not proven)
   - No long-term operational history
 
 - **Unmonitored production deployments**
@@ -48,7 +48,8 @@
 ## Security Architecture Strengths
 
 ### Cryptographic Foundation
-- ✅ Post-quantum hybrid KEM (X25519 + ML-KEM-768)
+- ✅ Post-quantum hybrid KEM — `0xA3` X25519 + ML-KEM-768 (category 3); `0xA4` P-384 + ML-KEM-1024 (category 5, CNSA-aligned)
+- ✅ Hybrid-combiner secrecy machine-checked in CryptoVerif (both suites, both arms; abstract-combiner model — see THREAT_MODEL "Formal verification")
 - ✅ Post-quantum signing (ML-DSA-65)
 - ✅ Proper key derivation (HKDF-SHA256)
 - ✅ Authenticated encryption (AES-256-GCM)

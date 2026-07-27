@@ -8,9 +8,17 @@
 ## What this system is
 
 A hybrid post-quantum encryption envelope and key management system. It wraps
-plaintext using X25519 + ML-KEM-768 (hybrid KEM), AES-256-GCM (AEAD), and
-HKDF-SHA256 (KDF), enforces a 4-level key hierarchy, and provides stateful
-replay protection.
+plaintext using a hybrid KEM, AES-256-GCM (AEAD), and HKDF-SHA256 (KDF),
+enforces a 4-level key hierarchy, and provides stateful replay protection.
+
+Two wire suites are supported, selected by the suite byte and additively staged
+(the second never alters the first's bytes):
+
+- **`0xA3` (default, frozen):** X25519 + ML-KEM-768 — NIST PQ category 3.
+- **`0xA4` (CNSA-aligned):** P-384 + ML-KEM-1024 — NIST PQ category 5. Same
+  envelope codec, KDF, AEAD, and header; only the KEM provider varies. Added under
+  packets 033/034 with its own KATs, formal proof, and timing characterization
+  (see the corresponding sections below).
 
 ---
 
@@ -34,10 +42,11 @@ replay protection.
 | Auth brute force / key spam | Rate limiter (20 rps default, configurable) | `it_rate_limit_activates_under_spam` |
 | Auth failures leaving no evidence | Written to tamper-evident JSONL audit chain | `AuthFailed` in AuditAction |
 | Replay store deleted mid-run | Store recreates safely, in-memory state preserved | `file_store_recreates_after_deletion` |
-| Quantum attack on key exchange | ML-KEM-768 (NIST FIPS 203) — security holds even if X25519 broken | Hybrid KEM design |
-| Attacker-varied ciphertext timing | dudect passes all attacker-controlled classes | `timing_sidechannel` bench suite |
-| ACVP vector correctness | 60/60 NIST vectors byte-identical through the RustCrypto production provider directly, plus a libcrux differential | `nist_acvp_kat` (production provider) + `acvp_libcrux_kat` (differential) |
-| Corrupted X25519 ephemeral | Authentication fails | `corrupted_x25519_ephemeral_rejected` |
+| Quantum attack on key exchange | ML-KEM-768 (`0xA3`) / ML-KEM-1024 (`0xA4`), NIST FIPS 203 — security holds even if the classical arm is broken | Hybrid KEM design; combiner secrecy machine-checked (see Formal verification below) |
+| Attacker-varied ciphertext timing | dudect passes all attacker-controlled classes (both suites; `0xA4` P-384 remote/ciphertext class `|t|` ≤ 2.9) | `timing_sidechannel` bench suite |
+| ACVP vector correctness | `0xA3`: 60/60 NIST vectors byte-identical through the RustCrypto production provider, plus a libcrux differential. `0xA4`: NIST ACVP ML-KEM-1024 + Wycheproof P-384 ECDH KATs, provenance-verified | `nist_acvp_kat`, `acvp_libcrux_kat`, `acvp_mlkem1024`, `wycheproof_p384_ecdh` |
+| Cross-suite / downgrade confusion (`0xA3`↔`0xA4`) | Exact total-length + `kem_ct_len` re-check rejects a bare flip before AEAD; suite byte + recipient-key hash bound into KDF+AAD reject a length-consistent forgery | `wire_v2::p3c_cross_suite_tests`, `v2_vector_a4` |
+| Corrupted classical ephemeral (X25519 / P-384) | Authentication fails; `0xA4` also SEC1-validates the P-384 point (on-curve, not-identity) before use | `corrupted_x25519_ephemeral_rejected`, `kem_p384` validation tests |
 | Corrupted AEAD tag | Authentication fails | `corrupted_aead_tag_rejected` |
 
 ---
@@ -57,9 +66,30 @@ limitation, not attributed to a proved root cause. Fixed-server-key,
 attacker-controlled ciphertext, tag, and AAD classes pass the frozen dudect
 screen. See the Packet 012 receipt and `TIMING.md` for scope and wording.
 
-### Formal verification
-No part of Citadel V3 has been formally verified. Correctness claims rest on
-tests, ACVP vectors, and code review, not mathematical proof.
+For the `0xA4` P-384 arm (packet 036): the shipped ECDH path is designed and
+implemented constant-time (`p384` 0.14.0 uses `subtle` + constant-time formulas; the
+shared secret is computed via the constant-time `Mul`, no `_vartime` on the path —
+source-verified). The vendor does not assess generated-assembly constant-timeness, and
+our well-powered dudect of the key-material class is inconclusive on the available noisy
+box (straddles the noise floor; the ML-KEM positive control is detected decisively). Because
+dudect is one-sided (it can reject constant-time, never prove it), the claim's ceiling is
+the same independent-audit gate as the ML-KEM provider, not a timing run. The attacker-
+controlled / remote P-384 class passes (`|t|` ≤ 2.9).
+
+### Formal verification (scope-limited — see below)
+The **hybrid-combiner secrecy theorem** is machine-checked in CryptoVerif 2.12 for
+**both suites and both arms** (`gauntlet/tier12_combiner_proof/`): if the surviving
+component KEM is IND-CCA2, the KDF-derived key is secret even if the other component
+is fully broken. `0xA3`: X25519 and ML-KEM-768 arms (packets 016/017), verified at the
+full-faithful CCA level with an explicit SHA3-256 collision term. `0xA4`: P-384 and
+ML-KEM-1024 arms (packet 033 P5), both `RESULT Proved secrecy of K`, exit 0, no `admit`.
+An independent falsification audit (packet 019-R) ran 8+ probes and found no cryptographic
+façade.
+
+**This is a proof of the abstract combiner (random-oracle KDF model), not of the Rust
+implementation.** The model↔code gap is covered by the other gauntlet tiers (ACVP/Wycheproof
+KATs, proptest, fuzz, Miri, ctgrind), not by these proofs. No other component (key hierarchy,
+replay store, API layer) is formally verified; those rest on tests, vectors, and code review.
 
 ### Audit certification
 The system has not been independently audited. No third party has reviewed the
@@ -113,16 +143,20 @@ standards. Citadel itself has not undergone FIPS 140-3 validation.
 
 | Primitive | Algorithm | Standard | Crate | Version | Status |
 |-----------|-----------|----------|-------|---------|--------|
-| KEM (classical) | X25519 ECDH | RFC 7748 | x25519-dalek | 2.x | Stable |
-| KEM (post-quantum) | ML-KEM-768 | NIST FIPS 203 | ml-kem | =0.3.2 | RustCrypto pure Rust; not independently audited |
+| KEM classical (`0xA3`) | X25519 ECDH | RFC 7748 | x25519-dalek | 2.x | Stable |
+| KEM classical (`0xA4`) | P-384 ECDH | NIST SP 800-186 / SEC1 | p384 | =0.14.0 | RustCrypto pure Rust; `subtle` + constant-time formulas, generated assembly not vendor-assessed; not independently audited |
+| KEM post-quantum (`0xA3`) | ML-KEM-768 | NIST FIPS 203 | ml-kem | =0.3.2 | RustCrypto pure Rust; not independently audited |
+| KEM post-quantum (`0xA4`) | ML-KEM-1024 | NIST FIPS 203 | ml-kem | =0.3.2 | RustCrypto pure Rust; not independently audited |
 | AEAD | AES-256-GCM | NIST SP 800-38D | aes-gcm | 0.10 | Stable |
 | KDF | HKDF-SHA256 | RFC 5869 | hkdf | 0.12 | Stable |
 | MAC (API auth) | HMAC-SHA256 | RFC 2104 | hmac | 0.12 | Stable |
 | Signing (optional) | ML-DSA-65 | NIST FIPS 204 | ml-dsa | =0.1.0-rc.9 | RustCrypto (pure Rust) |
 
-**Hybrid security guarantee:** An attacker must break BOTH X25519 AND ML-KEM-768
-to recover the shared secret. If either primitive is compromised (by cryptanalysis
-or implementation flaw), the other still protects the plaintext.
+**Hybrid security guarantee:** An attacker must break BOTH the classical arm (X25519
+for `0xA3`, P-384 for `0xA4`) AND the post-quantum arm (ML-KEM-768 / ML-KEM-1024) to
+recover the shared secret. If either primitive is compromised (by cryptanalysis or
+implementation flaw), the other still protects the plaintext. This is the property
+machine-checked by the combiner proofs (see Formal verification).
 
 ---
 

@@ -10,8 +10,11 @@ See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 ### Confidentiality of encrypted data
 Ciphertext produced by Citadel is computationally indistinguishable from random bytes
 to any party without access to the corresponding secret key. This holds under the
-security of both X25519 (ECDH) and ML-KEM-768 (NIST PQC standard), and requires
-only one of the two to remain secure (hybrid defense-in-depth).
+security of both the classical arm (X25519 ECDH for suite `0xA3`, P-384 ECDH for suite
+`0xA4`) and the post-quantum arm (ML-KEM-768 / ML-KEM-1024, NIST FIPS 203), and requires
+only one of the two to remain secure (hybrid defense-in-depth). This combiner property
+is machine-checked in CryptoVerif for both suites and both arms (abstract-combiner model;
+see `THREAT_MODEL.md` "Formal verification").
 
 ### Authenticity and integrity of encrypted data
 Every ciphertext includes an AES-256-GCM authentication tag. Any modification to the
@@ -116,8 +119,10 @@ Multiple API instances sharing a load balancer: per-IP rate limiting is per-inst
 
 | Primitive | Algorithm | Standard | Version |
 |-----------|-----------|----------|---------|
-| KEM (classical) | X25519 ECDH | RFC 7748 | x25519-dalek 2.x |
-| KEM (post-quantum) | ML-KEM-768 | NIST FIPS 203 | ml-kem 0.2.2 |
+| KEM classical (`0xA3`) | X25519 ECDH | RFC 7748 | x25519-dalek 2.x |
+| KEM classical (`0xA4`) | P-384 ECDH | NIST SP 800-186 / SEC1 | p384 =0.14.0 |
+| KEM post-quantum (`0xA3`) | ML-KEM-768 | NIST FIPS 203 | ml-kem =0.3.2 |
+| KEM post-quantum (`0xA4`) | ML-KEM-1024 | NIST FIPS 203 | ml-kem =0.3.2 |
 
 ### Note on ml-kem crate status
 
