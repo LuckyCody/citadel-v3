@@ -1296,7 +1296,9 @@ fn bench_stage_p384_ecdh_key_a_vs_key_b_success(runner: &mut CtRunner, rng: &mut
             p384_fixture_kem_ct(&pk_b, "p384-key-b", i),
         ));
     }
-    for _ in 0..100_000 {
+    // 1M samples: reach dudect's sufficiency estimate for a WELL-POWERED result on a box
+    // that provably detects ML-KEM's key-material signal (see TIMING.md P-384 baseline).
+    for _ in 0..1_000_000 {
         let sample = &samples[rng.gen_range(0..samples.len())];
         runner.run_one(sample.0, || {
             let _ = black_box(timing_diagnostics::p384_ecdh_only(
@@ -1332,7 +1334,7 @@ fn bench_stage_p384_ecdh_same_key_pool_a_vs_pool_b_control(
             p384_fixture_kem_ct(&pk, "p384-pool-b", i),
         ));
     }
-    for _ in 0..100_000 {
+    for _ in 0..1_000_000 {
         let sample = &samples[rng.gen_range(0..samples.len())];
         runner.run_one(sample.0, || {
             let _ = black_box(timing_diagnostics::p384_ecdh_only(
