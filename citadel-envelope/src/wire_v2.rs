@@ -4,13 +4,10 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use hkdf::Hkdf;
-use sha2::{Digest as Sha2Digest, Sha256};
-use sha3::Sha3_256;
 use subtle::ConstantTimeEq;
 use zeroize::Zeroizing;
 
-use crate::aead;
+use crate::backend::{ActiveBackend, CryptoBackend};
 use crate::error::{DecryptionError, EncodingError};
 use crate::kem::KemProvider;
 use crate::wire::KEM_CIPHERTEXT_BYTES;
@@ -79,13 +76,11 @@ fn push_u32(out: &mut Vec<u8>, value: usize) -> Result<(), EncodingError> {
 /// serialization is delegated to the suite. For `0xA3` this is byte-for-byte what it
 /// always was — `K::public_key_bytes` returns the same 1216 bytes `to_bytes()` did.
 pub fn public_key_hash<K: KemProvider>(pk: &K::PublicKey) -> [u8; 32] {
-    let digest = Sha3_256::digest(K::public_key_bytes(pk));
-    digest.into()
+    ActiveBackend::sha3_256(&K::public_key_bytes(pk))
 }
 
 pub fn context_hash(context: &[u8]) -> [u8; 32] {
-    let digest = Sha3_256::digest(context);
-    digest.into()
+    ActiveBackend::sha3_256(context)
 }
 
 /// Build the 98-byte header for suite `K`.
@@ -174,11 +169,9 @@ pub fn associated_data(
 }
 
 pub fn derive_key(shared_secret: &[u8], transcript: &[u8]) -> Result<[u8; 32], EncodingError> {
-    let salt = Sha256::digest(EXTRACT_SALT_LABEL);
-    let hkdf = Hkdf::<Sha256>::new(Some(salt.as_slice()), shared_secret);
+    let salt = ActiveBackend::sha256(EXTRACT_SALT_LABEL);
     let mut key = [0u8; 32];
-    hkdf.expand(transcript, &mut key)
-        .map_err(|_| EncodingError)?;
+    ActiveBackend::hkdf_sha256(Some(&salt), shared_secret, transcript, &mut key)?;
     Ok(key)
 }
 
@@ -276,7 +269,7 @@ pub fn seal<K: KemProvider>(
         return Err(EncodingError);
     }
     let (shared_secret, kem_ct) = K::encapsulate(pk)?;
-    let nonce = aead::nonce()?;
+    let nonce = ActiveBackend::aead_nonce()?;
     seal_with_material::<K>(pk, plaintext, aad, context, &shared_secret, &kem_ct, &nonce)
 }
 
@@ -304,7 +297,7 @@ pub(crate) fn seal_with_material<K: KemProvider>(
     let transcript = kdf_transcript(&header, kem_ct, context)?;
     let key = Zeroizing::new(derive_key(shared_secret, &transcript)?);
     let bound_aad = associated_data(&header, kem_ct, context, aad)?;
-    let aead_ct = aead::aead_seal(&key, nonce, plaintext, &bound_aad)?;
+    let aead_ct = ActiveBackend::aead_seal(&key, nonce, plaintext, &bound_aad)?;
     encode::<K>(&header, kem_ct, &aead_ct)
 }
 
@@ -337,7 +330,7 @@ pub fn open<K: KemProvider>(
     let key = Zeroizing::new(derive_key(&shared_secret, &transcript).map_err(|_| DecryptionError)?);
     let bound_aad = associated_data(parts.header, parts.kem_ciphertext, context, aad)
         .map_err(|_| DecryptionError)?;
-    let plaintext = aead::aead_open(&key, parts.nonce, parts.aead_ciphertext, &bound_aad)?;
+    let plaintext = ActiveBackend::aead_open(&key, parts.nonce, parts.aead_ciphertext, &bound_aad)?;
     if plaintext.len() != parts.plaintext_len {
         return Err(DecryptionError);
     }

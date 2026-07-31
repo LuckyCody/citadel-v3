@@ -51,6 +51,7 @@
 extern crate alloc;
 
 mod aead;
+mod backend;
 mod error;
 mod kdf;
 mod kem;
@@ -81,13 +82,16 @@ pub use sdk::{
     VERSION,
 };
 
+// Packet 037: the engines resolve their suite providers through the crypto-backend
+// seam. `ActiveBackend` is RustCrypto, so both aliases denote exactly the types they
+// always did — the indirection is the point, not a change.
 pub(crate) type CitadelEngine =
-    crate::kem_engine::Citadel<crate::kem::HybridX25519MlKem768Provider>;
+    crate::kem_engine::Citadel<<backend::ActiveBackend as backend::CryptoBackend>::KemA3>;
 
 /// Engine instantiation for the additive `0xA4` (P-384 + ML-KEM-1024) suite.
 /// Parallel to [`CitadelEngine`]; the frozen `0xA3` engine is unchanged.
 pub(crate) type CitadelP384Engine =
-    crate::kem_engine::Citadel<crate::kem_p384::HybridP384MlKem1024Provider>;
+    crate::kem_engine::Citadel<<backend::ActiveBackend as backend::CryptoBackend>::KemA4>;
 
 #[doc(hidden)]
 #[cfg(feature = "timing-diagnostics")]
