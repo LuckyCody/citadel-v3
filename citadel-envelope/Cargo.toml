@@ -93,6 +93,12 @@ kat = ["ml-kem/hazmat"]
 bench = []
 # Explicit opt-in for the AWS-LC comparison path. Never selected by default.
 aws-lc-comparison = ["dep:aws-lc-rs"]
+# FIPS backend dependency gate (packet 038). Selects aws-lc-rs with its FIPS module
+# (aws-lc-fips-sys — a C build requiring CMake+Go+Perl; see fips-backend/SUPPLY_CHAIN.md).
+# NOTHING consumes this yet: the seam's ActiveBackend alias (backend.rs, packet 037)
+# still resolves to RustCryptoBackend unconditionally. Backend code attaches at 039+;
+# full feature wiring and the {default,fips} build matrix land in packet 043.
+fips = ["dep:aws-lc-rs", "aws-lc-rs/fips"]
 # Diagnostic/timing helpers (raw component decapsulation for side-channel benches).
 # NOT compiled into default/production builds: these expose unguarded intermediate
 # KEM material (e.g. raw X25519 output without the contributory check) purely for

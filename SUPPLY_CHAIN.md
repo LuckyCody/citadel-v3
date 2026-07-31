@@ -38,3 +38,39 @@ to drop the dev tooling that pulls them (replace `dudect-bencher`; drop the libc
 differential oracle) — tracked as a possible future cleanup, deliberately not done
 here because it would reduce test/CT-validation capability for zero shipped-risk
 benefit.
+
+## AWS-LC subtree (packet 038 — Citadel-FIPS dependency gate, 2026-07-31)
+
+The opt-in `fips` feature on `citadel-envelope` selects `aws-lc-rs` with its FIPS
+module. Lock change was **additive-only**: one new package, `aws-lc-fips-sys 0.13.16`
+(checksum `37b00953…`); no existing pin moved. Pins in force: `aws-lc-rs 1.17.1`,
+`aws-lc-sys 0.42.0` (both pre-existing via the comparison feature), `aws-lc-fips-sys
+0.13.16`. `cargo audit`: no findings on the subtree (the 4 pre-existing dev-only
+warnings above are unchanged).
+
+**License triage (deny.toml `[[licenses.exceptions]]`, scoped per-crate — the global
+allowlist is unchanged):**
+
+| Crate | Declared license | Exception granted | Why |
+|---|---|---|---|
+| aws-lc-rs 1.17.1 | `ISC AND (Apache-2.0 OR ISC)` | `ISC` | ISC is a permissive MIT-equivalent (OpenBSD's license); no obligations beyond notice |
+| aws-lc-sys 0.42.0 | `ISC AND (…) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (…)` | `ISC` | Same; every other mandatory term already allowed globally |
+| aws-lc-fips-sys 0.13.16 | `ISC AND (Apache-2.0 OR ISC) AND OpenSSL` | `ISC`, `OpenSSL` | See flag below |
+
+**FLAGGED FOR LEGAL REVIEW (blocking for any shipped `fips` artifact, tracked to
+packet 048):** the `OpenSSL` license term carries the historic advertising clause and
+is widely held GPL/AGPL-incompatible for *redistribution* of combined works. Citadel
+is AGPL-3.0-or-later. Acceptance here covers only: (a) the feature is opt-in and off
+by default, (b) no `fips` artifact is currently built or distributed, (c) the
+copyright holder (RepoSignal LLC / Andre Cordero) can license his own code as needed
+for his own distribution. Before any third party receives a `fips` build, the
+AGPL-vs-OpenSSL-license combination MUST clear legal review (packet 048
+`LEGAL_DISCLAIMER.md` work). This is a recorded open question, not a resolved one.
+
+**C-build note:** `aws-lc-fips-sys` compiles the AWS-LC FIPS module from C source and
+requires CMake, a C compiler, **Go**, and Perl at build time. This box (WSL2 Ubuntu)
+currently has cmake/gcc/perl but **no Go toolchain**, so `--features fips` does not
+build here yet — installing Go is a prerequisite for packet 039. CI note: the GitHub
+Actions build matrix `{default, fips}` (PRD §6.4) additionally needs those packages
+in the runner image; Actions is billing-blocked until ~2026-08-04, so the matrix
+lands with packet 043 validation running locally until then.

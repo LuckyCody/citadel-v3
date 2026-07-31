@@ -23,6 +23,38 @@ allow = [
     "Unicode-3.0",
 ]
 
+# Packet 038 (Citadel-FIPS dep gate): scoped per-crate exceptions for the AWS-LC
+# subtree ONLY — the global allowlist above is deliberately unchanged. ISC is a
+# permissive MIT-equivalent. The OpenSSL license term (aws-lc-fips-sys) is accepted
+# for the opt-in, non-default `fips` build only; its AGPL-compatibility question is
+# recorded in SUPPLY_CHAIN.md §AWS-LC and MUST clear legal review before any `fips`
+# artifact ships (packet 048). Rationale: SUPPLY_CHAIN.md; program doc:
+# factory citadel/fips-backend/SUPPLY_CHAIN.md.
+[[licenses.exceptions]]
+name = "aws-lc-rs"
+allow = ["ISC"]
+
+[[licenses.exceptions]]
+name = "aws-lc-sys"
+allow = ["ISC"]
+
+[[licenses.exceptions]]
+name = "aws-lc-fips-sys"
+allow = ["ISC", "OpenSSL"]
+
+# untrusted (Brian Smith's zero-alloc parsing helper) enters the production graph
+# only via aws-lc-rs under `--features fips`. ISC, same rationale as above.
+[[licenses.exceptions]]
+name = "untrusted"
+allow = ["ISC"]
+
+# libloading enters the checked graph only via clang-sys <- bindgen, the build-time
+# binding generator of the aws-lc `fips` C build. ISC, build-time only, never linked
+# into a shipped artifact.
+[[licenses.exceptions]]
+name = "libloading"
+allow = ["ISC"]
+
 [bans]
 multiple-versions = "warn"
 wildcards = "allow"
