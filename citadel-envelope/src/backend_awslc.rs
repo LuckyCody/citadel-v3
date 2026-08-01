@@ -20,6 +20,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use aws_lc_rs::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
+use aws_lc_rs::agreement as lc_agreement;
 use aws_lc_rs::digest as lc_digest;
 use aws_lc_rs::hkdf as lc_hkdf;
 use aws_lc_rs::kem::{Ciphertext, DecapsulationKey, EncapsulationKey, ML_KEM_1024};
@@ -213,6 +214,86 @@ impl AwsLcHash {
         let mut out = [0u8; 32];
         out.copy_from_slice(digest.as_ref());
         out
+    }
+}
+
+/// Uncompressed SEC1 P-384 point: `0x04 || x[48] || y[48]`.
+const P384_POINT_BYTES: usize = 97;
+/// SEC1 uncompressed tag — decision D2: the ONLY accepted encoding, enforced in our
+/// code on every backend (injectivity of the recipient-binding hash must not depend
+/// on which library parses the point).
+const SEC1_TAG_UNCOMPRESSED: u8 = 0x04;
+/// P-384 scalar width.
+const P384_SCALAR_BYTES: usize = 48;
+/// ECDH output: the x-coordinate only.
+const P384_SHARED_BYTES: usize = 48;
+
+/// P-384 ECDH executed inside AWS-LC (packet 042).
+///
+/// Mirrors the two classical arms of `kem_p384.rs`: the static-scalar arm
+/// (decapsulate: `diffie_hellman(scalar, ephemeral_point)`) and the ephemeral arm
+/// (encapsulate: generate, export uncompressed SEC1, agree with the recipient key).
+/// D2 policy (uncompressed-only, tag-checked) is enforced HERE, before AWS-LC parses
+/// anything — Wycheproof's compressed "valid" encodings are deliberately rejected.
+pub struct AwsLcEcdhP384;
+
+impl AwsLcEcdhP384 {
+    fn check_point(peer_sec1: &[u8]) -> Result<(), ()> {
+        if peer_sec1.len() != P384_POINT_BYTES || peer_sec1[0] != SEC1_TAG_UNCOMPRESSED {
+            return Err(());
+        }
+        Ok(())
+    }
+
+    /// Static-scalar arm: `x = ECDH(scalar, peer_point)`. Fail-closed on lengths,
+    /// tag, scalar range, and off-curve points (AWS-LC validates the point).
+    pub fn ecdh(
+        scalar: &[u8],
+        peer_sec1: &[u8],
+    ) -> Result<[u8; P384_SHARED_BYTES], DecryptionError> {
+        if scalar.len() != P384_SCALAR_BYTES {
+            return Err(DecryptionError);
+        }
+        Self::check_point(peer_sec1).map_err(|()| DecryptionError)?;
+        let private = lc_agreement::PrivateKey::from_private_key(&lc_agreement::ECDH_P384, scalar)
+            .map_err(|_| DecryptionError)?;
+        let peer = lc_agreement::UnparsedPublicKey::new(&lc_agreement::ECDH_P384, peer_sec1);
+        lc_agreement::agree(&private, peer, DecryptionError, |km| {
+            if km.len() != P384_SHARED_BYTES {
+                return Err(DecryptionError);
+            }
+            let mut out = [0u8; P384_SHARED_BYTES];
+            out.copy_from_slice(km);
+            Ok(out)
+        })
+    }
+
+    /// Ephemeral arm: generate inside AWS-LC, return
+    /// `(ephemeral_pub_sec1_uncompressed[97], x[48])`.
+    pub fn ephemeral_ecdh(
+        peer_sec1: &[u8],
+    ) -> Result<([u8; P384_POINT_BYTES], Zeroizing<[u8; P384_SHARED_BYTES]>), EncodingError> {
+        Self::check_point(peer_sec1).map_err(|()| EncodingError)?;
+        let private = lc_agreement::PrivateKey::generate(&lc_agreement::ECDH_P384)
+            .map_err(|_| EncodingError)?;
+        let public = private.compute_public_key().map_err(|_| EncodingError)?;
+        if public.as_ref().len() != P384_POINT_BYTES || public.as_ref()[0] != SEC1_TAG_UNCOMPRESSED
+        {
+            return Err(EncodingError);
+        }
+        let mut pub_out = [0u8; P384_POINT_BYTES];
+        pub_out.copy_from_slice(public.as_ref());
+
+        let peer = lc_agreement::UnparsedPublicKey::new(&lc_agreement::ECDH_P384, peer_sec1);
+        let shared = lc_agreement::agree(&private, peer, EncodingError, |km| {
+            if km.len() != P384_SHARED_BYTES {
+                return Err(EncodingError);
+            }
+            let mut out = Zeroizing::new([0u8; P384_SHARED_BYTES]);
+            out.copy_from_slice(km);
+            Ok(out)
+        })?;
+        Ok((pub_out, shared))
     }
 }
 
