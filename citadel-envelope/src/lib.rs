@@ -52,6 +52,12 @@ extern crate alloc;
 
 mod aead;
 mod backend;
+/// AWS-LC-backed primitive components for the FIPS backend (packet 039+).
+/// Component layer only — `backend::ActiveBackend` still resolves to RustCrypto
+/// unconditionally until the provider fold in packet 043.
+#[cfg(feature = "fips")]
+#[doc(hidden)]
+pub mod backend_awslc;
 mod error;
 mod kdf;
 mod kem;
