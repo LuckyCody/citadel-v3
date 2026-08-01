@@ -20,6 +20,8 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use aws_lc_rs::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
+use aws_lc_rs::digest as lc_digest;
+use aws_lc_rs::hkdf as lc_hkdf;
 use aws_lc_rs::kem::{Ciphertext, DecapsulationKey, EncapsulationKey, ML_KEM_1024};
 use zeroize::Zeroizing;
 
@@ -185,5 +187,67 @@ impl AwsLcAes256Gcm {
             .len();
         in_out.truncate(plaintext_len);
         Ok(in_out)
+    }
+}
+
+/// Hash functions executed inside AWS-LC (packet 041).
+///
+/// Shapes mirror `CryptoBackend::{sha256, sha3_256}`. SHA3-256 is exposed by
+/// `aws-lc-rs` 1.17.1 (`digest::SHA3_256`); whether it executes in the FIPS-approved
+/// mode of the validated module is a security-policy question answered with a citation
+/// at packet 044/046 — availability here is an API fact, not an approval claim.
+pub struct AwsLcHash;
+
+impl AwsLcHash {
+    /// SHA-256 one-shot digest.
+    pub fn sha256(data: &[u8]) -> [u8; 32] {
+        let digest = lc_digest::digest(&lc_digest::SHA256, data);
+        let mut out = [0u8; 32];
+        out.copy_from_slice(digest.as_ref());
+        out
+    }
+
+    /// SHA3-256 one-shot digest.
+    pub fn sha3_256(data: &[u8]) -> [u8; 32] {
+        let digest = lc_digest::digest(&lc_digest::SHA3_256, data);
+        let mut out = [0u8; 32];
+        out.copy_from_slice(digest.as_ref());
+        out
+    }
+}
+
+/// Arbitrary-length HKDF output size for `aws_lc_rs::hkdf`'s ring-style `KeyType`.
+struct OkmLen(usize);
+
+impl lc_hkdf::KeyType for OkmLen {
+    fn len(&self) -> usize {
+        self.0
+    }
+}
+
+/// HKDF-SHA256 executed inside AWS-LC (packet 041).
+///
+/// Shape mirrors `CryptoBackend::hkdf_sha256` exactly: `salt: None` uses RFC 5869
+/// zero-salt semantics (`Salt::none`), matching RustCrypto's `Hkdf::new(None, ikm)`.
+pub struct AwsLcHkdfSha256;
+
+impl AwsLcHkdfSha256 {
+    /// Extract-then-expand; fills `okm`. Errors on an out-of-range requested length.
+    pub fn derive(
+        salt: Option<&[u8]>,
+        ikm: &[u8],
+        info: &[u8],
+        okm: &mut [u8],
+    ) -> Result<(), EncodingError> {
+        let salt = match salt {
+            Some(bytes) => lc_hkdf::Salt::new(lc_hkdf::HKDF_SHA256, bytes),
+            None => lc_hkdf::Salt::none(lc_hkdf::HKDF_SHA256),
+        };
+        let prk = salt.extract(ikm);
+        let info_parts = [info];
+        let okm_material = prk
+            .expand(&info_parts, OkmLen(okm.len()))
+            .map_err(|_| EncodingError)?;
+        okm_material.fill(okm).map_err(|_| EncodingError)
     }
 }
