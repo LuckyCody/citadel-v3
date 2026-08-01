@@ -16,6 +16,10 @@
 //!   vectors + bidirectional interop with the ACVP-validated RustCrypto path
 //!   (`tests/awslc_mlkem_differential.rs`).
 
+extern crate alloc;
+use alloc::vec::Vec;
+
+use aws_lc_rs::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
 use aws_lc_rs::kem::{Ciphertext, DecapsulationKey, EncapsulationKey, ML_KEM_1024};
 use zeroize::Zeroizing;
 
@@ -122,3 +126,64 @@ impl AwsLcMlKem1024 {
 // must persist the ek alongside the dk rather than re-deriving it (the `0xA4` public
 // key already serializes the ek, so this costs nothing at 043). The differential suite
 // proves import-layout correctness via vector-ek/imported-dk agreement instead.
+
+/// AES-256-GCM tag length — identical constant to `wire_v2::TAG_LEN`; restated here so
+/// the component has no dependency on the codec module.
+const AEAD_TAG_BYTES: usize = 16;
+
+/// AES-256-GCM executed inside AWS-LC (packet 040).
+///
+/// Signatures mirror `crate::aead::{aead_seal, aead_open}` exactly — the CryptoBackend
+/// method shape — and the output format is the same `ciphertext || tag[16]`. AES-GCM
+/// is fully deterministic given (key, nonce), so the differential gate for this
+/// component is exact byte-identity against the RustCrypto path
+/// (`tests/awslc_aead_differential.rs`), a stronger bar than the KEM's interop gate.
+pub struct AwsLcAes256Gcm;
+
+impl AwsLcAes256Gcm {
+    /// Seal: returns `ciphertext || tag`. Fail-closed on any AWS-LC error.
+    pub fn seal(
+        key: &[u8; 32],
+        nonce: &[u8; 12],
+        plaintext: &[u8],
+        aad: &[u8],
+    ) -> Result<Vec<u8>, EncodingError> {
+        let unbound = UnboundKey::new(&AES_256_GCM, key).map_err(|_| EncodingError)?;
+        let sealing_key = LessSafeKey::new(unbound);
+        let mut in_out = Vec::with_capacity(plaintext.len() + AEAD_TAG_BYTES);
+        in_out.extend_from_slice(plaintext);
+        sealing_key
+            .seal_in_place_append_tag(
+                Nonce::assume_unique_for_key(*nonce),
+                Aad::from(aad),
+                &mut in_out,
+            )
+            .map_err(|_| EncodingError)?;
+        Ok(in_out)
+    }
+
+    /// Open: verifies the tag, returns the plaintext. Fail-closed.
+    pub fn open(
+        key: &[u8; 32],
+        nonce: &[u8; 12],
+        ciphertext: &[u8],
+        aad: &[u8],
+    ) -> Result<Vec<u8>, DecryptionError> {
+        if ciphertext.len() < AEAD_TAG_BYTES {
+            return Err(DecryptionError);
+        }
+        let unbound = UnboundKey::new(&AES_256_GCM, key).map_err(|_| DecryptionError)?;
+        let opening_key = LessSafeKey::new(unbound);
+        let mut in_out = ciphertext.to_vec();
+        let plaintext_len = opening_key
+            .open_in_place(
+                Nonce::assume_unique_for_key(*nonce),
+                Aad::from(aad),
+                &mut in_out,
+            )
+            .map_err(|_| DecryptionError)?
+            .len();
+        in_out.truncate(plaintext_len);
+        Ok(in_out)
+    }
+}
