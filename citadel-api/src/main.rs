@@ -1499,7 +1499,38 @@ fn lname(level: ThreatLevel) -> &'static str {
 // ---------------------------------------------------------------------------
 
 async fn health() -> impl IntoResponse {
-    Json(serde_json::json!({"status": "ok", "version": env!("CARGO_PKG_VERSION")}))
+    Json(serde_json::json!({
+        "status": "ok",
+        "version": env!("CARGO_PKG_VERSION"),
+        "crypto_backend": crypto_backend_health(),
+    }))
+}
+
+/// Crypto-backend block of `/health` (packet 047).
+///
+/// Default builds report `rustcrypto` with a null module. FIPS builds add the pinned
+/// module version, the live FIPS-mode assertion, and the CMVP status in its bounded
+/// wording — deliberately shipped together so an operator reading `mode_active: true`
+/// cannot mistake it for "validated". Wording source: `citadel_envelope::fips_status`
+/// (bound by the CLAIM_EVIDENCE_MATRIX FIPS-backend section).
+fn crypto_backend_health() -> serde_json::Value {
+    use citadel_envelope::fips_status;
+    let module = match (
+        fips_status::module_version(),
+        fips_status::mode_active(),
+        fips_status::cmvp_status(),
+    ) {
+        (Some(version), Some(mode_active), Some(cmvp_status)) => serde_json::json!({
+            "version": version,
+            "mode_active": mode_active,
+            "cmvp_status": cmvp_status,
+        }),
+        _ => serde_json::Value::Null,
+    };
+    serde_json::json!({
+        "backend": fips_status::BACKEND_NAME,
+        "fips_module": module,
+    })
 }
 
 async fn get_status(
@@ -3389,6 +3420,58 @@ async fn main() {
 // ---------------------------------------------------------------------------
 // P146 — API key format and entropy tests
 // ---------------------------------------------------------------------------
+
+/// Packet 047: the `/health` crypto-backend block on whichever graph is compiled.
+#[cfg(test)]
+mod crypto_backend_health_tests {
+    use super::*;
+
+    #[test]
+    fn health_reports_the_compiled_backend() {
+        let v = crypto_backend_health();
+        let backend = v["backend"].as_str().expect("backend string");
+
+        if cfg!(feature = "fips") {
+            assert_eq!(backend, "aws-lc-fips");
+            let module = &v["fips_module"];
+            assert_eq!(
+                module["version"].as_str(),
+                Some("AWS-LC-FIPS 3.4.0"),
+                "pinned module version must be reported"
+            );
+            assert_eq!(
+                module["mode_active"].as_bool(),
+                Some(true),
+                "FIPS mode must be active on a fips build"
+            );
+            let cmvp = module["cmvp_status"].as_str().expect("cmvp_status string");
+            assert!(
+                cmvp.contains("CMVP review pending") && cmvp.contains("NOT validated"),
+                "cmvp_status must carry the bounded wording, got {cmvp:?}"
+            );
+        } else {
+            assert_eq!(backend, "rustcrypto");
+            assert!(
+                v["fips_module"].is_null(),
+                "default builds must report no fips module"
+            );
+        }
+    }
+
+    /// The health body must never imply validation. The only permitted occurrence of
+    /// "validat" is inside the explicit negative/submitted phrasing.
+    #[test]
+    fn health_never_claims_validated() {
+        let text = crypto_backend_health().to_string();
+        for (i, _) in text.match_indices("validat") {
+            let window = &text[i.saturating_sub(40)..text.len().min(i + 20)];
+            assert!(
+                window.contains("NOT validated") || window.contains("submitted for FIPS"),
+                "unbounded validation wording in health body near: {window:?}"
+            );
+        }
+    }
+}
 
 #[cfg(test)]
 mod api_key_tests {

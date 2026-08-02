@@ -1,0 +1,103 @@
+# =============================================================================
+# Citadel API Server — FIPS-backend image (packet 047)
+#
+# Identical to `Dockerfile` except: the builder installs the C toolchain the
+# AWS-LC FIPS module needs (CMake + Go + Perl) and builds with `--features fips`,
+# so every envelope cryptographic operation executes inside AWS-LC-FIPS 3.4.0.
+#
+# HONEST SCOPE — do not overstate when shipping this image:
+#   * the module is SUBMITTED for FIPS 140-3 validation (CMVP review pending);
+#     it is NOT validated. `/health` reports this string itself.
+#   * ML-KEM key expansion from stored seeds, key generation, and ML-DSA-65
+#     signing execute in pure Rust (aws-lc-rs exposes no FIPS-mode ML-DSA).
+#   * DISTRIBUTION IS GATED: Citadel is AGPL-3.0-or-later and aws-lc-fips-sys
+#     carries an OpenSSL-license term. Legal review (packet 048) must clear
+#     before this image reaches any third party. Local/self-hosted builds only
+#     until then.
+# Controlling record: factory `CLAIM_EVIDENCE_MATRIX.md` FIPS-backend section and
+# `citadel/fips-backend/FIPS_MODE_STATUS.md`.
+#
+# Build:  docker build -f Dockerfile.fips -t citadel:v3-fips .
+# Verify: curl -s localhost:8443/health | jq .crypto_backend
+# =============================================================================
+
+# Stage 1: Build (same rust pin as Dockerfile; see its note on edition2024)
+FROM rust:1.96.1-bookworm AS builder
+
+# AWS-LC FIPS module build prerequisites: CMake, Go, Perl, and a C compiler.
+# (Perl and cc are already in the rust:bookworm image; cmake and golang are not.)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends cmake golang-go perl && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Workspace manifests first for dependency caching (every workspace member must
+# be present — cargo resolves the whole graph before -p selection applies).
+COPY Cargo.toml Cargo.lock ./
+COPY citadel-core/Cargo.toml citadel-core/Cargo.toml
+COPY citadel-envelope/Cargo.toml citadel-envelope/Cargo.toml
+COPY citadel-keystore/Cargo.toml citadel-keystore/Cargo.toml
+COPY citadel-signer/Cargo.toml citadel-signer/Cargo.toml
+COPY citadel-api/Cargo.toml citadel-api/Cargo.toml
+COPY citadel-cli/Cargo.toml citadel-cli/Cargo.toml
+COPY citadel-ffi/Cargo.toml citadel-ffi/Cargo.toml
+
+RUN mkdir -p citadel-core/src && echo "" > citadel-core/src/lib.rs && \
+    mkdir -p citadel-envelope/src && echo "" > citadel-envelope/src/lib.rs && \
+    mkdir -p citadel-keystore/src && echo "" > citadel-keystore/src/lib.rs && \
+    mkdir -p citadel-signer/src && echo "" > citadel-signer/src/lib.rs && \
+    mkdir -p citadel-api/src && echo "fn main() {}" > citadel-api/src/main.rs && \
+    mkdir -p citadel-cli/src && echo "fn main() {}" > citadel-cli/src/main.rs && \
+    mkdir -p citadel-ffi/src && echo "" > citadel-ffi/src/lib.rs
+
+# Cache the dependency build, including the AWS-LC FIPS C build (slow, ~minutes).
+RUN cargo build --release -p citadel-api -p citadel-cli --bins \
+        --features redis-backend,fips 2>/dev/null || true
+
+COPY citadel-core/ citadel-core/
+COPY citadel-envelope/ citadel-envelope/
+COPY citadel-keystore/ citadel-keystore/
+COPY citadel-signer/ citadel-signer/
+COPY citadel-api/ citadel-api/
+COPY citadel-cli/ citadel-cli/
+COPY citadel-ffi/ citadel-ffi/
+
+RUN touch citadel-core/src/lib.rs citadel-envelope/src/lib.rs citadel-keystore/src/lib.rs \
+          citadel-signer/src/lib.rs citadel-api/src/main.rs citadel-cli/src/main.rs \
+          citadel-ffi/src/lib.rs
+
+# Real build: Redis replay support + the AWS-LC FIPS backend.
+RUN cargo build --release -p citadel-api -p citadel-cli --bins \
+        --features redis-backend,fips
+
+# Stage 2: Runtime (minimal image — the FIPS module is statically linked in)
+FROM debian:bookworm-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r citadel && useradd -r -g citadel -m citadel
+
+COPY --from=builder /build/target/release/citadel-api /usr/local/bin/citadel-api
+COPY --from=builder /build/target/release/citadel    /usr/local/bin/citadel
+COPY --from=builder /build/target/release/hash-apikey /usr/local/bin/hash-apikey
+
+RUN mkdir -p /data && chown citadel:citadel /data
+VOLUME /data
+
+USER citadel
+
+ENV CITADEL_PORT=8443
+ENV CITADEL_DATA_DIR=/data
+ENV CITADEL_SEED_DEMO=false
+
+EXPOSE 8443
+
+# /health additionally reports {"crypto_backend":{"backend":"aws-lc-fips",...}} on
+# this image; the liveness probe itself is unchanged.
+HEALTHCHECK --interval=30s --timeout=3s \
+    CMD curl -f http://localhost:8443/health || exit 1
+
+ENTRYPOINT ["citadel-api"]

@@ -23,6 +23,12 @@ default = []
 # Must match the feature enabled in citadel-keystore.
 # Build: cargo build --features redis-backend
 redis-backend = ["citadel-keystore/redis-backend"]
+# FIPS backend (packet 047): forwarding only — the API performs no crypto itself.
+# Selects the AWS-LC FIPS module inside citadel-envelope and makes /health report
+# the crypto backend + module status. Wording is bound by the CLAIM_EVIDENCE_MATRIX
+# FIPS-backend section: the module is SUBMITTED for FIPS 140-3 validation (CMVP
+# review pending), NOT validated.
+fips = ["citadel-envelope/fips"]
 
 [dependencies]
 axum = { version = "0.7", features = ["macros"] }

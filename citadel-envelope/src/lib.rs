@@ -58,6 +58,60 @@ mod backend;
 #[cfg(feature = "fips")]
 #[doc(hidden)]
 pub mod backend_awslc;
+
+/// Crypto-backend identity and (on fips builds) FIPS module status, for operators
+/// and health endpoints. Packet 047: lets consumers report which backend is
+/// compiled in without depending on `aws-lc-rs` themselves.
+///
+/// Wording is bound by the `CLAIM_EVIDENCE_MATRIX` FIPS-backend section: the module
+/// is **submitted** for FIPS 140-3 validation (CMVP review pending), NOT validated.
+pub mod fips_status {
+    /// `"rustcrypto"` on default builds, `"aws-lc-fips"` under `--features fips`.
+    pub const BACKEND_NAME: &str = if cfg!(feature = "fips") {
+        "aws-lc-fips"
+    } else {
+        "rustcrypto"
+    };
+
+    /// Pinned FIPS module version, or `None` on default builds.
+    pub fn module_version() -> Option<&'static str> {
+        #[cfg(feature = "fips")]
+        {
+            Some(crate::backend_awslc::FIPS_MODULE_VERSION)
+        }
+        #[cfg(not(feature = "fips"))]
+        {
+            None
+        }
+    }
+
+    /// `Some(true)` iff this is a fips build AND the module reports FIPS mode active;
+    /// `None` on default builds.
+    pub fn mode_active() -> Option<bool> {
+        #[cfg(feature = "fips")]
+        {
+            Some(crate::backend_awslc::fips_module_status().is_ok())
+        }
+        #[cfg(not(feature = "fips"))]
+        {
+            None
+        }
+    }
+
+    /// The CMVP status of the pinned module, in the exact bounded wording, or `None`
+    /// on default builds. Emitted by servers so "mode active" can never be read as
+    /// "validated".
+    pub fn cmvp_status() -> Option<&'static str> {
+        #[cfg(feature = "fips")]
+        {
+            Some("submitted for FIPS 140-3 validation; CMVP review pending; NOT validated")
+        }
+        #[cfg(not(feature = "fips"))]
+        {
+            None
+        }
+    }
+}
 mod error;
 mod kdf;
 mod kem;
