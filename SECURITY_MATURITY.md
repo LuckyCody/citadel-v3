@@ -40,7 +40,10 @@
 
 - **Compliance-critical systems**
   - Without formal security certification
-  - Requiring FIPS 140-2/3 validation
+  - Requiring FIPS 140-2/3 validation (the optional `fips` build routes envelope
+    operations through the AWS-LC FIPS module, but that module's CMVP status is
+    review-in-process at the current pin — NOT validated; see the FIPS-backend
+    section of the factory `CLAIM_EVIDENCE_MATRIX.md`, which controls all wording)
   - Subject to regulatory audit requirements
 
 ---

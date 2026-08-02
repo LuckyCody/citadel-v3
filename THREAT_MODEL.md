@@ -116,6 +116,21 @@ the network layer are out of scope.
 The primitives used (ML-KEM-768, AES-256-GCM, HKDF-SHA256) follow NIST
 standards. Citadel itself has not undergone FIPS 140-3 validation.
 
+An optional `--features fips` build (packets 037-046) routes the v2 envelope's
+cryptographic operations for both suites through the AWS-LC FIPS module
+(AWS-LC-FIPS 3.4.0 via `aws-lc-fips-sys 0.13.16`), with wire bytes proven identical
+to the default build. Scope, honestly stated:
+- The module's CMVP status is **submitted / review in process** — not validated.
+  "FIPS 140-3 validated" remains a prohibited claim at this pin.
+- ML-KEM key expansion from stored seeds and key generation execute in pure Rust;
+  ML-DSA-65 signing is pure Rust on ALL builds (aws-lc-rs exposes no FIPS-mode
+  ML-DSA at this version).
+- FIPS mode is asserted active at runtime; the module's integrity check is
+  fail-closed (upstream-documented).
+Controlling record: the factory `CLAIM_EVIDENCE_MATRIX.md` FIPS-backend section and
+`citadel/fips-backend/FIPS_MODE_STATUS.md`. This document must never state a
+stronger claim than those.
+
 ---
 
 ## Attacker model
