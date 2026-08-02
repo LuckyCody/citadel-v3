@@ -141,6 +141,13 @@ name = "timing_sidechannel"
 harness = false
 required-features = ["timing-diagnostics"]
 
+# NFR3 (packet 049): P-384 ECDH timing differential, RustCrypto vs AWS-LC, in one
+# process on one box. Needs both the diagnostic helpers and the fips backend.
+[[bench]]
+name = "timing_fips_p384"
+harness = false
+required-features = ["timing-diagnostics", "fips"]
+
 [[bench]]
 name = "mlkem_standalone"
 harness = false
