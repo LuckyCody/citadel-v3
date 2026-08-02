@@ -52,9 +52,9 @@ extern crate alloc;
 
 mod aead;
 mod backend;
-/// AWS-LC-backed primitive components for the FIPS backend (packet 039+).
-/// Component layer only — `backend::ActiveBackend` still resolves to RustCrypto
-/// unconditionally until the provider fold in packet 043.
+/// The AWS-LC backend (packets 039–043): primitive components + the
+/// `AwsLcBackend`/`0xA4` provider that `backend::ActiveBackend` selects under
+/// `--features fips`. Absent from default builds entirely.
 #[cfg(feature = "fips")]
 #[doc(hidden)]
 pub mod backend_awslc;
@@ -89,8 +89,9 @@ pub use sdk::{
 };
 
 // Packet 037: the engines resolve their suite providers through the crypto-backend
-// seam. `ActiveBackend` is RustCrypto, so both aliases denote exactly the types they
-// always did — the indirection is the point, not a change.
+// seam. On default builds `ActiveBackend` is RustCrypto and both aliases denote
+// exactly the types they always did; under `--features fips` (packet 043) the same
+// indirection selects the AWS-LC `0xA4` provider — same key types, same wire.
 pub(crate) type CitadelEngine =
     crate::kem_engine::Citadel<<backend::ActiveBackend as backend::CryptoBackend>::KemA3>;
 

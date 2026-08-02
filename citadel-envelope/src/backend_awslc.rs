@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! ML-KEM-1024 via AWS-LC — first component of the FIPS backend (packet 039).
 //!
-//! Compiled ONLY under `--features fips`. This is the component layer: a thin, typed,
-//! byte-oriented wrapper over `aws_lc_rs::kem` so later packets can slot it behind the
-//! packet-037 seam. [`crate::backend::ActiveBackend`] still resolves to RustCrypto
-//! unconditionally — the provider fold and the `fips` selection switch are packet 043.
+//! Compiled ONLY under `--features fips`. Grew in layers: the primitive components
+//! (packets 039–042, below) and, since packet 043, the [`AwsLcBackend`] +
+//! [`AwsLcHybridP384MlKem1024Provider`] fold at the end of this file —
+//! [`crate::backend::ActiveBackend`] resolves HERE under `--features fips` (and to
+//! RustCrypto otherwise). Selection lives in `backend.rs`; there is no other switch.
 //!
 //! Measured API constraints of `aws-lc-rs` 1.17.1 (packet-039 spike, recorded in the
 //! packet TASK):
