@@ -545,6 +545,38 @@ impl CryptoBackend for AwsLcBackend {
     }
 }
 
+// ---------------------------------------------------------------------------
+// FIPS module status surface (packet 044)
+// ---------------------------------------------------------------------------
+
+/// The AWS-LC FIPS module version this build pins, from the vendored
+/// `aws-lc-fips-sys 0.13.16` headers (`AWSLC_VERSION_NUMBER_STRING`).
+///
+/// **Validation status (recorded 2026-08-02, upstream FIPS.md):** the AWS-LC-FIPS
+/// 3.x line is CMVP **"Review Pending"** — submitted, NOT yet certificate-validated
+/// (issued certificates cover v1.0 #4631 and v2.0 #4759/#4816). No claim stronger
+/// than "submitted for validation / in process" is supportable for this pin. See
+/// `citadel/fips-backend/FIPS_MODE_STATUS.md`.
+pub const FIPS_MODULE_VERSION: &str = "AWS-LC-FIPS 3.4.0";
+
+/// Runtime assertion that the linked library IS the FIPS module and operational.
+///
+/// `Ok(())` means `FIPS_mode() == 1`, which can only be observed if the module's
+/// constructor completed — and that constructor performs the integrity check
+/// (HMAC over the module text; on mismatch the module "calls `exit` in an infinite
+/// loop" per upstream FIPS.md) and the power-on self-tests. Reaching this assertion
+/// alive with `Ok` is therefore evidence the self-tests passed; a corrupted module
+/// never gets here (fail-closed). Surfaced for the 047 health endpoint.
+pub fn fips_module_status() -> Result<(), &'static str> {
+    aws_lc_rs::try_fips_mode()
+}
+
+/// Runtime assertion that the SP 800-90B CPU jitter entropy source is in use
+/// (NIST entropy certificate #E77 per upstream FIPS.md).
+pub fn fips_entropy_status() -> Result<(), &'static str> {
+    aws_lc_rs::try_fips_cpu_jitter_entropy()
+}
+
 /// Cross-PROVIDER differentials (packet 043): the RustCrypto and AWS-LC `0xA4`
 /// providers against each other through the crate-private generic codec — the
 /// envelope-level half of the seam's "provider is the only thing that varies" claim.
