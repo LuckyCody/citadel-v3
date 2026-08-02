@@ -24,9 +24,12 @@ use aws_lc_rs::agreement as lc_agreement;
 use aws_lc_rs::digest as lc_digest;
 use aws_lc_rs::hkdf as lc_hkdf;
 use aws_lc_rs::kem::{Ciphertext, DecapsulationKey, EncapsulationKey, ML_KEM_1024};
+use aws_lc_rs::rand as lc_rand;
 use zeroize::Zeroizing;
 
+use crate::backend::{CryptoBackend, KemProvider};
 use crate::error::{DecryptionError, EncodingError};
+use crate::kem_p384::{P384MlKem1024PublicKey, P384MlKem1024SecretKey};
 
 /// ML-KEM-1024 encapsulation key (FIPS 203).
 pub const MLKEM1024_EK_BYTES: usize = 1568;
@@ -330,5 +333,288 @@ impl AwsLcHkdfSha256 {
             .expand(&info_parts, OkmLen(okm.len()))
             .map_err(|_| EncodingError)?;
         okm_material.fill(okm).map_err(|_| EncodingError)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The 0xA4 hybrid provider on AWS-LC (packet 043)
+// ---------------------------------------------------------------------------
+
+/// Hybrid P-384 + ML-KEM-1024 provider executing inside AWS-LC (suite `0xA4`).
+///
+/// Reuses the RustCrypto provider's key types and serializations byte-for-byte
+/// (`P384MlKem1024PublicKey`/`SecretKey`, 1665/112 bytes), so the SDK, FFI, and every
+/// stored key work identically on both backends. Only the *operations* differ.
+///
+/// **Boundary caveat (decision recorded in packet 043, quoted at 046):** ML-KEM key
+/// expansion from the stored D3 seed, and key GENERATION for both arms, use the
+/// pure-Rust key schedule (`ml-kem`/`p384` crates) — AWS-LC exposes no seed import
+/// (packet-039 finding) and no raw scalar export. All envelope cryptographic
+/// OPERATIONS (ML-KEM encapsulate/decapsulate, P-384 ECDH, AEAD, KDF, hashes) execute
+/// in AWS-LC. Claim language must never exceed this.
+pub struct AwsLcHybridP384MlKem1024Provider;
+
+impl AwsLcHybridP384MlKem1024Provider {
+    /// Derive the FIPS 203 expanded dk from the stored D3 seed (RustCrypto key
+    /// schedule — the documented bridge).
+    #[allow(deprecated)]
+    fn expanded_dk_from_seed(seed: &[u8; 64]) -> Zeroizing<[u8; MLKEM1024_DK_EXPANDED_BYTES]> {
+        use ml_kem::{ExpandedKeyEncoding, Seed};
+        let dk = ml_kem::ml_kem_1024::DecapsulationKey::from_seed(Seed::from(*seed));
+        let mut out = Zeroizing::new([0u8; MLKEM1024_DK_EXPANDED_BYTES]);
+        out.copy_from_slice(dk.to_expanded_bytes().as_ref());
+        out
+    }
+
+    /// Derive the ML-KEM ek bytes from the stored D3 seed (RustCrypto key schedule).
+    fn ek_from_seed(seed: &[u8; 64]) -> [u8; MLKEM1024_EK_BYTES] {
+        use ml_kem::{kem::KeyExport, Seed};
+        let dk = ml_kem::ml_kem_1024::DecapsulationKey::from_seed(Seed::from(*seed));
+        let mut out = [0u8; MLKEM1024_EK_BYTES];
+        out.copy_from_slice(dk.encapsulation_key().to_bytes().as_ref());
+        out
+    }
+}
+
+impl KemProvider for AwsLcHybridP384MlKem1024Provider {
+    // Identical constants to the RustCrypto provider — same suite byte, same wire.
+    const SUITE_KEM: u8 = crate::wire::SUITE_KEM_HYBRID_P384_MLKEM1024;
+    const KEM_CIPHERTEXT_BYTES: usize = P384_POINT_BYTES + MLKEM1024_CT_BYTES;
+    const KEM_PUBLIC_KEY_BYTES: usize = P384_POINT_BYTES + MLKEM1024_EK_BYTES;
+    const KEM_SECRET_KEY_BYTES: usize = P384_SCALAR_BYTES + 64;
+
+    type PublicKey = P384MlKem1024PublicKey;
+    type SecretKey = P384MlKem1024SecretKey;
+
+    fn keygen() -> (Self::PublicKey, Self::SecretKey) {
+        // Key GENERATION uses the pure-Rust schedule (boundary caveat above): the D3
+        // 112-byte secret format requires the seed and raw scalar, which AWS-LC does
+        // not expose. Assembled through the public validated constructors so both
+        // arms are checked exactly as on the default backend.
+        use p384::elliptic_curve::sec1::ToSec1Point;
+        use p384::elliptic_curve::Generate;
+        use rand_core::{OsRng, RngCore};
+
+        let p384_sk = p384::SecretKey::generate();
+        let mut seed = Zeroizing::new([0u8; 64]);
+        OsRng.fill_bytes(seed.as_mut());
+
+        let mut sk_bytes = Zeroizing::new([0u8; 112]);
+        sk_bytes[..48].copy_from_slice(p384_sk.to_bytes().as_slice());
+        sk_bytes[48..].copy_from_slice(&*seed);
+        let sk = P384MlKem1024SecretKey::from_bytes(&*sk_bytes)
+            .expect("freshly generated key material must parse");
+
+        let mut pk_bytes = [0u8; 1665];
+        pk_bytes[..97].copy_from_slice(
+            p384_sk
+                .public_key()
+                .as_affine()
+                .to_sec1_point(false)
+                .as_ref(),
+        );
+        pk_bytes[97..].copy_from_slice(&Self::ek_from_seed(&seed));
+        let pk = P384MlKem1024PublicKey::from_bytes(&pk_bytes)
+            .expect("freshly generated public material must parse");
+        (pk, sk)
+    }
+
+    fn encapsulate(pk: &Self::PublicKey) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), EncodingError> {
+        let pk_bytes = pk.to_bytes();
+        let recipient_point = &pk_bytes[..P384_POINT_BYTES];
+        let mlkem_ek = &pk_bytes[P384_POINT_BYTES..];
+
+        // Both operations inside AWS-LC.
+        let (eph_pub, x) = AwsLcEcdhP384::ephemeral_ecdh(recipient_point)?;
+        let (mlkem_ct, mlkem_ss) = AwsLcMlKem1024::encapsulate(mlkem_ek)?;
+
+        let mut shared = Zeroizing::new(Vec::with_capacity(P384_SHARED_BYTES + MLKEM_SHARED_BYTES));
+        shared.extend_from_slice(&x[..]);
+        shared.extend_from_slice(&mlkem_ss[..]);
+
+        let mut kem_ct = Vec::with_capacity(Self::KEM_CIPHERTEXT_BYTES);
+        kem_ct.extend_from_slice(&eph_pub);
+        kem_ct.extend_from_slice(&mlkem_ct);
+        Ok((shared, kem_ct))
+    }
+
+    fn decapsulate(sk: &Self::SecretKey, ct: &[u8]) -> Result<Zeroizing<Vec<u8>>, DecryptionError> {
+        if ct.len() != Self::KEM_CIPHERTEXT_BYTES {
+            return Err(DecryptionError);
+        }
+        let sk_bytes = Zeroizing::new(sk.to_bytes());
+        let scalar = &sk_bytes[..P384_SCALAR_BYTES];
+        let mut seed = Zeroizing::new([0u8; 64]);
+        seed.copy_from_slice(&sk_bytes[P384_SCALAR_BYTES..]);
+
+        // ECDH inside AWS-LC (validates the ephemeral point: D2 tag + on-curve).
+        let x = AwsLcEcdhP384::ecdh(scalar, &ct[..P384_POINT_BYTES])?;
+        // ML-KEM decapsulation inside AWS-LC; dk expanded from the seed via the
+        // documented RustCrypto key-schedule bridge.
+        let dk = Self::expanded_dk_from_seed(&seed);
+        let mlkem_ss = AwsLcMlKem1024::decapsulate(&dk[..], &ct[P384_POINT_BYTES..])?;
+
+        let mut shared = Zeroizing::new(Vec::with_capacity(P384_SHARED_BYTES + MLKEM_SHARED_BYTES));
+        shared.extend_from_slice(&x[..]);
+        shared.extend_from_slice(&mlkem_ss[..]);
+        Ok(shared)
+    }
+
+    fn public_key_bytes(pk: &Self::PublicKey) -> Vec<u8> {
+        pk.to_bytes().to_vec()
+    }
+
+    fn public_key_of(sk: &Self::SecretKey) -> Self::PublicKey {
+        let sk_bytes = Zeroizing::new(sk.to_bytes());
+        let mut seed = Zeroizing::new([0u8; 64]);
+        seed.copy_from_slice(&sk_bytes[P384_SCALAR_BYTES..]);
+
+        // P-384 public derivation inside AWS-LC (raw scalar import + compute).
+        let mut pk_bytes = [0u8; 1665];
+        let private = lc_agreement::PrivateKey::from_private_key(
+            &lc_agreement::ECDH_P384,
+            &sk_bytes[..P384_SCALAR_BYTES],
+        )
+        .expect("stored scalar was validated at construction");
+        let public = private
+            .compute_public_key()
+            .expect("public derivation from a valid scalar");
+        pk_bytes[..97].copy_from_slice(public.as_ref());
+        pk_bytes[97..].copy_from_slice(&Self::ek_from_seed(&seed));
+        P384MlKem1024PublicKey::from_bytes(&pk_bytes).expect("derived public material must parse")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The backend (packet 043): CryptoBackend on AWS-LC
+// ---------------------------------------------------------------------------
+
+/// The AWS-LC backend — selected by `--features fips` at the `ActiveBackend` alias
+/// (SEAM_DESIGN §3, now live).
+///
+/// `KemA3` stays the RustCrypto X25519 hybrid: the FIPS path is `0xA4`-only (PRD
+/// NG2), and `0xA3` envelopes remain byte-identical on fips builds because the codec
+/// routes hash/KDF/AEAD through this backend while the `0xA3` KEM arms are untouched
+/// RustCrypto.
+pub struct AwsLcBackend;
+
+impl CryptoBackend for AwsLcBackend {
+    type KemA3 = crate::kem::HybridX25519MlKem768Provider;
+    type KemA4 = AwsLcHybridP384MlKem1024Provider;
+
+    fn sha256(data: &[u8]) -> [u8; 32] {
+        AwsLcHash::sha256(data)
+    }
+
+    fn sha3_256(data: &[u8]) -> [u8; 32] {
+        AwsLcHash::sha3_256(data)
+    }
+
+    fn hkdf_sha256(
+        salt: Option<&[u8]>,
+        ikm: &[u8],
+        info: &[u8],
+        okm: &mut [u8],
+    ) -> Result<(), EncodingError> {
+        AwsLcHkdfSha256::derive(salt, ikm, info, okm)
+    }
+
+    fn aead_nonce() -> Result<[u8; 12], EncodingError> {
+        let mut n = [0u8; 12];
+        lc_rand::fill(&mut n).map_err(|_| EncodingError)?;
+        Ok(n)
+    }
+
+    fn aead_seal(
+        key: &[u8; 32],
+        nonce: &[u8; 12],
+        plaintext: &[u8],
+        aad: &[u8],
+    ) -> Result<Vec<u8>, EncodingError> {
+        AwsLcAes256Gcm::seal(key, nonce, plaintext, aad)
+    }
+
+    fn aead_open(
+        key: &[u8; 32],
+        nonce: &[u8; 12],
+        ciphertext: &[u8],
+        aad: &[u8],
+    ) -> Result<Vec<u8>, DecryptionError> {
+        AwsLcAes256Gcm::open(key, nonce, ciphertext, aad)
+    }
+}
+
+/// Cross-PROVIDER differentials (packet 043): the RustCrypto and AWS-LC `0xA4`
+/// providers against each other through the crate-private generic codec — the
+/// envelope-level half of the seam's "provider is the only thing that varies" claim.
+/// Unit tests because `wire_v2::{seal, open}` are deliberately not public.
+#[cfg(test)]
+mod cross_provider_tests {
+    use super::AwsLcHybridP384MlKem1024Provider as LcP4;
+    use crate::backend::KemProvider;
+    use crate::kem_p384::{
+        HybridP384MlKem1024Provider as RcP4, P384MlKem1024PublicKey, P384MlKem1024SecretKey,
+    };
+    use crate::wire_v2;
+
+    const ROUNDS: usize = 50;
+
+    fn reload(
+        pk: &P384MlKem1024PublicKey,
+        sk: &P384MlKem1024SecretKey,
+    ) -> (P384MlKem1024PublicKey, P384MlKem1024SecretKey) {
+        (
+            P384MlKem1024PublicKey::from_bytes(&pk.to_bytes()).expect("pk reload"),
+            P384MlKem1024SecretKey::from_bytes(&sk.to_bytes()).expect("sk reload"),
+        )
+    }
+
+    /// KEM-contract agreement in both key directions, same serialized keys.
+    #[test]
+    fn kem_level_cross_provider_agreement() {
+        for round in 0..ROUNDS {
+            let (pk, sk) = RcP4::keygen();
+            let (pk_lc, _sk_lc) = reload(&pk, &sk);
+
+            let (ss_enc, ct) = LcP4::encapsulate(&pk_lc).expect("awslc encapsulate");
+            let ss_dec = RcP4::decapsulate(&sk, &ct).expect("rustcrypto decapsulate");
+            assert_eq!(&*ss_enc, &*ss_dec, "rc-keys direction, round {round}");
+
+            let (pk2, sk2) = LcP4::keygen();
+            let (pk2_rc, sk2_rc) = reload(&pk2, &sk2);
+            let (ss_enc2, ct2) = RcP4::encapsulate(&pk2_rc).expect("rustcrypto encapsulate");
+            let ss_dec2 = LcP4::decapsulate(&sk2_rc, &ct2).expect("awslc decapsulate");
+            assert_eq!(&*ss_enc2, &*ss_dec2, "lc-keys direction, round {round}");
+        }
+    }
+
+    /// Full envelopes sealed under one provider open under the other, same keys.
+    #[test]
+    fn envelope_cross_provider_interop() {
+        for round in 0..ROUNDS {
+            let (pk, sk) = RcP4::keygen();
+            let (pk_lc, sk_lc) = reload(&pk, &sk);
+            let msg = alloc::format!("cross-provider envelope {round}");
+
+            let env_rc =
+                wire_v2::seal::<RcP4>(&pk, msg.as_bytes(), b"aad", b"ctx").expect("rc seal");
+            let opened = wire_v2::open::<LcP4>(&sk_lc, &env_rc, b"aad", b"ctx")
+                .expect("awslc provider opens rc-provider envelope");
+            assert_eq!(opened, msg.as_bytes(), "rc->lc round {round}");
+
+            let env_lc =
+                wire_v2::seal::<LcP4>(&pk_lc, msg.as_bytes(), b"aad", b"ctx").expect("lc seal");
+            let opened2 = wire_v2::open::<RcP4>(&sk, &env_lc, b"aad", b"ctx")
+                .expect("rc provider opens awslc-provider envelope");
+            assert_eq!(opened2, msg.as_bytes(), "lc->rc round {round}");
+
+            assert_eq!(
+                env_rc.len(),
+                env_lc.len(),
+                "wire sizes agree, round {round}"
+            );
+            assert_eq!(env_rc[6], 0xA4);
+            assert_eq!(env_lc[6], 0xA4);
+        }
     }
 }

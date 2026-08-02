@@ -147,6 +147,10 @@ pub trait CryptoBackend {
 /// AEAD delegates to `crate::aead` rather than duplicating the AES-GCM bodies here:
 /// that module carries the audited key-lifecycle handling (`kdf.rs` KEY_LIFECYCLE
 /// note) and stays the single home of the `aes_gcm::` calls, below the seam.
+// On the fips graph nothing references this type (ActiveBackend points at AWS-LC);
+// it is deliberately still compiled so a single-feature build cannot silently rot
+// the other backend.
+#[cfg_attr(feature = "fips", allow(dead_code))]
 pub struct RustCryptoBackend;
 
 impl CryptoBackend for RustCryptoBackend {
@@ -200,12 +204,15 @@ impl CryptoBackend for RustCryptoBackend {
 // Backend selection point
 // ---------------------------------------------------------------------------
 
-/// The compile-time backend selection point.
-///
-/// Packet 038+ turns this single alias into the `fips` feature switch
-/// (`#[cfg(not(feature = "fips"))]` → `RustCryptoBackend`, `#[cfg(feature = "fips")]` →
-/// the AWS-LC backend). The `#[cfg]` is not written yet because the `fips` feature does
-/// not exist in this packet — a cfg on an undeclared feature trips `unexpected_cfgs`
-/// under `-D warnings`. Declaring the feature is packet 038's move, together with the
-/// dependency it selects.
+/// The compile-time backend selection point — the `fips` feature switch declared by
+/// packet 037 (SEAM_DESIGN §3) and made live by packet 043. Default builds compile
+/// zero AWS-LC code; `--features fips` routes every seam method — and the `0xA4`
+/// suite provider — through AWS-LC (`backend_awslc.rs`). No runtime branch exists on
+/// either arm.
+#[cfg(not(feature = "fips"))]
 pub(crate) type ActiveBackend = RustCryptoBackend;
+
+/// See the non-fips arm above. `KemA3` remains RustCrypto on this arm too — the FIPS
+/// path is `0xA4`-only (PRD NG2); `0xA3` stays byte-identical on both backends.
+#[cfg(feature = "fips")]
+pub(crate) type ActiveBackend = crate::backend_awslc::AwsLcBackend;

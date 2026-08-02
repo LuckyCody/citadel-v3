@@ -13,6 +13,9 @@ use getrandom::getrandom;
 use crate::error::{DecryptionError, EncodingError};
 
 /// Generate a random 12-byte nonce. Used during encryption only.
+// On the fips graph the caller (RustCryptoBackend) is compiled but unreachable, so
+// this goes dead there; kept compiled on both graphs deliberately (packet 043).
+#[cfg_attr(feature = "fips", allow(dead_code))]
 pub fn nonce() -> Result<[u8; 12], EncodingError> {
     let mut n = [0u8; 12];
     getrandom(&mut n).map_err(|_| EncodingError)?;
