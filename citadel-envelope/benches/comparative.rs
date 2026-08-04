@@ -13,7 +13,15 @@ use aes_gcm::{
 };
 use citadel_envelope::{Aad, Citadel, Context, HybridX25519MlKem768Provider, KemProvider};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use rand::rngs::OsRng;
+use rand::{rngs::OsRng, RngCore};
+
+/// A random AES-256 key without the deprecated `Aes256Gcm::generate_key` (removed in
+/// aes-gcm 0.11). Bench-only helper.
+fn random_aes256_key() -> aes_gcm::Key<Aes256Gcm> {
+    let mut k = [0u8; 32];
+    OsRng.fill_bytes(&mut k);
+    k.into()
+}
 
 /// Payload sizes to benchmark.
 const PAYLOAD_SIZES: &[usize] = &[64, 1024, 65_536, 1_048_576];
@@ -26,7 +34,7 @@ fn bench_keygen(c: &mut Criterion) {
     });
 
     group.bench_function("aes_256_gcm_key", |b| {
-        b.iter(|| Aes256Gcm::generate_key(OsRng));
+        b.iter(random_aes256_key);
     });
 
     group.finish();
@@ -38,7 +46,7 @@ fn bench_encrypt(c: &mut Criterion) {
     let citadel = Citadel::new();
     let (citadel_pk, _citadel_sk) = citadel.generate_keypair();
 
-    let aes_key = Aes256Gcm::generate_key(OsRng);
+    let aes_key = random_aes256_key();
     let aes_cipher = Aes256Gcm::new(&aes_key);
 
     let aad = Aad::raw(b"bench-aad");
@@ -79,7 +87,7 @@ fn bench_decrypt(c: &mut Criterion) {
     let citadel = Citadel::new();
     let (citadel_pk, citadel_sk) = citadel.generate_keypair();
 
-    let aes_key = Aes256Gcm::generate_key(OsRng);
+    let aes_key = random_aes256_key();
     let aes_cipher = Aes256Gcm::new(&aes_key);
 
     let aad = Aad::raw(b"bench-aad");
@@ -129,7 +137,7 @@ fn bench_overhead(c: &mut Criterion) {
     let citadel_overhead = citadel_ct.len() - plaintext.len();
 
     let nonce = Nonce::from([0u8; 12]);
-    let aes_key = Aes256Gcm::generate_key(OsRng);
+    let aes_key = random_aes256_key();
     let aes_cipher = Aes256Gcm::new(&aes_key);
     let aes_ct = aes_cipher.encrypt(&nonce, plaintext.as_slice()).unwrap();
     let aes_overhead = 12 + aes_ct.len() - plaintext.len();
