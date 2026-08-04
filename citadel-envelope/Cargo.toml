@@ -65,6 +65,15 @@ zeroize = { version = "1.7", features = ["derive"] }
 # production builds do not compile it; enable only for the standalone provider bench.
 aws-lc-rs = { version = "1.17", features = ["unstable"], optional = true }
 
+# Direct handle on the FIPS module crate, ONLY to read the linked module version at
+# runtime (packet 054). It is already in the `fips` graph transitively via aws-lc-rs,
+# so this adds NO new C compilation; it is optional and gated behind `fips`, so the
+# default/production graph never sees it. The `=0.13.11` exact pin is a guard in its
+# own right: it blocks `cargo update` from drifting the CMVP-validated module
+# (0.13.11 = AWS-LC FIPS 3.1.0, certs #5298/#5314). See backend_awslc.rs
+# `fips_module_version_runtime` and tests/awslc_fips_mode.rs.
+aws-lc-fips-sys = { version = "=0.13.11", optional = true }
+
 [dev-dependencies]
 hex = "0.4"
 rand = "0.8"
@@ -98,7 +107,7 @@ aws-lc-comparison = ["dep:aws-lc-rs"]
 # NOTHING consumes this yet: the seam's ActiveBackend alias (backend.rs, packet 037)
 # still resolves to RustCryptoBackend unconditionally. Backend code attaches at 039+;
 # full feature wiring and the {default,fips} build matrix land in packet 043.
-fips = ["dep:aws-lc-rs", "aws-lc-rs/fips"]
+fips = ["dep:aws-lc-rs", "aws-lc-rs/fips", "dep:aws-lc-fips-sys"]
 # Diagnostic/timing helpers (raw component decapsulation for side-channel benches).
 # NOT compiled into default/production builds: these expose unguarded intermediate
 # KEM material (e.g. raw X25519 output without the contributory check) purely for

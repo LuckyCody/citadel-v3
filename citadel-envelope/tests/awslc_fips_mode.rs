@@ -15,7 +15,8 @@
 #![cfg(feature = "fips")]
 
 use citadel_envelope::backend_awslc::{
-    fips_entropy_status, fips_module_status, AwsLcHash, FIPS_MODULE_VERSION,
+    fips_entropy_status, fips_module_status, fips_module_version_runtime, AwsLcHash,
+    FIPS_MODULE_VERSION,
 };
 
 /// P1: the fips build links the real FIPS module and it is operational.
@@ -48,25 +49,41 @@ fn fips_jitter_entropy_state_is_pinned() {
     );
 }
 
-/// Documentation pin: the recorded module-version constant matches what the packets
-/// and the claim language say. Re-pinning aws-lc-fips-sys forces the constant, the
-/// docs and the claims to be revisited together.
+/// REAL guard (packet 054): the recorded `FIPS_MODULE_VERSION` constant must match the
+/// version of the module **actually linked** into this process. `fips_module_version_runtime()`
+/// reads that version from the module at runtime via `OpenSSL_version`, so a `cargo update`
+/// that drifts `aws-lc-fips-sys` off the CMVP-validated 0.13.11 / AWS-LC FIPS 3.1.0 build
+/// makes this test FAIL — the exact failure mode that was missing while the old assertion
+/// compared a constant to a string literal (tautological; found in packet 051).
 ///
-/// **HONEST LIMIT, found in packet 051 (2026-08-04): this does NOT verify the linked
-/// module.** It compares a hardcoded constant to a literal, so it passes no matter
-/// which module is actually linked. It was written as a doc anchor and was briefly
-/// mistaken for a version probe when the pin moved 3.4.0 → 3.1.0 — the suite stayed
-/// green precisely because the assertion is tautological. Believing otherwise would
-/// have meant claiming a validated build on the strength of a test that cannot fail.
+/// Negative controls proving this CAN fail (packet 054 RECEIPT): (A) flipping the constant to a
+/// wrong version reddens this test with no rebuild; (B) repinning to 0.13.16 links module 3.4.0
+/// and the runtime string then contains "3.4.0", not the recorded "3.1.0", so it fails.
 ///
-/// The linked version is evidenced by supply chain instead: the lockfile pin, the
-/// build script's source path (`.../aws-lc-fips-sys-0.13.11`), and that source's
-/// `AWSLC_VERSION_NUMBER_STRING "3.1.0"`.
-///
-/// TO MAKE THIS REAL: adopt `aws-lc-rs >= 1.17.3`, which added `fips_version()`, and
-/// assert the RUNTIME value equals `FIPS_MODULE_VERSION`. That is a dependency change
-/// and therefore its own dep-gate packet, not an edit here.
+/// 053 established why aws-lc-rs's own `fips_version()`/`awslc_version()` (new in 1.17.2) cannot
+/// be used: every aws-lc-rs version exposing them requires `aws-lc-fips-sys >= 0.13.16`
+/// (module 3.4.0), disjoint from the validated 3.1.0. The formats differ intentionally — the
+/// constant reads `"AWS-LC-FIPS 3.1.0"` (hyphenated) and the module reports `"AWS-LC FIPS 3.1.0"`
+/// (spaced) — so the guard matches on the version *token*, not the whole string.
 #[test]
-fn pinned_module_version_is_recorded() {
-    assert_eq!(FIPS_MODULE_VERSION, "AWS-LC-FIPS 3.1.0");
+fn pinned_module_version_matches_linked_module() {
+    // The version token of the recorded pin, e.g. "3.1.0" from "AWS-LC-FIPS 3.1.0".
+    let recorded_token = FIPS_MODULE_VERSION
+        .rsplit(' ')
+        .next()
+        .expect("FIPS_MODULE_VERSION carries a version token");
+    let linked = fips_module_version_runtime();
+    // Evidence line (visible with `--nocapture`): records the exact linked module string.
+    println!("linked AWS-LC FIPS module version string: {linked:?}");
+    assert!(
+        linked.contains(recorded_token),
+        "linked AWS-LC FIPS module reports {linked:?}, which does not contain the recorded \
+         version token {recorded_token:?} (FIPS_MODULE_VERSION = {FIPS_MODULE_VERSION:?}). \
+         The CMVP-validated 0.13.11 / 3.1.0 pin may have drifted — check Cargo.lock."
+    );
+    // Belt-and-suspenders: the module must self-identify as an AWS-LC FIPS build.
+    assert!(
+        linked.contains("AWS-LC"),
+        "linked module version {linked:?} is not an AWS-LC build"
+    );
 }

@@ -567,12 +567,15 @@ impl CryptoBackend for AwsLcBackend {
 /// about operation outside the tested environments. So: validated *build*, ported
 /// environment, disclosed. Never "FIPS validated product" or "FIPS compliant".
 ///
-/// **This constant is a documentation pin, not a runtime probe** — see
-/// `pinned_module_version_is_recorded`. `aws-lc-rs 1.17.1` exposes no
-/// `fips_version()`; that arrived in 1.17.3. Until it is adopted, the linked
-/// version is evidenced by supply chain (lockfile + the build's source path +
-/// vendored header), not by an assertion at runtime.
-/// See `citadel/fips-backend/FIPS_MODE_STATUS.md`.
+/// **This constant is the RECORDED pin; `fips_module_version_runtime()` verifies it
+/// against the linked module at runtime** — see `pinned_module_version_matches_linked_module`.
+/// Packet 054 made the guard real via `aws-lc-fips-sys`'s `OpenSSL_version` FFI, after 053
+/// established that adopting `aws-lc-rs`'s own version API is impossible without losing this
+/// pin: `fips_version()`/`awslc_version()` arrived in aws-lc-rs **1.17.2**, and every
+/// aws-lc-rs version carrying them requires `aws-lc-fips-sys >= 0.13.16` (module **3.4.0**),
+/// which is disjoint from the validated 0.13.11 (module **3.1.0**). Do not "adopt 1.17.3 to
+/// make this real" — that forces 3.4.0. See work packets 053/054 and
+/// `citadel/fips-backend/FIPS_MODE_STATUS.md`.
 pub const FIPS_MODULE_VERSION: &str = "AWS-LC-FIPS 3.1.0";
 
 /// Runtime assertion that the linked library IS the FIPS module and operational.
@@ -591,6 +594,40 @@ pub fn fips_module_status() -> Result<(), &'static str> {
 /// (NIST entropy certificate #E77 per upstream FIPS.md).
 pub fn fips_entropy_status() -> Result<(), &'static str> {
     aws_lc_rs::try_fips_cpu_jitter_entropy()
+}
+
+/// The version string of the AWS-LC FIPS module **actually linked** into this
+/// process, read at runtime from the module via `OpenSSL_version` (e.g.
+/// `"AWS-LC FIPS 3.1.0"`). This is the real probe behind
+/// `pinned_module_version_matches_linked_module`: unlike the `FIPS_MODULE_VERSION`
+/// constant, it fails to match if a `cargo update` drifts the module off the
+/// CMVP-validated 0.13.11 / 3.1.0 build (packet 054; 053 explains why aws-lc-rs's
+/// own `fips_version()` cannot be used without abandoning that pin).
+///
+/// `aws_lc_fips_sys::OpenSSL_version` is a real exported FFI function (robust across
+/// the crate's prebuilt and bindgen-generated binding modes), unlike the
+/// `OPENSSL_VERSION_TEXT` macro constant which bindgen may omit.
+///
+/// This is the **only** `unsafe` in the crate: it carries a scoped `#[allow(unsafe_code)]`
+/// against the crate-wide `#![deny(unsafe_code)]`, justified below, because reading a C
+/// string from the linked module is inherently an FFI operation. `core::ffi` is used
+/// (not `std`) so the probe compiles under the crate's `no_std` configuration.
+#[allow(unsafe_code)] // sole FFI in the crate; reads a static C version string, no writes
+pub fn fips_module_version_runtime() -> &'static str {
+    use core::ffi::{c_int, CStr};
+    // `OpenSSL_version(OPENSSL_VERSION)` — OPENSSL_VERSION is the integer selector `0`;
+    // written as a literal so the probe does not depend on bindgen emitting the macro
+    // constant. AWS-LC returns a string such as "AWS-LC FIPS 3.1.0".
+    const OPENSSL_VERSION_SELECTOR: c_int = 0;
+    // SAFETY: `OpenSSL_version` returns a pointer to a static, NUL-terminated C string
+    // owned by the linked module and valid for the entire process lifetime; we only read
+    // it, never free or mutate it. The selector `0` (OPENSSL_VERSION) is always valid, and
+    // AWS-LC's version string is ASCII, so `to_str` cannot fail in practice.
+    let ptr = unsafe { aws_lc_fips_sys::OpenSSL_version(OPENSSL_VERSION_SELECTOR) };
+    // SAFETY: as above — `ptr` is a valid, static, NUL-terminated C string.
+    unsafe { CStr::from_ptr(ptr) }
+        .to_str()
+        .expect("AWS-LC module version string must be valid UTF-8")
 }
 
 /// Cross-PROVIDER differentials (packet 043): the RustCrypto and AWS-LC `0xA4`
