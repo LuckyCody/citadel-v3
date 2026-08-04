@@ -1,13 +1,21 @@
 [advisories]
 version = 2
 yanked = "deny"
-# Policy: fail on vulnerabilities always. For unmaintained/unsound, gate only on
+# Policy: fail on vulnerabilities by default. For unmaintained/unsound, gate only on
 # crates we DIRECTLY chose (`workspace` scope); transitively-pulled dev-tooling
 # advisories are NOT hidden — they stay visible in `cargo audit` every run and
-# are documented as reviewed/accepted in SUPPLY_CHAIN.md. We do NOT ignore any
-# specific advisory ID. The 4 current such advisories (ansi_term, atty x2,
-# proc-macro-error2) are dev-only, have no upstream fix, and never ship.
-ignore = []
+# are documented as reviewed/accepted in SUPPLY_CHAIN.md. The 4 such advisories
+# (ansi_term, atty x2, proc-macro-error2) are dev-only, have no upstream fix, never ship.
+#
+# TWO scoped, ID-specific exceptions (packet 058, 2026-08-04): both are advisories in the
+# CMVP-VALIDATED `aws-lc-fips-sys 0.13.11` pin (AWS-LC FIPS 3.1.0, packet 051) and are
+# NON-APPLICABLE to Citadel — we use AES-GCM (never AES-CCM) and do no X.509/CRL. The fixes
+# exist only in the UNVALIDATED 3.4.0 build, so keeping the validated build is a deliberate,
+# owner-approved trade-off. Full rationale: SUPPLY_CHAIN.md §"FIPS module advisory exceptions".
+ignore = [
+    { id = "RUSTSEC-2026-0042", reason = "CRL distribution-point scope-check logic error in AWS-LC; Citadel does no X.509/CRL. Present in the validated 3.1.0 pin; fixed only in the unvalidated 3.4.0." },
+    { id = "RUSTSEC-2026-0043", reason = "AES-CCM tag-verify timing side-channel in AWS-LC; Citadel uses AES-GCM, never AES-CCM. Present in the validated 3.1.0 pin; fixed only in the unvalidated 3.4.0." },
+]
 unmaintained = "workspace"
 unsound = "workspace"
 

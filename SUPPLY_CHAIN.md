@@ -13,7 +13,7 @@ Last reviewed: 2026-07-20. Authoritative tools: `cargo audit` (advisories) and
   the build but remain visible in `cargo audit` and are listed below.
 - **We do not `ignore` specific advisory IDs.** There is no per-ID suppression.
 
-## Vulnerabilities: 0
+## Vulnerabilities: 2 accepted exceptions (non-applicable, in the CMVP-validated FIPS pin)
 
 RUSTSEC-2026-0207, -0208 (libcrux-sha3) and -0212 (libcrux-secrets) were **fixed**
 on 2026-07-20 by bumping the `libcrux-ml-kem` dev-dependency (differential-test
@@ -23,6 +23,25 @@ are no longer in `Cargo.lock`; the patched code is compiled in. The full test
 suite is unchanged at 353 passed / 0 failed / 8 ignored. This was a real code
 swap, not a suppression — and libcrux was dev-only, so nothing vulnerable ever
 shipped in the production binary regardless.
+
+### FIPS module advisory exceptions (packet 058, 2026-08-04)
+
+The CMVP-**validated** pin `aws-lc-fips-sys 0.13.11` (AWS-LC FIPS 3.1.0, certs #5298 / #5314;
+packet 051) carries two advisories that the newer **unvalidated** 3.4.0 build fixed:
+
+| Advisory | Title | Applicability to Citadel | Status |
+|---|---|---|---|
+| RUSTSEC-2026-0042 | CRL distribution-point scope-check logic error in AWS-LC | **None** — Citadel does no X.509/CRL processing | Accepted, ID-scoped ignore |
+| RUSTSEC-2026-0043 | AES-CCM tag-verification timing side-channel in AWS-LC | **None** — Citadel uses AES-256-GCM, never AES-CCM | Accepted, ID-scoped ignore |
+
+Keeping the CMVP-validated build (packet 051) is a deliberate, owner-approved trade-off —
+"validated ≠ latest." The vulnerable code is compiled into the fips build but **never reached by
+Citadel's code paths** (grep-verified: zero AES-CCM, zero X.509/CRL). The fixes exist only in
+3.4.0, which is **not** CMVP-validated; there is currently no build that is both validated and
+patched (the v4.0 line is "in process"). These two IDs are the ONLY specific-ID ignores, in both
+`deny.toml` and the `cargo audit` CI step; every other advisory still fails the build. **Re-evaluate**
+when a validated build ≥ the fix lands, or if Citadel ever adds AES-CCM or X.509/CRL. This is honest
+disclosure of present-but-non-applicable advisories, not suppression.
 
 ## Accepted (visible) warnings: 4 — all dev-only, no upstream fix
 
