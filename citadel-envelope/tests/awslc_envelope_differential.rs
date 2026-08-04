@@ -50,7 +50,10 @@ fn fips_seal_uses_module_generated_random_nonce() {
     let e2 = citadel.seal(&pk, pt, &aad, &ctx).expect("seal 2");
 
     // Different envelopes overall, and — decisively — different nonces.
-    assert_ne!(e1, e2, "two seals of the same input must differ (fresh module nonce)");
+    assert_ne!(
+        e1, e2,
+        "two seals of the same input must differ (fresh module nonce)"
+    );
     assert_ne!(
         e1[86..98],
         e2[86..98],
