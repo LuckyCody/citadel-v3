@@ -550,14 +550,30 @@ impl CryptoBackend for AwsLcBackend {
 // ---------------------------------------------------------------------------
 
 /// The AWS-LC FIPS module version this build pins, from the vendored
-/// `aws-lc-fips-sys 0.13.16` headers (`AWSLC_VERSION_NUMBER_STRING`).
+/// `aws-lc-fips-sys 0.13.11` headers (`AWSLC_VERSION_NUMBER_STRING`).
 ///
-/// **Validation status (recorded 2026-08-02, upstream FIPS.md):** the AWS-LC-FIPS
-/// 3.x line is CMVP **"Review Pending"** — submitted, NOT yet certificate-validated
-/// (issued certificates cover v1.0 #4631 and v2.0 #4759/#4816). No claim stronger
-/// than "submitted for validation / in process" is supportable for this pin. See
-/// `citadel/fips-backend/FIPS_MODE_STATUS.md`.
-pub const FIPS_MODULE_VERSION: &str = "AWS-LC-FIPS 3.4.0";
+/// **Validation status (packet 051, 2026-08-04): this is the CMVP-VALIDATED build.**
+/// `AWS-LC FIPS 3.1.0` is the exact module version on certificates **#5298**
+/// (dynamic, validated 2026-06-03) and **#5314** (static, 2026-06-05), both active
+/// through 2031. The pin was moved here from 3.4.0 *because* 3.4.0 is a later,
+/// unvalidated build — validated is not the same as latest, and this trade accepts
+/// fewer upstream fixes in exchange for a certificate.
+///
+/// **What this still does NOT license.** Citadel's operational environments
+/// (Ubuntu/WSL2, Debian bookworm containers) are not among the certificate's tested
+/// environments — Amazon Linux 2023 on Graviton4 `r8g.metal-24xl` and Intel Xeon
+/// `c6i.metal` — and the policy records **"Vendor-Affirmed Operational Environments:
+/// N/A for this module."** Per CMVP's porting statement, CMVP makes no statement
+/// about operation outside the tested environments. So: validated *build*, ported
+/// environment, disclosed. Never "FIPS validated product" or "FIPS compliant".
+///
+/// **This constant is a documentation pin, not a runtime probe** — see
+/// `pinned_module_version_is_recorded`. `aws-lc-rs 1.17.1` exposes no
+/// `fips_version()`; that arrived in 1.17.3. Until it is adopted, the linked
+/// version is evidenced by supply chain (lockfile + the build's source path +
+/// vendored header), not by an assertion at runtime.
+/// See `citadel/fips-backend/FIPS_MODE_STATUS.md`.
+pub const FIPS_MODULE_VERSION: &str = "AWS-LC-FIPS 3.1.0";
 
 /// Runtime assertion that the linked library IS the FIPS module and operational.
 ///

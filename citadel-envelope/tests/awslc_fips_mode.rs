@@ -48,11 +48,25 @@ fn fips_jitter_entropy_state_is_pinned() {
     );
 }
 
-/// P4 anchor: the pinned module version constant matches what the packet recorded.
-/// (If aws-lc-fips-sys is ever re-pinned — e.g. to a certificate-validated v2.0
-/// line per the Review-Pending finding — this test forces the constant, the docs,
-/// and the claims to be revisited together.)
+/// Documentation pin: the recorded module-version constant matches what the packets
+/// and the claim language say. Re-pinning aws-lc-fips-sys forces the constant, the
+/// docs and the claims to be revisited together.
+///
+/// **HONEST LIMIT, found in packet 051 (2026-08-04): this does NOT verify the linked
+/// module.** It compares a hardcoded constant to a literal, so it passes no matter
+/// which module is actually linked. It was written as a doc anchor and was briefly
+/// mistaken for a version probe when the pin moved 3.4.0 → 3.1.0 — the suite stayed
+/// green precisely because the assertion is tautological. Believing otherwise would
+/// have meant claiming a validated build on the strength of a test that cannot fail.
+///
+/// The linked version is evidenced by supply chain instead: the lockfile pin, the
+/// build script's source path (`.../aws-lc-fips-sys-0.13.11`), and that source's
+/// `AWSLC_VERSION_NUMBER_STRING "3.1.0"`.
+///
+/// TO MAKE THIS REAL: adopt `aws-lc-rs >= 1.17.3`, which added `fips_version()`, and
+/// assert the RUNTIME value equals `FIPS_MODULE_VERSION`. That is a dependency change
+/// and therefore its own dep-gate packet, not an edit here.
 #[test]
 fn pinned_module_version_is_recorded() {
-    assert_eq!(FIPS_MODULE_VERSION, "AWS-LC-FIPS 3.4.0");
+    assert_eq!(FIPS_MODULE_VERSION, "AWS-LC-FIPS 3.1.0");
 }
