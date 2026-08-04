@@ -118,16 +118,17 @@ pub trait CryptoBackend {
         okm: &mut [u8],
     ) -> Result<(), EncodingError>;
 
-    /// Fresh AEAD nonce from the backend's randomness source.
-    fn aead_nonce() -> Result<[u8; 12], EncodingError>;
-
-    /// AES-256-GCM seal: returns `ciphertext || tag`.
+    /// AES-256-GCM seal (packet 056): the backend GENERATES the nonce and returns
+    /// `(nonce, ciphertext || tag)`. On the fips backend this is the approved GCM IV
+    /// Scenario 2 service (`RandomizedNonceKey`, module DRBG); on the default backend it
+    /// is a fresh getrandom nonce. The caller places the returned nonce at `header[86..98]`.
+    /// There is no caller-supplied-nonce seal on the seam — that was the External-IV mode
+    /// packet 055 found outside the approved scenarios.
     fn aead_seal(
         key: &[u8; 32],
-        nonce: &[u8; 12],
         plaintext: &[u8],
         aad: &[u8],
-    ) -> Result<Vec<u8>, EncodingError>;
+    ) -> Result<([u8; 12], Vec<u8>), EncodingError>;
 
     /// AES-256-GCM open: verifies the tag, returns the plaintext.
     fn aead_open(
@@ -177,17 +178,17 @@ impl CryptoBackend for RustCryptoBackend {
         hkdf.expand(info, okm).map_err(|_| EncodingError)
     }
 
-    fn aead_nonce() -> Result<[u8; 12], EncodingError> {
-        crate::aead::nonce()
-    }
-
     fn aead_seal(
         key: &[u8; 32],
-        nonce: &[u8; 12],
         plaintext: &[u8],
         aad: &[u8],
-    ) -> Result<Vec<u8>, EncodingError> {
-        crate::aead::aead_seal(key, nonce, plaintext, aad)
+    ) -> Result<([u8; 12], Vec<u8>), EncodingError> {
+        // Default (non-FIPS) backend: a fresh getrandom nonce, then the RustCrypto AES-GCM
+        // primitive. Not a FIPS scenario (this backend is not the module); it only matches the
+        // unified wire format so fips<->default envelopes stay interoperable.
+        let nonce = crate::aead::nonce()?;
+        let ct = crate::aead::aead_seal(key, &nonce, plaintext, aad)?;
+        Ok((nonce, ct))
     }
 
     fn aead_open(

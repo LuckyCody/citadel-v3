@@ -20,12 +20,11 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-use aws_lc_rs::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
+use aws_lc_rs::aead::{Aad, LessSafeKey, Nonce, RandomizedNonceKey, UnboundKey, AES_256_GCM};
 use aws_lc_rs::agreement as lc_agreement;
 use aws_lc_rs::digest as lc_digest;
 use aws_lc_rs::hkdf as lc_hkdf;
 use aws_lc_rs::kem::{Ciphertext, DecapsulationKey, EncapsulationKey, ML_KEM_1024};
-use aws_lc_rs::rand as lc_rand;
 use zeroize::Zeroizing;
 
 use crate::backend::{CryptoBackend, KemProvider};
@@ -148,7 +147,34 @@ const AEAD_TAG_BYTES: usize = 16;
 pub struct AwsLcAes256Gcm;
 
 impl AwsLcAes256Gcm {
-    /// Seal: returns `ciphertext || tag`. Fail-closed on any AWS-LC error.
+    /// **Production seal — approved GCM IV Scenario 2** (packet 056). The module GENERATES the
+    /// 96-bit nonce internally via `RandomizedNonceKey` (`EVP_aead_aes_256_gcm_randnonce`,
+    /// SP 800-38D §8.2.2) and returns `(nonce, ciphertext || tag)`. The caller never chooses
+    /// the IV — that was the External-IV mode packet 055 found outside the approved scenarios.
+    /// `seal_in_place_separate_tag` keeps the wire body byte-compatible with the RustCrypto
+    /// path (`ct || tag`, nonce stored separately in `header[86..98]`), not the raw randnonce
+    /// blob layout. This is the ONLY seal the production seam (`AwsLcBackend::aead_seal`) uses.
+    pub fn seal_randnonce(
+        key: &[u8; 32],
+        plaintext: &[u8],
+        aad: &[u8],
+    ) -> Result<([u8; 12], Vec<u8>), EncodingError> {
+        let sealing_key = RandomizedNonceKey::new(&AES_256_GCM, key).map_err(|_| EncodingError)?;
+        let mut in_out = Vec::with_capacity(plaintext.len() + AEAD_TAG_BYTES);
+        in_out.extend_from_slice(plaintext);
+        let (nonce, tag) = sealing_key
+            .seal_in_place_separate_tag(Aad::from(aad), &mut in_out)
+            .map_err(|_| EncodingError)?;
+        in_out.extend_from_slice(tag.as_ref());
+        let nonce_bytes: [u8; 12] = *nonce.as_ref();
+        Ok((nonce_bytes, in_out))
+    }
+
+    /// **Test-only fixed-nonce seal** (NOT the production path). Retained so the ACVP/Wycheproof
+    /// known-answer vectors and the RustCrypto-vs-AWS-LC byte-identity differential can exercise
+    /// the AES-GCM *primitive* with a caller-chosen IV. The production seam never calls this;
+    /// it is not a GCM IV scenario and makes no compliance claim — it only proves the primitive
+    /// is correct against fixed-IV test vectors.
     pub fn seal(
         key: &[u8; 32],
         nonce: &[u8; 12],
@@ -169,7 +195,10 @@ impl AwsLcAes256Gcm {
         Ok(in_out)
     }
 
-    /// Open: verifies the tag, returns the plaintext. Fail-closed.
+    /// Open: verifies the tag, returns the plaintext. Fail-closed. Opening always takes an
+    /// explicit nonce (read from `header[86..98]`); there is no IV-generation scenario for
+    /// decryption, so this one path serves both production and the KAT/differential tests, and
+    /// a fips build can decrypt any envelope produced by either backend.
     pub fn open(
         key: &[u8; 32],
         nonce: &[u8; 12],
@@ -520,19 +549,12 @@ impl CryptoBackend for AwsLcBackend {
         AwsLcHkdfSha256::derive(salt, ikm, info, okm)
     }
 
-    fn aead_nonce() -> Result<[u8; 12], EncodingError> {
-        let mut n = [0u8; 12];
-        lc_rand::fill(&mut n).map_err(|_| EncodingError)?;
-        Ok(n)
-    }
-
     fn aead_seal(
         key: &[u8; 32],
-        nonce: &[u8; 12],
         plaintext: &[u8],
         aad: &[u8],
-    ) -> Result<Vec<u8>, EncodingError> {
-        AwsLcAes256Gcm::seal(key, nonce, plaintext, aad)
+    ) -> Result<([u8; 12], Vec<u8>), EncodingError> {
+        AwsLcAes256Gcm::seal_randnonce(key, plaintext, aad)
     }
 
     fn aead_open(

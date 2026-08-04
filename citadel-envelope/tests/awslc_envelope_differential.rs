@@ -32,6 +32,35 @@ fn fips_build_a4_sdk_roundtrip() {
     assert_eq!(opened, b"awslc envelope");
 }
 
+/// Packet 056: prove the fips AEAD runs the approved GCM IV **Scenario 2** path
+/// (`RandomizedNonceKey`, module-generated nonce), not a fixed or caller-supplied IV.
+/// Sealing the SAME (key, plaintext, aad, context) twice must yield different envelopes,
+/// and specifically different nonces at `header[86..98]`, because the module draws a fresh
+/// 96-bit nonce from its approved DRBG on every seal. Both must still open. This is the
+/// runtime evidence that the External-IV mode found in packet 055 is gone.
+#[test]
+fn fips_seal_uses_module_generated_random_nonce() {
+    let citadel = CitadelP384::new();
+    let (pk, sk) = citadel.generate_keypair();
+    let aad = Aad::for_storage("bucket", "object", 7);
+    let ctx = Context::for_application("fips-randnonce", "test");
+    let pt = b"scenario-2 randnonce liveness";
+
+    let e1 = citadel.seal(&pk, pt, &aad, &ctx).expect("seal 1");
+    let e2 = citadel.seal(&pk, pt, &aad, &ctx).expect("seal 2");
+
+    // Different envelopes overall, and — decisively — different nonces.
+    assert_ne!(e1, e2, "two seals of the same input must differ (fresh module nonce)");
+    assert_ne!(
+        e1[86..98],
+        e2[86..98],
+        "the module must generate a fresh random nonce each seal (Scenario 2)"
+    );
+    // Both still decrypt.
+    assert_eq!(citadel.open(&sk, &e1, &aad, &ctx).expect("open 1"), pt);
+    assert_eq!(citadel.open(&sk, &e2, &aad, &ctx).expect("open 2"), pt);
+}
+
 #[test]
 fn fips_build_a3_sdk_roundtrip_unchanged() {
     let citadel = Citadel::new();

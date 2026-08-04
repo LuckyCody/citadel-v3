@@ -80,10 +80,12 @@ fn deterministic_a4_vector_matches_independent_transcript_reconstruction() {
     header[54..86].copy_from_slice(&Sha3_256::digest(CONTEXT));
     header[86..98].fill(0x66);
 
+    // Packet 056: KDF/AAD bind only the nonce-free header prefix (header[..86]).
+    let bound_header = &header[..86];
     let mut transcript = Vec::new();
     transcript.extend_from_slice(b"citadel-envelope-v2/kdf\0");
-    transcript.extend_from_slice(&be16(header.len()));
-    transcript.extend_from_slice(&header);
+    transcript.extend_from_slice(&be16(bound_header.len()));
+    transcript.extend_from_slice(bound_header);
     transcript.extend_from_slice(&be16(kem_ct.len()));
     transcript.extend_from_slice(&kem_ct);
     transcript.extend_from_slice(&be32(CONTEXT.len()));
@@ -96,8 +98,8 @@ fn deterministic_a4_vector_matches_independent_transcript_reconstruction() {
 
     let mut bound_aad = Vec::new();
     bound_aad.extend_from_slice(b"citadel-envelope-v2/aad\0");
-    bound_aad.extend_from_slice(&be16(header.len()));
-    bound_aad.extend_from_slice(&header);
+    bound_aad.extend_from_slice(&be16(bound_header.len()));
+    bound_aad.extend_from_slice(bound_header);
     bound_aad.extend_from_slice(&be16(kem_ct.len()));
     bound_aad.extend_from_slice(&kem_ct);
     bound_aad.extend_from_slice(&be32(CONTEXT.len()));
