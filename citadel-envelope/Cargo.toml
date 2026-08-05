@@ -100,6 +100,9 @@ default = []
 kat = ["ml-kem/hazmat"]
 # Enable criterion benchmarks: cargo bench --features bench
 bench = []
+# Adversarial "ringer" suite (packet 059) — test-only, no shipping change. Combine with `fips`
+# to exercise the AWS-LC backend. See tests/ringer.rs for the env volume knobs.
+ringer = []
 # Explicit opt-in for the AWS-LC comparison path. Never selected by default.
 aws-lc-comparison = ["dep:aws-lc-rs"]
 # FIPS backend dependency gate (packet 038). Selects aws-lc-rs with its FIPS module
@@ -140,6 +143,11 @@ required-features = ["legacy-envelope-v1"]
 name = "v2_vector"
 path = "tests/v2_vector.rs"
 required-features = ["kat"]
+
+[[test]]
+name = "ringer"
+path = "tests/ringer.rs"
+required-features = ["ringer"]
 
 [[bench]]
 name = "timing"
