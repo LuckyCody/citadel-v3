@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: CC0-1.0
+// Additional permission: an OpenSSL/AWS-LC linking exception under AGPLv3 section 7 applies to this file; see LICENSE-EXCEPTION.
 //! NIST ACVP FIPS 203 ML-KEM-1024 known-answer tests.
 //!
 //! Source: usnistgov/ACVP-Server commit

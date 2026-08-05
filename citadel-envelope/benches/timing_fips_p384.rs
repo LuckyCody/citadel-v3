@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional permission: an OpenSSL/AWS-LC linking exception under AGPLv3 section 7 applies to this file; see LICENSE-EXCEPTION.
 //! NFR3 (packet 049): P-384 ECDH timing differential, RustCrypto vs AWS-LC.
 //!
 //! Packet 036 asked an ABSOLUTE question dudect cannot answer (is the shipped

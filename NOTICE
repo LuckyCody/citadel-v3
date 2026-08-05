@@ -1,0 +1,19 @@
+Citadel
+Copyright (C) 2026 Andre Cordero
+
+This product is licensed under the GNU Affero General Public License v3.0 or
+later (see LICENSE, COPYING, AGPL-3.0.txt), with an additional OpenSSL/AWS-LC
+linking exception under AGPL section 7 (see LICENSE-EXCEPTION), and is also
+available under a separate commercial license (see COMMERCIAL_LICENSE.md).
+
+This product includes third-party open-source software. Each dependency remains
+under its own license and its notices continue to apply. Notably, when built with
+the `fips` feature, this product links the AWS-LC cryptographic library
+(`aws-lc-rs` / `aws-lc-fips-sys`), which is distributed under a combination of the
+Apache License 2.0, the ISC License, the OpenSSL License, and the Original SSLeay
+License. When distributing a binary built with that feature, include the AWS-LC
+LICENSE and NOTICE materials for the exact version linked.
+
+A full dependency license inventory is maintained separately (see the project's
+license documentation). This NOTICE is provided for attribution and does not
+modify any license.

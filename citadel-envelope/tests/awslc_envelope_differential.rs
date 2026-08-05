@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional permission: an OpenSSL/AWS-LC linking exception under AGPLv3 section 7 applies to this file; see LICENSE-EXCEPTION.
 //! Packet 043 fips-build envelope tests through the PUBLIC SDK surface.
 //!
 //! On this build `ActiveBackend = AwsLcBackend`: `CitadelP384` runs the `0xA4` suite

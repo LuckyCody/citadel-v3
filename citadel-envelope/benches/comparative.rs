@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional permission: an OpenSSL/AWS-LC linking exception under AGPLv3 section 7 applies to this file; see LICENSE-EXCEPTION.
 //! Comparative benchmarks: Citadel Hybrid vs pure AES-256-GCM.
 //!
 //! Run with: `cargo bench --bench comparative --features bench`

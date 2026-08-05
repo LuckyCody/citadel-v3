@@ -2,7 +2,7 @@
 
 Post-quantum hybrid encryption and key management server.
 
-Citadel combines X25519 + ML-KEM-768 for key encapsulation and AES-256-GCM for data encryption, following NIST's hybrid approach for the post-quantum transition. Applications encrypt and decrypt data through a REST API. Citadel manages the keys — generation, rotation, revocation, access control, and audit logging.
+Citadel combines a classical and a post-quantum key-encapsulation mechanism with AES-256-GCM data encryption, following NIST's hybrid approach for the post-quantum transition. Two envelope suites are supported: **`0xA3`** (X25519 + ML-KEM-768) and **`0xA4`** (P-384 + ML-KEM-1024, NIST category 5, CNSA 2.0-aligned). Applications encrypt and decrypt through a REST API; Citadel manages the keys — generation, rotation, revocation, access control, and audit logging. An optional `fips` feature routes all envelope operations through the AWS-LC cryptographic library (see [Cryptography](#cryptography)).
 
 **Status:** Working beta-stage implementation. Unaudited. No production deployments. The controlling claim record is [`../../CLAIM_EVIDENCE_MATRIX.md`](../../CLAIM_EVIDENCE_MATRIX.md); see [Security](#security) below.
 
@@ -38,8 +38,8 @@ citadel-api         HTTP server, scoped API key auth, rate limiting, real-time d
 
 ```bash
 # Clone
-git clone https://github.com/mrcord77/rust_citadel.git
-cd rust_citadel
+git clone https://github.com/mrcord77/citadel-v3.git
+cd citadel-v3
 
 # Set your admin API key
 echo -n "your-secret-key" | sha256sum | cut -d' ' -f1
@@ -57,11 +57,11 @@ Dashboard: http://localhost:3000
 
 ### From Source
 
-Requires Rust 1.81+.
+Requires Rust 1.96+ (the dependency chain pulls in the 2024 edition).
 
-> **Note:** The `ml-kem` dependency chain transitively requires `cargo` 1.81+ to parse
-> correctly. Ubuntu 24.04 LTS ships cargo 1.75 via `apt` — use `rustup` to install 1.81+.
-> `rustup toolchain install stable` on any up-to-date machine will work.
+> **Note:** Use `rustup` (`rustup toolchain install stable`) rather than a distro-packaged
+> `cargo`, which is often too old. The `fips` feature additionally needs clang, CMake, Perl,
+> and Go to build AWS-LC; the default pure-Rust build does not.
 
 ```bash
 cargo build --release -p citadel-api
@@ -187,14 +187,20 @@ Events that raise threat level: failed authentication, decryption failures, rapi
 
 ## Cryptography
 
-| Component | Algorithm | Standard |
-|-----------|-----------|----------|
-| Key encapsulation (classical) | X25519 ECDH | RFC 7748 |
-| Key encapsulation (post-quantum) | ML-KEM-768 | FIPS 203 |
-| Data encryption | AES-256-GCM | NIST SP 800-38D |
-| Key derivation | HKDF-SHA256 | NIST SP 800-56C |
+Citadel ships two envelope suites, chosen by a self-describing wire suite byte (no negotiation):
 
-Hybrid construction: both shared secrets are concatenated and fed through HKDF. Security holds if **either** X25519 or ML-KEM-768 remains secure.
+| Suite | Classical KEM | Post-quantum KEM | AEAD | KDF |
+|-------|---------------|------------------|------|-----|
+| `0xA3` | X25519 (RFC 7748) | ML-KEM-768 (FIPS 203) | AES-256-GCM (SP 800-38D) | HKDF-SHA256 (SP 800-56C) |
+| `0xA4` | P-384 (FIPS 186-5) | ML-KEM-1024 (FIPS 203) | AES-256-GCM (SP 800-38D) | HKDF-SHA256 (SP 800-56C) |
+
+`0xA4` is NIST category 5 and CNSA 2.0-aligned. Hybrid construction: both shared secrets are concatenated and fed through HKDF, so security holds if **either** the classical or the post-quantum KEM remains secure.
+
+### FIPS backend (optional `fips` feature)
+
+By default all cryptography runs in pure-Rust crates. Building with `--features fips` routes every envelope operation through the **AWS-LC** cryptographic library, executing inside the exact build that CMVP validated as **AWS-LC-FIPS 3.1.0** (certificates #5298 / #5314), with AES-GCM using the approved random-IV construction (GCM IV Scenario 2).
+
+**This does not make Citadel a FIPS-validated or FIPS-compliant product.** The operating environment is not tested under CMVP; key generation and ML-KEM seed expansion remain pure-Rust; and no regulatory compliance claim is made. The exact status and its bounds are recorded in [`../../CLAIM_EVIDENCE_MATRIX.md`](../../CLAIM_EVIDENCE_MATRIX.md).
 
 ### Wire Format
 
@@ -203,7 +209,7 @@ version[1] || suite_kem[1] || suite_aead[1] || flags[1] || kem_ct_len[2] ||
 x25519_ephemeral_pk[32] || mlkem768_ct[1088] || nonce[12] || aead_ct[variable]
 ```
 
-Self-describing, versioned, no negotiation (prevents downgrade attacks). See [SPEC.md](SPEC.md) for full specification.
+The layout above illustrates suite `0xA3`; suite `0xA4` substitutes a P-384 ephemeral key and the ML-KEM-1024 ciphertext. Self-describing, versioned, no negotiation (prevents downgrade attacks). [SPEC.md](SPEC.md) is the authoritative wire specification (including the current envelope-v2 header).
 
 ### Security Properties
 
@@ -253,39 +259,19 @@ Relevant frameworks: NIST SP 800-57 (key management), CNSA 2.0 (PQC timeline), H
 ## Project Structure
 
 ```
-rust_citadel/
-├── citadel-envelope/        # Core hybrid encryption library
-│   ├── src/
-│   │   ├── envelope.rs      # Encrypt/decrypt operations
-│   │   ├── kem.rs           # X25519 + ML-KEM-768 hybrid KEM
-│   │   ├── kdf.rs           # HKDF-SHA256 key derivation
-│   │   ├── wire.rs          # Wire format encode/decode
-│   │   ├── aead.rs          # AES-256-GCM wrapper
-│   │   ├── aad.rs           # Additional authenticated data
-│   │   ├── error.rs         # Uniform error types
-│   │   └── sdk.rs           # High-level API
-│   ├── tests/               # KAT + roundtrip tests
-│   └── fuzz/                # Fuzz targets
-├── citadel-keystore/        # Key lifecycle management
-│   └── src/
-│       ├── keystore.rs      # Key CRUD + state machine
-│       ├── policy.rs        # Crypto-period policies
-│       ├── threat.rs        # Adaptive threat intelligence
-│       ├── storage.rs       # File-based key storage
-│       ├── audit.rs         # Integrity-chained audit log
-│       └── types.rs         # Key types and states
-├── citadel-api/             # HTTP server
-│   └── src/
-│       ├── main.rs          # API routes, auth, rate limiting
-│       └── dashboard.html   # Real-time security dashboard
-├── citadel_example.py       # Python integration example
-├── Backup-Citadel.ps1       # Backup/restore tooling
-├── docker-compose.yml       # Development deployment
-├── docker-compose-production.yml  # Production with TLS
-├── SPEC.md                  # Wire format specification
-├── THREAT_MODEL.md          # Security goals and attacker model
-├── COMPLIANCE_MATRIX.md     # NIST 800-57 control mapping
-└── CITADEL_OVERVIEW.md      # Commercial overview
+citadel-v3/
+├── citadel-core/          # Shared types and primitives
+├── citadel-envelope/      # Hybrid encryption core (suites 0xA3/0xA4; optional AWS-LC `fips` backend)
+├── citadel-keystore/      # Key lifecycle, 4-level hierarchy, adaptive threat policies
+├── citadel-api/           # HTTP server, scoped auth, rate limiting, dashboard
+├── citadel-cli/           # Command-line interface
+├── citadel-signer/        # ML-DSA-65 signing service
+├── citadel-ffi/           # C ABI + Python/Java/C bindings
+├── LICENSE, LICENSE-EXCEPTION, NOTICE, COPYING, COMMERCIAL_LICENSE.md
+├── SPEC.md                # Authoritative wire specification
+├── THREAT_MODEL.md        # Security goals and attacker model
+├── SECURITY_GUARANTEES.md # What is and is not protected
+└── COMPLIANCE_MATRIX.md   # NIST 800-57 control mapping
 ```
 
 ## Documentation
@@ -303,16 +289,14 @@ rust_citadel/
 
 ## License
 
-This project is dual-licensed:
+Citadel is dual-licensed:
 
-- **GNU Affero General Public License v3 (AGPL)** — for open source use
-- **Commercial License** — for proprietary or commercial use
+- **GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)** — for open-source use. Full text in [COPYING](COPYING) / [AGPL-3.0.txt](AGPL-3.0.txt).
+- **Commercial License** — for proprietary or commercial use. See [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md).
 
-If you are using this software in a commercial environment or do not wish to comply with AGPL terms, you must obtain a commercial license.
+If you use this software in a commercial environment, or do not wish to comply with the AGPL, you must obtain a commercial license.
 
-See [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md) for commercial terms.
-
-The full text of the AGPL is provided in [AGPL-3.0.txt](AGPL-3.0.txt) and [COPYING](COPYING).
+**OpenSSL/AWS-LC linking exception.** When built with the `fips` feature, Citadel links the AWS-LC library, which carries code under the OpenSSL License and the Original SSLeay License (both AGPL-incompatible). An additional permission under AGPL section 7 permits conveying that combined build; see [LICENSE-EXCEPTION](LICENSE-EXCEPTION). The default pure-Rust build links no OpenSSL-licensed code and does not rely on the exception. Third-party attributions are collected in [NOTICE](NOTICE).
 
 Contact: commit@reposignal.io
 

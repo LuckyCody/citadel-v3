@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// Additional permission: an OpenSSL/AWS-LC linking exception under AGPLv3 section 7 applies to this file; see LICENSE-EXCEPTION.
 //! Google Wycheproof P-384 ECDH vectors.
 //!
 //! Source: C2SP/wycheproof `ecdh_secp384r1_test.json`, commit

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional permission: an OpenSSL/AWS-LC linking exception under AGPLv3 section 7 applies to this file; see LICENSE-EXCEPTION.
 //! Integration tests for the Citadel V3 stream format (stream_v3.rs).
 //!
 //! Validates security properties required by the V3 specification:

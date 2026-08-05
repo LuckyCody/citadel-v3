@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional permission: an OpenSSL/AWS-LC linking exception under AGPLv3 section 7 applies to this file; see LICENSE-EXCEPTION.
 //! Hash an API key for use with CITADEL_API_KEY_HASH.
 //!
 //! Uses HMAC-SHA256 with the configured root custody key as the server-side

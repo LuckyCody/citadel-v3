@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional permission: an OpenSSL/AWS-LC linking exception under AGPLv3 section 7 applies to this file; see LICENSE-EXCEPTION.
 //! Wycheproof AES-256-GCM vectors replayed on BOTH backends (packet 043b).
 //!
 //! Clears the packet-040 gate debt: an authoritative, checked-in vector FILE for the

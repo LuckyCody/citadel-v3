@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional permission: an OpenSSL/AWS-LC linking exception under AGPLv3 section 7 applies to this file; see LICENSE-EXCEPTION.
 //! Packet 044: FIPS-mode runtime assertions on the fips build.
 //!
 //! `fips_module_status()` returning `Ok` proves the linked library is the AWS-LC

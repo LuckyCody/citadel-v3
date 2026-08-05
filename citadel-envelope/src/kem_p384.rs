@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional permission: an OpenSSL/AWS-LC linking exception under AGPLv3 section 7 applies to this file; see LICENSE-EXCEPTION.
 //! Hybrid KEM: P-384 + ML-KEM-1024 — suite `0xA4`.
 //!
 //! The CNSA 2.0 category-5 pairing. Same hybrid construction as suite `0xA3`

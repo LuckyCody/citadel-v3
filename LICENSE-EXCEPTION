@@ -1,0 +1,53 @@
+CITADEL — ADDITIONAL PERMISSION (OpenSSL / AWS-LC LINKING EXCEPTION)
+====================================================================
+
+Copyright (C) 2026 Andre Cordero
+
+Citadel's first-party crates are licensed under the GNU Affero General Public
+License, version 3 or (at your option) any later version (AGPL-3.0-or-later),
+whose full text is in COPYING / AGPL-3.0.txt. The following is an additional
+permission granted under section 7 of that license. It is relevant only when
+Citadel is built with the `fips` feature, which links the AWS-LC cryptographic
+library; the default (pure-Rust) build links no OpenSSL-licensed code and does
+not require this permission.
+
+Definitions
+-----------
+"AWS-LC Components" means the `aws-lc-rs` and `aws-lc-fips-sys` crates and the
+AWS-LC / AWS-LC-FIPS source bundled with or linked through `aws-lc-fips-sys`, or
+a modified version of any of them.
+
+Additional permission under GNU AGPL version 3 section 7
+--------------------------------------------------------
+If you modify this Program, or any covered work, by linking or combining it with
+the AWS-LC Components, containing parts covered by the terms of the OpenSSL
+License and the Original SSLeay License, the licensors of this Program grant you
+additional permission to convey the resulting work. Corresponding Source for a
+non-source form of such a combination shall include the source code for the
+parts of the AWS-LC Components used as well as that of the covered work.
+
+Savings
+-------
+Except for the additional permission granted above, the GNU Affero General
+Public License version 3 continues to apply in full to this Program's own code.
+This additional permission does not relicense the AWS-LC Components, does not
+waive any of their notices, attribution, or other conditions, and does not grant
+any rights in code other than this Program's own code. You must comply with all
+licenses and notices applicable to the AWS-LC Components and to every other
+third-party dependency.
+
+Modifiers
+---------
+As a modifier of a covered file you may extend this additional permission to
+your own modified versions of that file, but you are not obligated to do so. If
+you do not wish to grant this permission for your version, you may remove this
+exception notice from your version.
+
+--------------------------------------------------------------------------------
+NOTE (not part of the grant): This exception was drafted from the FSF's GPLv3/
+AGPLv3 section 7 additional-permission template and reviewed for consistency with
+common licensing practice. It has NOT been reviewed by counsel. The exact license
+composition of the pinned `aws-lc-fips-sys` (which its own LICENSE declares as
+`ISC AND (Apache-2.0 OR ISC) AND OpenSSL`, covering the OpenSSL and Original
+SSLeay conditions on inherited code) and the AGPL "or later" treatment should be
+confirmed with an OSS/IP lawyer before relying on this for distribution.

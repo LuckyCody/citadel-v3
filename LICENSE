@@ -30,6 +30,18 @@ commit@reposignal.io
 
 --------------------------------------------------------------------
 
+ADDITIONAL PERMISSION (OpenSSL / AWS-LC LINKING EXCEPTION)
+
+When Citadel is built with the `fips` feature it links the AWS-LC
+cryptographic library, which carries code under the OpenSSL License and
+the Original SSLeay License (GPL/AGPL-incompatible). An additional
+permission granted under section 7 of the AGPL allows conveying that
+combined build. The full exception text is in the LICENSE-EXCEPTION file
+and applies to Citadel's first-party source files. The default
+(pure-Rust) build links no OpenSSL-licensed code and does not rely on it.
+
+--------------------------------------------------------------------
+
 TRADEMARK NOTICE
 
 "Citadel", "citadel-envelope", "citadel-keystore", and "citadel-api"
