@@ -4,7 +4,7 @@ Post-quantum hybrid encryption and key management server.
 
 Citadel combines a classical and a post-quantum key-encapsulation mechanism with AES-256-GCM data encryption, following NIST's hybrid approach for the post-quantum transition. Two envelope suites are supported: **`0xA3`** (X25519 + ML-KEM-768) and **`0xA4`** (P-384 + ML-KEM-1024, NIST category 5, CNSA 2.0-aligned). Applications encrypt and decrypt through a REST API; Citadel manages the keys — generation, rotation, revocation, access control, and audit logging. An optional `fips` feature routes all envelope operations through the AWS-LC cryptographic library (see [Cryptography](#cryptography)).
 
-**Status:** Working beta-stage implementation. Unaudited. No production deployments. The controlling claim record is [`../../CLAIM_EVIDENCE_MATRIX.md`](../../CLAIM_EVIDENCE_MATRIX.md); see [Security](#security) below.
+**Status:** Working beta-stage implementation. Unaudited. No production deployments. The per-claim validation record is [`VALIDATION_MATRIX.md`](VALIDATION_MATRIX.md); see [Security](#security) below.
 
 ---
 
@@ -200,7 +200,7 @@ Citadel ships two envelope suites, chosen by a self-describing wire suite byte (
 
 By default all cryptography runs in pure-Rust crates. Building with `--features fips` routes every envelope operation through the **AWS-LC** cryptographic library, executing inside the exact build that CMVP validated as **AWS-LC-FIPS 3.1.0** (certificates #5298 / #5314), with AES-GCM using the approved random-IV construction (GCM IV Scenario 2).
 
-**This does not make Citadel a FIPS-validated or FIPS-compliant product.** The operating environment is not tested under CMVP; key generation and ML-KEM seed expansion remain pure-Rust; and no regulatory compliance claim is made. The exact status and its bounds are recorded in [`../../CLAIM_EVIDENCE_MATRIX.md`](../../CLAIM_EVIDENCE_MATRIX.md).
+**This does not make Citadel a FIPS-validated or FIPS-compliant product.** The operating environment is not tested under CMVP; key generation and ML-KEM seed expansion remain pure-Rust; and no regulatory compliance claim is made. The status and its bounds are stated in [`SECURITY_MATURITY.md`](SECURITY_MATURITY.md).
 
 ### Wire Format
 
@@ -260,6 +260,7 @@ citadel-v3/
 ├── SPEC.md                # Authoritative wire specification
 ├── THREAT_MODEL.md        # Security goals and attacker model
 ├── SECURITY_GUARANTEES.md # What is and is not protected
+├── VALIDATION_MATRIX.md   # Per-claim test evidence and gate status
 └── COMPLIANCE_MATRIX.md   # NIST 800-57 control mapping
 ```
 
@@ -269,6 +270,7 @@ citadel-v3/
 |----------|----------|
 | [SPEC.md](SPEC.md) | Wire format specification |
 | [THREAT_MODEL.md](THREAT_MODEL.md) | Security goals and assumptions |
+| [VALIDATION_MATRIX.md](VALIDATION_MATRIX.md) | Per-claim test evidence and gate status |
 | [COMPLIANCE_MATRIX.md](COMPLIANCE_MATRIX.md) | NIST 800-57 compliance mapping |
 | [CITADEL_OVERVIEW.md](CITADEL_OVERVIEW.md) | Commercial positioning |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |

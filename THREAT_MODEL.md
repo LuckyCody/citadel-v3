@@ -202,6 +202,6 @@ Not appropriate for (without further work):
 
 ---
 
-*See [TIMING.md](../../TIMING.md) for the complete timing validation model.*
+*See [TIMING.md](TIMING.md) for the complete timing validation model.*
 *See [SECURITY.md](SECURITY.md) for the security policy and disclosure process.*
-*See [PROVIDER_DECISION_LOG.md](../../PROVIDER_DECISION_LOG.md) for ML-KEM provider history.*
+*See [PROVIDER_DECISION_LOG.md](PROVIDER_DECISION_LOG.md) for ML-KEM provider history.*
