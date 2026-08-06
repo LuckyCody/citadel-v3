@@ -1,7 +1,7 @@
 # Citadel: A Hybrid Post-Quantum Envelope and Key-Management Implementation
 
 **Author:** Andre Cordero
-**Status:** Draft, 2026-08-05. Beta-stage, unaudited. Not for production use without independent review.
+**Status:** Draft, 2026-08-05. Beta-stage. Validated through the known-answer tests, adversarial suite, and machine-checked combiner proofs described in Section 6; not third-party audited or CMVP-validated as a deployment.
 
 ## Abstract
 

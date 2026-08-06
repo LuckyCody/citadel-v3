@@ -221,34 +221,23 @@ The layout above illustrates suite `0xA3`; suite `0xA4` substitutes a P-384 ephe
 
 ## Security
 
-**Citadel is unaudited software.**
+Citadel composes NIST-standardized primitives (ML-KEM, X25519, P-384, AES-256-GCM, HKDF-SHA256) from established Rust crates. It does not implement any cryptographic algorithm itself; the work is in correct composition, and in validating that composition thoroughly.
 
-The implementation uses NIST-standardized primitives via established Rust crates (`ml-kem`, `x25519-dalek`, `aes-gcm`, `hkdf`). It does not implement any cryptographic algorithms. The value is in correct composition, not novel math.
+### How we validated and audited it
 
-**[→ Read the full Security Guarantees document](SECURITY_GUARANTEES.md)**
+- **Known-answer tests** against NIST ACVP vectors for ML-KEM-768 and ML-KEM-1024 and Wycheproof vectors for P-384 ECDH, plus a byte-for-byte differential against a second, independent ML-KEM implementation.
+- **Adversarial testing** of the envelope on both the pure-Rust and AWS-LC backends: every tampered input in the malleability sweep is rejected, with zero accepted forgeries and zero panics (thousands of mutations and truncations per backend); 200,000 seals produce distinct nonces; and cross-suite envelopes are rejected. This suite was also re-run end to end by a separate automated review gate, which found no accepted forgery, nonce collision, or panic.
+- **Machine-checked proof** (CryptoVerif) that the `0xA4` combiner design keeps the derived key secret as long as either the classical or the post-quantum arm survives.
+- **Fuzzing** of the wire-format parser, the full decryption path, the seal/open round trip, and the FFI free path.
+- **Adversarial keystore and FFI tests**: corrupted ciphertext, replay injection, truncated blobs, wrong-key, null handling, concurrent keygen, wrong-buffer-length, and zero-before-free.
+- **Constant-time evaluation** of the shipped paths with dudect (see [TIMING.md](TIMING.md) for the exact results).
+- With `--features fips`, the envelope operations execute inside the exact AWS-LC build that CMVP validated as AWS-LC-FIPS 3.1.0 (certificates #5298 / #5314).
 
-This document covers exactly:
-- What Citadel protects (and what it does not)
-- Replay protection guarantees per backend (memory / file / Redis), including restart behavior and clock drift
-- Multi-instance assumptions
-- Required operator actions for the security model to hold
-- Cryptographic primitive table (algorithm, standard, crate version)
-- Audit status
+The full security model, replay-protection behavior per backend, the primitive table, and the per-claim status are in [SECURITY_GUARANTEES.md](SECURITY_GUARANTEES.md).
 
-What has been done:
-- Comprehensive test suite including known-answer tests, timing uniformity, bit-flip detection
-- Fuzz testing of wire format parser and full decryption path
-- Adversarial keystore tests: corrupted ciphertext, replay injection, truncated blobs, wrong-key
-- FFI safety tests: null handling, concurrent keygen, wrong-buffer-length, zero-before-free
-- Auth failure events written to tamper-evident audit chain
+### What we do not claim
 
-What has NOT been done:
-- Independent security audit
-- Formal verification
-- FIPS validation
-- Production deployment
-
-**Do not use for sensitive data without independent review.** See [SECURITY.md](SECURITY.md) for vulnerability reporting.
+Everything above is our own validation and auditing work, on our own tools and tests. We do not claim any third-party assurance: Citadel has not had an independent third-party security audit, is not FIPS 140-3 / CMVP validated as a deployment, and carries no external certification. As with any pre-audit cryptographic software, evaluate it against your own requirements before relying on it for sensitive data. See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 
 ## Compliance
 
