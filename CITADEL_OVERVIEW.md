@@ -55,13 +55,13 @@ The four-level hierarchy `Root → Domain → KEK → DEK` is structurally enfor
 
 Root's role is access-control separation and hierarchy validation, not runtime key unwrapping. This is consistent with NIST SP 800-57 guidance on offline root keys and key custodian separation.
 
-**Domain policy enforcement (P217):** Runtime multi-tenant domain enforcement is
+**Domain policy enforcement:** Runtime multi-tenant domain enforcement is
 implemented at three layers: (1) **API** — API keys are bound to domains
 (`allowed_domains`) and a central `authorize_domain_access` gate resolves the
 target key's Domain and rejects out-of-domain operations on every crypto/key
-endpoint (P221–P223, P233), with cross-domain exploit tests; (2) **replay** — the
+endpoint, with cross-domain exploit tests; (2) **replay** — the
 replay-claim key is domain-scoped, `SHA256(domain_id ‖ key_id ‖ version ‖ nonce ‖
-tag)`, so a claim in one Domain cannot interfere with another (P224); (3)
+tag)`, so a claim in one Domain cannot interfere with another; (3)
 **keystore/crypto** — `encrypt_authorized`/`decrypt_authorized` independently
 resolve the key's Domain from the hierarchy and refuse a mismatched authorization
 (defense in depth), verified by `tests/domain_isolation.rs`. The application-level

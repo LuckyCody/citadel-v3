@@ -1,7 +1,7 @@
 # Citadel Envelope Wire Format v2
 
 **Version:** 2.0.0-draft1  
-**Status:** packet-007 frozen implementation target  
+**Status:** frozen implementation target  
 **Date:** 2026-07-15
 
 This document specifies the non-streaming Citadel envelope v2 format. It is
@@ -149,7 +149,7 @@ nonce. It MUST be unavailable from default production builds.
 
 Every failure from the public open operation MUST be the same opaque error.
 The implementation does not claim constant-time whole-operation behavior;
-Packet 006 timing screens remain limitations rather than erased evidence.
+The timing screens described in `TIMING.md` remain limitations rather than erased evidence.
 
 ## 8. Migration and downgrade behavior
 

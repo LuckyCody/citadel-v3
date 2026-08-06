@@ -209,7 +209,7 @@ version[1] || suite_kem[1] || suite_aead[1] || flags[1] || kem_ct_len[2] ||
 x25519_ephemeral_pk[32] || mlkem768_ct[1088] || nonce[12] || aead_ct[variable]
 ```
 
-The layout above illustrates suite `0xA3`; suite `0xA4` substitutes a P-384 ephemeral key and the ML-KEM-1024 ciphertext. Self-describing, versioned, no negotiation (prevents downgrade attacks). [SPEC.md](SPEC.md) is the authoritative wire specification (including the current envelope-v2 header).
+The layout above illustrates suite `0xA3`; suite `0xA4` substitutes a P-384 ephemeral key and the ML-KEM-1024 ciphertext. Self-describing, versioned, no negotiation (prevents downgrade attacks). [SPEC.md](SPEC.md) specifies the v1 wire format; [WIRE_SPEC_V2.md](WIRE_SPEC_V2.md) specifies the current envelope-v2 header.
 
 ### Security Properties
 
@@ -268,15 +268,29 @@ citadel-v3/
 
 | Document | Audience |
 |----------|----------|
-| [SPEC.md](SPEC.md) | Wire format specification |
+| [QUICKSTART.md](QUICKSTART.md) | Getting started |
+| [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) | SDK integration guide |
+| [SPEC.md](SPEC.md) | v1 wire format specification |
+| [WIRE_SPEC.md](WIRE_SPEC.md) | v1 wire format, formal RFC-2119 notation |
+| [WIRE_SPEC_V2.md](WIRE_SPEC_V2.md) | v2 wire format (current envelope format) |
+| [FORMAT.md](FORMAT.md) | Envelope encoding and binding-rules overview |
+| [MIGRATION.md](MIGRATION.md) | Python prototype → Rust migration guide |
 | [THREAT_MODEL.md](THREAT_MODEL.md) | Security goals and assumptions |
 | [VALIDATION_MATRIX.md](VALIDATION_MATRIX.md) | Per-claim test evidence and gate status |
 | [COMPLIANCE_MATRIX.md](COMPLIANCE_MATRIX.md) | NIST 800-57 compliance mapping |
+| [SECURITY_GUARANTEES.md](SECURITY_GUARANTEES.md) | What is and is not protected |
+| [SECURITY_MATURITY.md](SECURITY_MATURITY.md) | Deployment-readiness scope and limits |
+| [SIDE_CHANNEL_NOTES.md](SIDE_CHANNEL_NOTES.md) | Timing/side-channel status |
+| [REPLAY_STORE_GUARANTEES.md](REPLAY_STORE_GUARANTEES.md) | Replay-protection guarantees by backend |
+| [REPLAY_TRUST_BOUNDARIES.md](REPLAY_TRUST_BOUNDARIES.md) | Replay-protection trust boundaries |
+| [PROVIDER_DECISION_LOG.md](PROVIDER_DECISION_LOG.md) | ML-KEM provider selection history |
+| [PROVIDER_BAKEOFF_2026.md](PROVIDER_BAKEOFF_2026.md) | ML-KEM provider bakeoff scorecard |
+| [SUPPLY_CHAIN.md](SUPPLY_CHAIN.md) | Dependency advisory and license-exception status |
 | [CITADEL_OVERVIEW.md](CITADEL_OVERVIEW.md) | Commercial positioning |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
+| [SUPPORT.md](SUPPORT.md) | Support tiers |
 | [API_FREEZE.md](API_FREEZE.md) | API stability guarantees |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment guide |
-| [QUICKSTART.md](QUICKSTART.md) | Getting started |
 
 ## License
 

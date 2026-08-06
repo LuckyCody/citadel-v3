@@ -64,9 +64,9 @@ controls passed; an independent monotonic-clock sample corroborated a tiny
 distribution effect. This is retained as a local/co-resident side-channel
 limitation, not attributed to a proved root cause. Fixed-server-key,
 attacker-controlled ciphertext, tag, and AAD classes pass the frozen dudect
-screen. See the Packet 012 receipt and `TIMING.md` for scope and wording.
+screen. See `TIMING.md` for scope and wording.
 
-For the `0xA4` P-384 arm (packet 036): the shipped ECDH path is designed and
+For the `0xA4` P-384 arm, the shipped ECDH path is designed and
 implemented constant-time (`p384` 0.14.0 uses `subtle` + constant-time formulas; the
 shared secret is computed via the constant-time `Mul`, no `_vartime` on the path —
 source-verified). The vendor does not assess generated-assembly constant-timeness, and
@@ -80,10 +80,10 @@ controlled / remote P-384 class passes (`|t|` ≤ 2.9).
 The **hybrid-combiner secrecy theorem** is machine-checked in CryptoVerif 2.12 for
 **both suites and both arms** (`gauntlet/tier12_combiner_proof/`): if the surviving
 component KEM is IND-CCA2, the KDF-derived key is secret even if the other component
-is fully broken. `0xA3`: X25519 and ML-KEM-768 arms (packets 016/017), verified at the
+is fully broken. `0xA3`: X25519 and ML-KEM-768 arms, verified at the
 full-faithful CCA level with an explicit SHA3-256 collision term. `0xA4`: P-384 and
-ML-KEM-1024 arms (packet 033 P5), both `RESULT Proved secrecy of K`, exit 0, no `admit`.
-An independent falsification audit (packet 019-R) ran 8+ probes and found no cryptographic
+ML-KEM-1024 arms, both `RESULT Proved secrecy of K`, exit 0, no `admit`.
+An independent adversarial falsification audit ran 8+ probes and found no cryptographic
 façade.
 
 **This is a proof of the abstract combiner (random-oracle KDF model), not of the Rust

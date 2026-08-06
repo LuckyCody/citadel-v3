@@ -1,6 +1,6 @@
 # Citadel V3 — Replay Store Guarantees
 
-> **P319 update:** ReplayStore now uses atomic `claim()+release()` instead of the old `claim()+release()` two-step. `claim()` is check-and-insert under a single lock — no race window. `release()` frees the slot only on decrypt failure (anti-poisoning). Successful decrypt keeps the claim permanently until TTL.
+> **Update:** ReplayStore now uses atomic `claim()+release()` instead of the old `claim()+release()` two-step. `claim()` is check-and-insert under a single lock — no race window. `release()` frees the slot only on decrypt failure (anti-poisoning). Successful decrypt keeps the claim permanently until TTL.
 
 ## What the Replay Store Does
 
@@ -83,8 +83,8 @@ Required for production multi-instance deployment.
 
 ### Hardened Alpha Gate: PENDING
 - Multi-process replay behavior: documented (not safe without Redis)
-- Corruption semantics: ✅ tested (P195)
-- Replay-spam concurrency: ✅ proven (P191, 100 concurrent)
+- Corruption semantics: ✅ tested
+- Replay-spam concurrency: ✅ proven (100 concurrent)
 
 ### Beta Gate: PENDING
 - Redis multi-instance validation required

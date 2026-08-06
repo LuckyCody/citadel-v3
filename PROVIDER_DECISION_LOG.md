@@ -2,7 +2,7 @@
 
 ## 2026-07-15: Replace abandoned PQClean chain with RustCrypto 0.3.2
 
-Packet 006 selected exact-pinned `ml-kem 0.3.2` as the release provider under
+This decision selected exact-pinned `ml-kem 0.3.2` as the release provider under
 the preregistered scorecard in `PROVIDER_BAKEOFF_2026.md`.
 
 The selected implementation passes all 60 checked-in final FIPS 203 ACVP
@@ -14,7 +14,7 @@ are absent from the root and fuzz lockfiles.
 
 Citadel v1 must keep its 2400-byte expanded private-key encoding, so the
 provider's deprecated expanded-key compatibility API is isolated to v1 import,
-export, diagnostics, and migration benches. Packet 007 may select the preferred
+export, diagnostics, and migration benches. A future decision may select the preferred
 64-byte seed representation for v2; v1 bytes are not silently changed.
 
 This supersedes the 2026-07-09 keep-PQClean decision because the decisive new

@@ -90,8 +90,8 @@
 - Keystore remains the sole capability-consumption boundary
 - API handlers must not pre-consume capabilities before passing them to Keystore
 
-**Evidence boundary**: Narrow and core/Keystore Ubuntu tests pass; packet 002 and the
-complete two-run judge remain in progress.
+**Evidence boundary**: Narrow and core/Keystore Ubuntu tests pass; the
+complete two-run judge remains in progress.
 
 ---
 

@@ -1,7 +1,7 @@
 # Tier 12 computational combiner proof — BOTH arms verified (combiner-half)
 
 This directory contains machine-checked proofs of **both arms** of hybrid-combiner
-robustness (packets 016 + 017). Both arms are verified at the **full-faithful** level
+robustness. Both arms are verified at the **full-faithful** level
 (full hybrid-ciphertext CCA + ciphertext/context binding + explicit SHA3-256
 collision resistance), each resting on its component KEM's IND-CCA2 premise.
 
@@ -16,7 +16,7 @@ collision resistance), each resting on its component KEM's IND-CCA2 premise.
 | **P-384 CTD2 arm (suite `0xA4`)** | `citadel_combiner_ctd2_p384_arm.ocv` | **VERIFIED** | P-384-DHKEM IND-CCA2 — prime-order abstraction **faithful** (cofactor 1) |
 | **ML-KEM-1024 CTD2 arm (suite `0xA4`)** | `citadel_combiner_ctd2_mlkem1024_arm.ocv` | **VERIFIED** | ML-KEM-1024 IND-CCA2 (FIPS 203, category 5) |
 
-## Suite `0xA4` (P-384 + ML-KEM-1024) — packet 033 phase P5
+## Suite `0xA4` (P-384 + ML-KEM-1024)
 
 Both arms of the CNSA-aligned suite are machine-checked at the CTD2 (production
 `wire_v2`) level, exit code 0, no `admit`/`assume`. Receipts:
@@ -34,7 +34,7 @@ ML-KEM-1024 arm: RESULT Proved secrecy of K up to probability
   5 vs 3). Proof structure identical to the `0xA3` ML-KEM arm; the broken classical
   component is P-384 rather than X25519 but enters as the same abstract `[fixed]`
   ciphertext type, immaterial to the secrecy theorem since it is fully broken. This is
-  the "re-run and re-receipt only" of spec `eem/033` §5.
+  a re-run and re-receipt of the same proof structure, not a new argument.
 - **P-384 arm is an upgrade over the X25519 arm, not just a relabel.** CryptoVerif's
   prime-order/DHKEM abstraction is *unfaithful* to Curve25519 (cofactor 8, low-order
   points), which is exactly why `citadel_combiner_x25519_gdh_attempt.ocv` stays PARKED
@@ -59,10 +59,9 @@ RESULT Proved secrecy of K up to probability
 > points, all-zero/non-contributory rejection). Polishing its proof script would
 > validate an idealization, not Citadel. Both arms already hold under the cited,
 > published X25519-DHKEM / ML-KEM IND-CCA2 premises; a raw-Curve25519 grounding
-> (DH_subgroup + rejection, per `018R_solution.md`) is future work, not a claim.
+> (DH_subgroup + rejection) is future work, not a claim.
 
-> **ADVERSARIAL REVIEW + RESOLUTION (packet 017-R, Codex/GPT-5.6-Sol,
-> `citadel/eem/017R_receipt.md`).** The review flagged the secrets-only arms:
+> **ADVERSARIAL REVIEW + RESOLUTION (Codex/GPT-5.6-Sol).** The review flagged the secrets-only arms:
 > (F1) the KDF didn't model the real HKDF's ciphertext binding
 > `SHA3-256(kem_ct)`/domain/context; (F2) the guard compared only the ML-KEM
 > ciphertext, wrongly excluding the legal, load-bearing hybrid CCA query
@@ -79,8 +78,7 @@ RESULT Proved secrecy of K up to probability
 > complete; the SHA3 collision probability is assumed, not accounted. The
 > secrets-only files are retained as the minimal baseline.
 
-> **FALSIFICATION AUDIT (packet 019-R, Codex/GPT-5.6-Sol, `citadel/eem/019R_audit.md`;
-> probe copies under `citadel/eem/019R_probes/`).** Independent red-team ran 8+
+> **FALSIFICATION AUDIT (Codex/GPT-5.6-Sol).** Independent red-team ran 8+
 > falsification probes against the faithful arms — mutating the models so secrecy
 > MUST break if the proof has teeth. Result: **no cryptographic façade.** Every
 > load-bearing element fails correctly on removal (leak K → fails; constant info →
@@ -115,7 +113,7 @@ inside Citadel's own model.
 
 ---
 
-## ML-KEM arm (packet 016)
+## ML-KEM arm
 
 ## What is proved (and what is not)
 

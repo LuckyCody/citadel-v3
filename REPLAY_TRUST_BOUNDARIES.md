@@ -235,6 +235,4 @@ Planned improvements to strengthen replay trust:
 
 ---
 
-**Last Updated**: Round 4 security audit  
-**Reviewer Feedback**: "Replay persistence semantics still oversell reality"  
-**Resolution**: Complete trust boundary documentation (P024)
+**Status**: This document supersedes earlier replay-persistence claims found to oversell actual guarantees; see the sections above for current, verified behavior.

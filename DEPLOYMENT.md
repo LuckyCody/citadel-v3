@@ -2,8 +2,8 @@
 
 ## Linux local-pilot custody profile
 
-Packet 008 adds a hardened single-host profile that removes the root wrapping
-key from environment variables. This profile is the supported zero-budget pilot
+This hardened single-host profile removes the root wrapping
+key from environment variables. It is the supported zero-budget pilot
 path; it does **not** claim HSM, TPM, non-exportability, FIPS validation, or
 independent review.
 
