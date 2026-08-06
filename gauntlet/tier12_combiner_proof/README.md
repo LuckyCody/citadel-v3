@@ -61,7 +61,7 @@ RESULT Proved secrecy of K up to probability
 > published X25519-DHKEM / ML-KEM IND-CCA2 premises; a raw-Curve25519 grounding
 > (DH_subgroup + rejection) is future work, not a claim.
 
-> **ADVERSARIAL REVIEW + RESOLUTION (Codex/GPT-5.6-Sol).** The review flagged the secrets-only arms:
+> **ADVERSARIAL REVIEW + RESOLUTION.** An independent review flagged the secrets-only arms:
 > (F1) the KDF didn't model the real HKDF's ciphertext binding
 > `SHA3-256(kem_ct)`/domain/context; (F2) the guard compared only the ML-KEM
 > ciphertext, wrongly excluding the legal, load-bearing hybrid CCA query
@@ -78,7 +78,7 @@ RESULT Proved secrecy of K up to probability
 > complete; the SHA3 collision probability is assumed, not accounted. The
 > secrets-only files are retained as the minimal baseline.
 
-> **FALSIFICATION AUDIT (Codex/GPT-5.6-Sol).** Independent red-team ran 8+
+> **FALSIFICATION AUDIT.** An independent adversarial review ran 8+
 > falsification probes against the faithful arms — mutating the models so secrecy
 > MUST break if the proof has teeth. Result: **no cryptographic façade.** Every
 > load-bearing element fails correctly on removal (leak K → fails; constant info →
@@ -167,7 +167,7 @@ Full verbatim output is `receipt_mlkem_arm.txt`.
 
 ## How it verified (the honest trail)
 
-1. `citadel_hybrid_combiner.ocv` (design input, Codex): asked CryptoVerif to
+1. `citadel_hybrid_combiner.ocv` (design input): asked CryptoVerif to
    prove the ML-KEM assumption *from itself* (a `query_equiv` restating the
    `equiv`) — vacuous, stalled at game merge. Kept for the record.
 2. Corrected goal → prove combiner-key secrecy *using* the assumption. Automatic

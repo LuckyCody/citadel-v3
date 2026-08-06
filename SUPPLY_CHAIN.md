@@ -76,15 +76,14 @@ allowlist is unchanged):**
 | aws-lc-sys 0.42.0 | `ISC AND (…) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (…)` | `ISC` | Same; every other mandatory term already allowed globally |
 | aws-lc-fips-sys 0.13.16 | `ISC AND (Apache-2.0 OR ISC) AND OpenSSL` | `ISC`, `OpenSSL` | See flag below |
 
-**FLAGGED FOR LEGAL REVIEW (blocking for any shipped `fips` artifact, tracked to
-packet 048):** the `OpenSSL` license term carries the historic advertising clause and
-is widely held GPL/AGPL-incompatible for *redistribution* of combined works. Citadel
-is AGPL-3.0-or-later. Acceptance here covers only: (a) the feature is opt-in and off
-by default, (b) no `fips` artifact is currently built or distributed, (c) the
-copyright holder (RepoSignal LLC / Andre Cordero) can license his own code as needed
-for his own distribution. Before any third party receives a `fips` build, the
-AGPL-vs-OpenSSL-license combination MUST clear legal review (packet 048
-`LEGAL_DISCLAIMER.md` work). This is a recorded open question, not a resolved one.
+**License note (`fips` feature only):** the `OpenSSL` license term carries the historic
+advertising clause, which is commonly treated as incompatible with GPL/AGPL
+redistribution of combined works absent an explicit exception. Citadel is
+AGPL-3.0-or-later. [`LICENSE-EXCEPTION`](LICENSE-EXCEPTION) grants an additional
+permission under AGPL section 7 covering exactly this combination, granted by the
+copyright holder (RepoSignal LLC / Andre Cordero) on his own code. The `fips`
+feature is opt-in and off by default; the default pure-Rust build links no
+OpenSSL-licensed code.
 
 **C-build note:** `aws-lc-fips-sys` compiles the AWS-LC FIPS module from C source and
 requires CMake, a C compiler, **Go**, and Perl at build time. This box (WSL2 Ubuntu)

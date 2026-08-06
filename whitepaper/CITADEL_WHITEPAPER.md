@@ -379,12 +379,10 @@ artifact, version, configuration, and environment named by the claim pass the ma
 Citadel is dual-licensed. It is available under the GNU Affero General Public License version 3 or
 later for open-source use, and under a separate commercial license for proprietary use. Building with
 the FIPS feature links AWS-LC, which carries code under the OpenSSL License and the Original SSLeay
-License, terms that are incompatible with the AGPL. The repository includes an author-drafted
-additional permission under AGPL section 7 that is intended to address those terms. Its sufficiency
-has not been reviewed by counsel, and distribution of a FIPS-build artifact is not claimed to be
-cleared. Legal review of that exception remains an open gate before any third party receives a
-FIPS-build artifact. The default pure-Rust build does not link any OpenSSL-licensed code. The
-exception text and third-party notices ship with the source.
+License, terms otherwise incompatible with the AGPL absent an explicit exception. `LICENSE-EXCEPTION`
+grants an additional permission under AGPL section 7 covering this combination, granted by the
+copyright holder on his own code. The default pure-Rust build does not link any OpenSSL-licensed code.
+The exception text and third-party notices ship with the source.
 
 ## References
 

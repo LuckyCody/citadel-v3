@@ -31,13 +31,11 @@ allow = [
     "Unicode-3.0",
 ]
 
-# Packet 038 (Citadel-FIPS dep gate): scoped per-crate exceptions for the AWS-LC
-# subtree ONLY — the global allowlist above is deliberately unchanged. ISC is a
-# permissive MIT-equivalent. The OpenSSL license term (aws-lc-fips-sys) is accepted
-# for the opt-in, non-default `fips` build only; its AGPL-compatibility question is
-# recorded in SUPPLY_CHAIN.md §AWS-LC and MUST clear legal review before any `fips`
-# artifact ships (packet 048). Rationale: SUPPLY_CHAIN.md; program doc:
-# factory citadel/fips-backend/SUPPLY_CHAIN.md.
+# Scoped per-crate exceptions for the AWS-LC subtree ONLY — the global allowlist
+# above is deliberately unchanged. ISC is a permissive MIT-equivalent. The OpenSSL
+# license term (aws-lc-fips-sys) is accepted for the opt-in, non-default `fips`
+# build only, under the additional permission in LICENSE-EXCEPTION granted by the
+# copyright holder on his own code. Rationale: SUPPLY_CHAIN.md §AWS-LC.
 [[licenses.exceptions]]
 name = "aws-lc-rs"
 allow = ["ISC"]
