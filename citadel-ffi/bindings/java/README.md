@@ -18,7 +18,7 @@ License inquiries: commit@reposignal.io
 ## Step 1 — Get the native library
 
 Download the prebuilt binary for your platform from the
-[rust_citadel releases page](https://github.com/mrcord77/rust_citadel/releases):
+[citadel-v3 releases page](https://github.com/mrcord77/citadel-v3/releases):
 
 | Platform       | File                    |
 |----------------|-------------------------|
@@ -29,8 +29,8 @@ Download the prebuilt binary for your platform from the
 Or build from source:
 
 ```bash
-git clone https://github.com/mrcord77/rust_citadel
-cd rust_citadel
+git clone https://github.com/mrcord77/citadel-v3
+cd citadel-v3
 cargo build --release -p citadel-ffi
 # Output: target/release/libcitadel.so (or .dll / .dylib)
 ```

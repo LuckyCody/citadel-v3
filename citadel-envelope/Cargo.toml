@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.74"
 description = "Citadel Envelope v2: X25519 + ML-KEM-768 hybrid encryption with AES-256-GCM"
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/mrcord77/rust_citadel"
+repository = "https://github.com/mrcord77/citadel-v3"
 keywords = ["cryptography", "post-quantum", "encryption", "ml-kem", "hybrid"]
 categories = ["cryptography"]
 

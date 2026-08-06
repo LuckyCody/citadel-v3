@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.74"
 description = "C FFI bindings for citadel-envelope — enables Java, C#, Go, Python, and Node.js integration"
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/mrcord77/rust_citadel"
+repository = "https://github.com/mrcord77/citadel-v3"
 
 [lib]
 name = "citadel"

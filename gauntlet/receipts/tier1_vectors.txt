@@ -45,8 +45,8 @@
    Compiling ppv-lite86 v0.2.21
    Compiling rand_chacha v0.9.0
    Compiling proptest v1.11.0
-   Compiling citadel-envelope v0.2.0 (/mnt/c/Users/andre/Downloads/factory/citadel/src/citadel_v3/citadel-envelope)
-   Compiling citadel-gauntlet-tier1 v0.0.0 (/mnt/c/Users/andre/Downloads/factory/citadel/src/citadel_v3/gauntlet/tier1_vectors)
+   Compiling citadel-envelope v0.2.0 (citadel-v3/citadel-envelope)
+   Compiling citadel-gauntlet-tier1 v0.0.0 (citadel-v3/gauntlet/tier1_vectors)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 11.38s
      Running tests/adversarial_envelope.rs (target/debug/deps/adversarial_envelope-f6c83c623cc2a877)
 

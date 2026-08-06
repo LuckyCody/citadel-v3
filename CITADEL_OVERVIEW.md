@@ -83,7 +83,7 @@ services:
     volumes:
       - citadel-data:/data
     ports:
-      - "3000:3000"
+      - "8443:8443"
 ```
 
 Production deployment includes Caddy for TLS termination, per-IP rate limiting, and scoped API keys for separation of duties.
@@ -129,7 +129,7 @@ Citadel maps to 34 controls in NIST SP 800-57: 26 satisfied, 7 partially satisfi
 | Dashboard | Working, real-time threat visualization |
 | Independent audit | **Not yet completed** |
 | Production deployments | **None yet** |
-| FIPS validation | **Not applicable** (uses NIST algorithms, not FIPS-validated module) |
+| FIPS validation | **Not a validated deployment.** The optional `fips` build routes envelope operations through a CMVP-validated AWS-LC module, but that does not make Citadel itself a validated product — see [SECURITY_MATURITY.md](SECURITY_MATURITY.md). |
 
 ## What Independent Audit Would Cover
 

@@ -123,24 +123,22 @@ Multiple API instances sharing a load balancer: per-IP rate limiting is per-inst
 | KEM classical (`0xA4`) | P-384 ECDH | NIST SP 800-186 / SEC1 | p384 =0.14.0 |
 | KEM post-quantum (`0xA3`) | ML-KEM-768 | NIST FIPS 203 | ml-kem =0.3.2 |
 | KEM post-quantum (`0xA4`) | ML-KEM-1024 | NIST FIPS 203 | ml-kem =0.3.2 |
-
-### Note on ml-kem crate status
-
-The `ml-kem 0.2.2` crate implements NIST FIPS 203 (ML-KEM, formerly Kyber). The crate
-carries an "experimental" designation in its own documentation, meaning it has not yet
-received a formal third-party security audit.
-
-**This does not reduce Citadel's security guarantees** because of the hybrid design:
-an attacker must break BOTH X25519 and ML-KEM-768 to recover the shared secret. If
-ML-KEM-768 is broken (by cryptanalysis or implementation flaw), X25519 still protects
-the plaintext. The hybrid construction provides defense-in-depth.
-
-**Recommendation:** Track the ml-kem crate for a stable, audited release. When available,
-update `ml-kem = "0.2.2"` to the audited version in `citadel-envelope/Cargo.toml`.
 | AEAD | AES-256-GCM | NIST SP 800-38D | aes-gcm 0.10 |
 | KDF | HKDF-SHA256 | RFC 5869 | hkdf 0.12 |
 | MAC (auth) | HMAC-SHA256 | RFC 2104 | hmac 0.12 |
 | Hash | SHA-256 / SHA3-256 | FIPS 180-4 | sha2/sha3 0.10 |
+
+### Note on ml-kem crate status
+
+The `ml-kem` crate implements NIST FIPS 203 (ML-KEM, formerly Kyber). The crate
+carries an "experimental" designation in its own documentation, meaning it has not yet
+received a formal third-party security audit.
+
+**This does not reduce Citadel's `0xA3` security guarantee** because of the hybrid design:
+an attacker must break BOTH X25519 and ML-KEM-768 to recover the shared secret. If
+ML-KEM-768 is broken (by cryptanalysis or implementation flaw), X25519 still protects
+the plaintext. The hybrid construction provides defense-in-depth. The same reasoning
+applies to `0xA4` (P-384 + ML-KEM-1024).
 
 ---
 

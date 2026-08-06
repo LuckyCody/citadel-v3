@@ -253,11 +253,9 @@ It IS:
 
 ## Contact and Support
 
-**Security Issues**: Open issue on GitHub with [SECURITY] prefix  
-**General Questions**: See CONTRIBUTING.md  
-**Commercial Support**: Contact project maintainers
-
-**Security Disclosure Policy**: Responsible disclosure preferred, 90-day window for fixes
+**Security Issues**: Do not open a public issue — see [SECURITY.md](SECURITY.md) for the disclosure process.
+**General Questions**: See [SUPPORT.md](SUPPORT.md)
+**Commercial Support**: See [SUPPORT.md](SUPPORT.md)
 
 ---
 

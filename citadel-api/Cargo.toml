@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.74"
 description = "REST API layer for the Citadel post-quantum encryption ecosystem"
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/mrcord77/rust_citadel"
+repository = "https://github.com/mrcord77/citadel-v3"
 keywords = ["cryptography", "post-quantum", "encryption", "api", "rest"]
 categories = ["cryptography", "web-programming::http-server"]
 

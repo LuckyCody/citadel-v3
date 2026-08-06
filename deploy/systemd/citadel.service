@@ -1,6 +1,6 @@
 [Unit]
 Description=Citadel Post-Quantum Key Management Service (V3)
-Documentation=https://github.com/mrcord77/rust_citadel
+Documentation=https://github.com/mrcord77/citadel-v3
 After=network.target redis.service
 Requires=network.target
 

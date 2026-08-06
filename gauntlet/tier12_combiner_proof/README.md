@@ -179,4 +179,4 @@ Full verbatim output is `receipt_mlkem_arm.txt`.
    ciphertext** — a real attack. Forbidding it (`if c = ct then yield`), which is
    the correct CCA2 threat model, closes the proof.
 
-Per-step evidence is in `citadel/eem/016_attempt_*.md` and `016_receipt.md`.
+Per-step evidence is in the receipt files in this directory (`receipt_mlkem_arm.txt` and related).

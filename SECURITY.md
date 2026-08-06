@@ -5,8 +5,8 @@
 **Citadel is unaudited software.**
 
 The implementation:
-- Uses NIST-standardized primitives (ML-KEM-768, AES-256-GCM, HKDF-SHA256, X25519)
-- Follows established hybrid construction patterns (X25519 + ML-KEM-768)
+- Uses NIST-standardized primitives (ML-KEM-768, ML-KEM-1024, P-384, AES-256-GCM, HKDF-SHA256, X25519)
+- Follows established hybrid construction patterns (`0xA3`: X25519 + ML-KEM-768; `0xA4`: P-384 + ML-KEM-1024)
 - Has broad automated coverage; the 2026-07-15 locked Ubuntu baseline passed 353 tests, with 7 explicitly ignored and 0 failed
 - Has dudect-based timing validation covering all attacker-controlled-input classes
 - Has NOT undergone independent security audit
@@ -118,8 +118,8 @@ We track security advisories for all dependencies via `cargo audit`.
 The signing path exact-pins `ml-dsa 0.1.0-rc.9` and enables its secret-key
 zeroization feature. That proves a memory-lifecycle property, not independent
 implementation assurance. Direct official FIPS 204 vectors through the exact
-release path and a maintained-provider assurance decision remain open under
-`open-problems/P028_crypto_provider_assurance.md`.
+release path and a maintained-provider assurance decision remain open work,
+tracked internally.
 
 ### Build toolchain requirement
 

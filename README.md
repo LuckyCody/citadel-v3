@@ -26,6 +26,9 @@ Your application never touches raw key material. The encrypted blob is self-cont
 
 ## Architecture
 
+The request path runs through three crates (see [Project Structure](#project-structure)
+below for all seven):
+
 ```
 citadel-envelope    Hybrid encryption core (X25519 + ML-KEM-768 + AES-256-GCM)
 citadel-keystore    Key lifecycle management, 4-level hierarchy, threat-adaptive policies
@@ -41,23 +44,23 @@ citadel-api         HTTP server, scoped API key auth, rate limiting, real-time d
 git clone https://github.com/mrcord77/citadel-v3.git
 cd citadel-v3
 
-# Set your admin API key
-echo -n "your-secret-key" | sha256sum | cut -d' ' -f1
-# Copy the hash
-
-# Start
-CITADEL_API_KEY_HASH=<paste-hash> docker compose up -d
+# Start (dev mode: plaintext key, demo seed — never use this profile in production)
+docker compose up -d
 
 # Verify
-curl http://localhost:3000/health
+curl http://localhost:8443/health
 # {"status":"ok","version":"0.2.0"}
 ```
 
-Dashboard: http://localhost:3000
+Dashboard: http://localhost:8443
+
+For a production deployment (hashed API key, Redis-backed replay protection, TLS),
+see [QUICKSTART.md](QUICKSTART.md).
 
 ### From Source
 
-Requires Rust 1.96+ (the dependency chain pulls in the 2024 edition).
+Requires a recent stable Rust — see the `rust-version` field in each crate's `Cargo.toml`
+for its exact minimum supported version.
 
 > **Note:** Use `rustup` (`rustup toolchain install stable`) rather than a distro-packaged
 > `cargo`, which is often too old. The `fips` feature additionally needs clang, CMake, Perl,
@@ -65,7 +68,11 @@ Requires Rust 1.96+ (the dependency chain pulls in the 2024 edition).
 
 ```bash
 cargo build --release -p citadel-api
-CITADEL_API_KEY="your-secret-key" CITADEL_SEED_DEMO=true ./target/release/citadel-api
+CITADEL_ENV=development \
+CITADEL_ALLOW_PLAINTEXT_KEYS=1 \
+CITADEL_API_KEY="your-secret-key" \
+CITADEL_SEED_DEMO=true \
+./target/release/citadel-api
 ```
 
 The default build/test graph excludes the comparison-only AWS-LC provider. Compile the
@@ -88,7 +95,7 @@ bash scripts/test-citadel-ubuntu.sh
 ```python
 import requests
 
-api = "http://localhost:3000"
+api = "http://localhost:8443"
 headers = {"Authorization": "Bearer your-secret-key"}
 
 # Encrypt
@@ -114,13 +121,13 @@ See [citadel_example.py](citadel_example.py) for a complete working example with
 
 ```bash
 # Status
-curl http://localhost:3000/api/status -H "Authorization: Bearer $KEY"
+curl http://localhost:8443/api/status -H "Authorization: Bearer $KEY"
 
 # List keys
-curl http://localhost:3000/api/keys -H "Authorization: Bearer $KEY"
+curl http://localhost:8443/api/keys -H "Authorization: Bearer $KEY"
 
 # Encrypt
-curl -X POST http://localhost:3000/api/keys/$DEK_ID/encrypt \
+curl -X POST http://localhost:8443/api/keys/$DEK_ID/encrypt \
   -H "Authorization: Bearer $KEY" \
   -H "Content-Type: application/json" \
   -d '{"plaintext":"hello","aad":"test","context":"demo"}'
@@ -281,6 +288,7 @@ citadel-v3/
 | [SECURITY_GUARANTEES.md](SECURITY_GUARANTEES.md) | What is and is not protected |
 | [SECURITY_MATURITY.md](SECURITY_MATURITY.md) | Deployment-readiness scope and limits |
 | [SIDE_CHANNEL_NOTES.md](SIDE_CHANNEL_NOTES.md) | Timing/side-channel status |
+| [TIMING.md](TIMING.md) | Full timing/dudect validation record |
 | [REPLAY_STORE_GUARANTEES.md](REPLAY_STORE_GUARANTEES.md) | Replay-protection guarantees by backend |
 | [REPLAY_TRUST_BOUNDARIES.md](REPLAY_TRUST_BOUNDARIES.md) | Replay-protection trust boundaries |
 | [PROVIDER_DECISION_LOG.md](PROVIDER_DECISION_LOG.md) | ML-KEM provider selection history |
@@ -291,6 +299,7 @@ citadel-v3/
 | [SUPPORT.md](SUPPORT.md) | Support tiers |
 | [API_FREEZE.md](API_FREEZE.md) | API stability guarantees |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment guide |
+| [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md) | Commercial license terms |
 
 ## License
 

@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.85"
 description = "Post-quantum key lifecycle management for the Citadel ecosystem"
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/mrcord77/rust_citadel"
+repository = "https://github.com/mrcord77/citadel-v3"
 keywords = ["cryptography", "post-quantum", "keystore", "key-management"]
 categories = ["cryptography"]
 
