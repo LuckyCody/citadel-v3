@@ -42,12 +42,3 @@ As a modifier of a covered file you may extend this additional permission to
 your own modified versions of that file, but you are not obligated to do so. If
 you do not wish to grant this permission for your version, you may remove this
 exception notice from your version.
-
---------------------------------------------------------------------------------
-NOTE (not part of the grant): This exception was drafted from the FSF's GPLv3/
-AGPLv3 section 7 additional-permission template and reviewed for consistency with
-common licensing practice. It has NOT been reviewed by counsel. The exact license
-composition of the pinned `aws-lc-fips-sys` (which its own LICENSE declares as
-`ISC AND (Apache-2.0 OR ISC) AND OpenSSL`, covering the OpenSSL and Original
-SSLeay conditions on inherited code) and the AGPL "or later" treatment should be
-confirmed with an OSS/IP lawyer before relying on this for distribution.
