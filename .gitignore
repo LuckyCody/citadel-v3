@@ -42,3 +42,7 @@ test_output.txt
 citadel-validation-*.txt
 citadel-backups/
 citadel-data/
+
+# python caches
+__pycache__/
+*.pyc
