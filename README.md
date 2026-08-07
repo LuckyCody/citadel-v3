@@ -297,6 +297,8 @@ citadel-v3/
 | [CITADEL_OVERVIEW.md](CITADEL_OVERVIEW.md) | Commercial positioning |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
 | [SUPPORT.md](SUPPORT.md) | Support tiers |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
 | [API_FREEZE.md](API_FREEZE.md) | API stability guarantees |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment guide |
 | [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md) | Commercial license terms |
