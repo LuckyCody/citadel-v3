@@ -210,6 +210,7 @@ function ApiKeyPanel({ authInfo, config }) {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newScopes, setNewScopes] = useState(["read"]);
+  const [newDomains, setNewDomains] = useState("");
   const [createdKey, setCreatedKey] = useState(null);
   const [error, setError] = useState("");
   const isAdmin = authInfo.scopes.includes("admin");
@@ -226,15 +227,23 @@ function ApiKeyPanel({ authInfo, config }) {
   const createKey = async () => {
     setError("");
     if (!newName.trim()) { setError("Name required"); return; }
+    const domains = newDomains.split(",").map(d => d.trim()).filter(Boolean);
+    if (!newScopes.includes("admin") && domains.length === 0) {
+      setError("Non-admin keys must be scoped to at least one domain (see DOMAINS field below)");
+      return;
+    }
     try {
+      const body = { name: newName.trim(), scopes: newScopes };
+      if (domains.length > 0) body.allowed_domains = domains;
       const res = await api("/api/auth/keys", {
         method: "POST",
-        body: JSON.stringify({ name: newName.trim(), scopes: newScopes }),
+        body: JSON.stringify(body),
       });
       if (res.api_key) {
         setCreatedKey(res);
         setNewName("");
         setNewScopes(["read"]);
+        setNewDomains("");
         loadKeys();
       } else if (res.error) {
         setError(res.error);
@@ -345,6 +354,19 @@ function ApiKeyPanel({ authInfo, config }) {
               ))}
             </div>
           </div>
+          {!newScopes.includes("admin") && (
+            <div style={{ marginBottom:10 }}>
+              <label style={{ fontSize:9, letterSpacing:1, color:"rgba(255,255,255,0.4)" }}>
+                DOMAINS (comma-separated, required for non-admin keys)
+              </label>
+              <input value={newDomains} onChange={e => setNewDomains(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") createKey(); }}
+                placeholder="e.g. production"
+                style={{ width:"100%", padding:"6px 10px", fontSize:11, marginTop:4,
+                  background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.1)",
+                  borderRadius:4, color:"#fff", outline:"none" }} />
+            </div>
+          )}
           <button onClick={createKey} disabled={!newName.trim() || newScopes.length === 0}
             style={{ padding:"6px 16px", fontSize:10, fontWeight:600, letterSpacing:1,
               background:"rgba(59,130,246,0.15)", border:"1px solid rgba(59,130,246,0.4)",
