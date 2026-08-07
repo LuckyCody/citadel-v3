@@ -92,4 +92,4 @@ Required for production multi-instance deployment.
 
 ---
 
-*Last updated: 2026-05-02 | citadel-v3-alpha-001*
+*Last updated: 2026-05-02 | citadel-v3-beta-001*

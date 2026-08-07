@@ -3,19 +3,19 @@
 #
 # Identical to `Dockerfile` except: the builder installs the C toolchain the
 # AWS-LC FIPS module needs (CMake + Go + Perl) and builds with `--features fips`,
-# so every envelope cryptographic operation executes inside AWS-LC-FIPS 3.4.0.
+# so every envelope cryptographic operation executes inside the pinned
+# CMVP-validated AWS-LC-FIPS 3.1.0 build (`aws-lc-fips-sys 0.13.11`, certs #5298/#5314).
 #
 # HONEST SCOPE — do not overstate when shipping this image:
-#   * the module is SUBMITTED for FIPS 140-3 validation (CMVP review pending);
-#     it is NOT validated. `/health` reports this string itself.
+#   * the AWS-LC-FIPS module itself is CMVP-validated (certs #5298/#5314); that
+#     does not make Citadel a FIPS-validated or FIPS-compliant product. `/health`
+#     reports the backend string itself.
 #   * ML-KEM key expansion from stored seeds, key generation, and ML-DSA-65
 #     signing execute in pure Rust (aws-lc-rs exposes no FIPS-mode ML-DSA).
-#   * DISTRIBUTION IS GATED: Citadel is AGPL-3.0-or-later and aws-lc-fips-sys
-#     carries an OpenSSL-license term. Legal review (packet 048) must clear
-#     before this image reaches any third party. Local/self-hosted builds only
-#     until then.
-# Controlling record: factory `CLAIM_EVIDENCE_MATRIX.md` FIPS-backend section and
-# `citadel/fips-backend/FIPS_MODE_STATUS.md`.
+#   * LICENSING: Citadel is AGPL-3.0-or-later and aws-lc-fips-sys carries an
+#     OpenSSL-license term. See LICENSE-EXCEPTION for the additional permission
+#     under AGPL section 7 covering this combination.
+# Controlling record: SUPPLY_CHAIN.md (§AWS-LC) and SECURITY_MATURITY.md.
 #
 # Build:  docker build -f Dockerfile.fips -t citadel:v3-fips .
 # Verify: curl -s localhost:8443/health | jq .crypto_backend

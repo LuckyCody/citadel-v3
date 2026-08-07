@@ -1,6 +1,6 @@
 # Citadel V3 — Security Guarantees
 
-**Status:** Unaudited alpha. These are design-level claims, not independently verified guarantees.
+**Status:** Unaudited beta. These are design-level claims, not independently verified guarantees.
 See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 
 ---

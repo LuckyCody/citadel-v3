@@ -1,4 +1,4 @@
-# Citadel V3 Full Validation -- citadel-v3-alpha-001
+# Citadel V3 Full Validation -- citadel-v3-beta-001
 # Run: powershell -ExecutionPolicy Bypass -File .\citadel_full_validation.ps1
 
 $ts      = Get-Date -Format "yyyyMMdd_HHmmss"
@@ -342,7 +342,7 @@ try {
 # -- Summary ------------------------------------------------------------------
 $summary = @{
     timestamp  = $ts
-    tag        = "citadel-v3-alpha-001"
+    tag        = "citadel-v3-beta-001"
     log_dir    = $logDir
     cargo_log  = $cargoLog
     server_log = $serverLog

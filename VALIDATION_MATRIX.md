@@ -1,9 +1,14 @@
 # Citadel V3 — Validation Matrix
 
-**Tag:** citadel-v3-alpha-001  
-**Last full validation run:** 20260501_200031  
-**Alpha Freeze Gate:** PASSED (24/24)  
-**Hardened Alpha Gate:** IN PROGRESS
+**Tag:** citadel-v3-beta-001  
+**Current status:** Beta-stage (see [SECURITY_MATURITY.md](SECURITY_MATURITY.md)). Alpha Freeze
+and Hardened Alpha gates below are both superseded by validation work completed since —
+machine-checked combiner proofs for both suites, an independent adversarial falsification
+audit, ACVP vectors now passing, and the CMVP-validated FIPS backend pin. No independent
+third-party audit has been performed; see [SECURITY.md](SECURITY.md#what-we-do-not-claim).  
+**Baseline validation run (below):** 20260501_200031 — the tables that follow are that run's
+record and have not all been individually re-dated since. Where a specific claim has since
+changed, it is corrected inline.
 
 ---
 
@@ -15,7 +20,13 @@
 | AES-256-GCM authenticated encryption | `p006_*`, `p007_*` | citadel-envelope | ✅ PASS | 20260501 | — |
 | HKDF-SHA256 key derivation | `hkdf_kat_*` | citadel-envelope | ✅ PASS | 20260501 | — |
 | Wrong-key isolation (IND-CCA2 property) | `p012_wrong_key_*` | citadel-envelope | ✅ PASS | 20260501 | — |
-| ML-KEM ACVP/NIST official vectors | — | — | ⏳ PENDING | — | Requires official ACVP vectors |
+| ML-KEM ACVP/NIST official vectors | `nist_acvp_kat`, `acvp_mlkem1024`, `production_mlkem_acvp` | citadel-envelope | ✅ PASS (60/60) | current | Superseded — see [SECURITY.md](SECURITY.md#cryptographic-provider-assurance) |
+
+**Suite `0xA4` (P-384 + ML-KEM-1024):** added after this baseline run; not itemized row-by-row
+below. Its evidence lives in `citadel-envelope/tests/wycheproof_p384_ecdh.rs`,
+`proptest_a4.rs`, `v2_vector_a4.rs`, `awslc_ecdh_p384_differential.rs`, and the machine-checked
+combiner proofs in `gauntlet/tier12_combiner_proof/` (CTD2 P-384 and ML-KEM-1024 arms, both
+VERIFIED). See [SECURITY_GUARANTEES.md](SECURITY_GUARANTEES.md) for the full primitive table.
 
 ---
 
@@ -149,20 +160,24 @@
 | Gate | Status |
 |------|--------|
 | **Alpha Freeze** | ✅ PASSED (20260501_200031) |
-| **Hardened Alpha** | ⏳ IN PROGRESS (P191-P203) |
-| **Beta** | ⏳ PENDING (external review required) |
+| **Hardened Alpha** | ✅ SUPERSEDED — combiner proofs, ACVP, and the CMVP-validated FIPS pin all postdate this baseline |
+| **Beta** | ✅ REACHED — adversarial suite independently re-run end to end (see [README.md](README.md#how-we-validated-and-audited-it)); no independent third-party audit |
 
 ---
 
 ## Known Limitations
 
 - FileReplayStore is single-process only. Redis required for multi-instance.
-- ML-KEM-768 uses experimental ml-kem crate (v0.2.2). ACVP vectors pending.
-- API key comparison uses HMAC hash equality — not constant-time (see SIDE_CHANNEL_NOTES.md).
+- ML-KEM-768 uses the `ml-kem` crate (currently pinned at v0.3.2), which carries an
+  "experimental" designation in its own documentation. ACVP vectors pass (see above).
+- API key comparison uses `subtle::ConstantTimeEq` (see `citadel-api/src/main.rs`) — the
+  HMAC-hash-equality note above is superseded.
 - No independent security audit has been performed.
 - Backup/restore does not enforce key state preservation (active/revoked) post-restore.
-- **Build requires Rust/Cargo 1.81+** (P208): ml-kem transitive deps use edition2024 which Cargo <1.85 cannot parse. Ubuntu 24.04 LTS apt ships 1.75 — use rustup or Docker official rust image.
+- **Minimum Rust version varies by crate** — see the `rust-version` field in each crate's
+  `Cargo.toml` for its exact requirement; ml-kem's transitive dependencies require a
+  toolchain new enough to parse the 2024 edition.
 
 ---
 
-*Generated: 2026-05-02 | citadel-v3-alpha-001*
+*Baseline generated: 2026-05-02 | Superseding notes added: 2026-08-06 | citadel-v3-beta-001*

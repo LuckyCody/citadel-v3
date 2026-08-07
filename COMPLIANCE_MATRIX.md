@@ -4,8 +4,8 @@
 
 This document maps Citadel's key management capabilities against NIST Special Publication 800-57 Part 1 Rev. 5 ("Recommendation for Key Management: Part 1 - General"). It is intended for compliance officers, security architects, and procurement teams evaluating Citadel for enterprise deployment.
 
-**Assessment date:** February 2026
-**Citadel version:** 0.2.0 (citadel-envelope 0.1.0, citadel-keystore 0.1.0)
+**Assessment date:** August 2026
+**Citadel version:** 0.2.0 (citadel-envelope 0.2.0, citadel-keystore 0.2.0)
 **Auditor:** Self-assessed (no independent audit)
 
 ---
@@ -16,11 +16,11 @@ This document maps Citadel's key management capabilities against NIST Special Pu
 |----------|----------|-----------|---------|-----|
 | Key Types & Hierarchy | 6 | 5 | 1 | 0 |
 | Key Lifecycle | 8 | 7 | 1 | 0 |
-| Cryptographic Algorithms | 5 | 4 | 1 | 0 |
+| Cryptographic Algorithms | 5 | 5 | 0 | 0 |
 | Key Protection | 6 | 4 | 2 | 0 |
 | Operational Security | 5 | 3 | 1 | 1 |
 | Audit & Accountability | 4 | 3 | 1 | 0 |
-| **Total** | **34** | **26** | **7** | **1** |
+| **Total** | **34** | **27** | **6** | **1** |
 
 ---
 
@@ -58,7 +58,7 @@ This document maps Citadel's key management capabilities against NIST Special Pu
 | 3.2 | NIST-approved key derivation | SATISFIED | HKDF-SHA256 (NIST SP 800-56C Rev. 2). Domain-separated with protocol ID, suite identifiers, and context binding. | - |
 | 3.3 | Post-quantum algorithms per FIPS 203 | SATISFIED | ML-KEM-768 (FIPS 203, August 2024). Category 3 security level. | - |
 | 3.4 | Hybrid construction for migration period | SATISFIED | X25519 + ML-KEM-768 combined via HKDF. Security holds if either primitive remains secure. Follows NIST hybrid guidance for PQC transition. | - |
-| 3.5 | Algorithm agility / negotiation | PARTIAL | Wire format includes suite identifiers (kem=0xA3, aead=0xB1) enabling future algorithm additions. Only one suite currently implemented. | Single suite is intentional to avoid negotiation downgrade attacks. Additional suites can be added via wire format versioning. |
+| 3.5 | Algorithm agility / negotiation | SATISFIED | Wire format includes suite identifiers enabling algorithm additions. Two suites shipped: `0xA3` (X25519 + ML-KEM-768, category 3) and `0xA4` (P-384 + ML-KEM-1024, category 5, CNSA 2.0-aligned). No negotiation — the sender picks a suite and the wire header self-describes it, which avoids downgrade attacks. | - |
 
 ### 4. Key Protection (Section 6.2)
 
@@ -96,12 +96,12 @@ This document maps Citadel's key management capabilities against NIST Special Pu
 
 | NIST PQC Milestone | Status | Notes |
 |-------------------|--------|-------|
-| FIPS 203 (ML-KEM) implementation | DONE | ML-KEM-768, Category 3 security |
-| Hybrid classical + PQC construction | DONE | X25519 + ML-KEM-768, defense-in-depth |
+| FIPS 203 (ML-KEM) implementation | DONE | ML-KEM-768 (`0xA3`, Category 3) and ML-KEM-1024 (`0xA4`, Category 5) |
+| Hybrid classical + PQC construction | DONE | `0xA3`: X25519 + ML-KEM-768. `0xA4`: P-384 + ML-KEM-1024. Both defense-in-depth. |
 | Algorithm agility in wire format | DONE | Suite IDs in header, version field for future formats |
 | Crypto-period policies for PQC keys | DONE | Configurable per-policy, adaptive under threat |
 | Migration path from classical-only | DONE | Wire format self-describing, old data remains decryptable |
-| CNSA 2.0 compliance timeline | ON TRACK | ML-KEM-768 meets CNSA 2.0 requirements for software by 2025 |
+| CNSA 2.0 compliance timeline | ON TRACK | `0xA4` (P-384 + ML-KEM-1024) is CNSA 2.0-aligned. ML-KEM-768 (`0xA3`) is Category 3 and does not by itself meet CNSA 2.0's Category 5 requirement — use `0xA4` where CNSA 2.0 alignment is required. |
 
 ---
 

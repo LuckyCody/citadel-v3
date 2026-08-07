@@ -61,11 +61,14 @@ benefit.
 ## AWS-LC subtree (packet 038 — Citadel-FIPS dependency gate, 2026-07-31)
 
 The opt-in `fips` feature on `citadel-envelope` selects `aws-lc-rs` with its FIPS
-module. Lock change was **additive-only**: one new package, `aws-lc-fips-sys 0.13.16`
-(checksum `37b00953…`); no existing pin moved. Pins in force: `aws-lc-rs 1.17.1`,
+module. Lock change was **additive-only**: one new package, initially `aws-lc-fips-sys
+0.13.16`; no existing pin moved. **Superseded 2026-08-04 (packet 051):** re-pinned to
+`aws-lc-fips-sys 0.13.11` to hold the CMVP-validated AWS-LC FIPS 3.1.0 build (certs
+#5298/#5314) — see the AWS-LC FIPS module advisory-exceptions section above for the
+"validated ≠ latest" rationale. Pins currently in force: `aws-lc-rs 1.17.1`,
 `aws-lc-sys 0.42.0` (both pre-existing via the comparison feature), `aws-lc-fips-sys
-0.13.16`. `cargo audit`: no findings on the subtree (the 4 pre-existing dev-only
-warnings above are unchanged).
+0.13.11`. `cargo audit`: no findings on the subtree beyond the two ID-scoped ignores
+documented above.
 
 **License triage (deny.toml `[[licenses.exceptions]]`, scoped per-crate — the global
 allowlist is unchanged):**
@@ -74,7 +77,7 @@ allowlist is unchanged):**
 |---|---|---|---|
 | aws-lc-rs 1.17.1 | `ISC AND (Apache-2.0 OR ISC)` | `ISC` | ISC is a permissive MIT-equivalent (OpenBSD's license); no obligations beyond notice |
 | aws-lc-sys 0.42.0 | `ISC AND (…) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (…)` | `ISC` | Same; every other mandatory term already allowed globally |
-| aws-lc-fips-sys 0.13.16 | `ISC AND (Apache-2.0 OR ISC) AND OpenSSL` | `ISC`, `OpenSSL` | See flag below |
+| aws-lc-fips-sys 0.13.11 | `ISC AND (Apache-2.0 OR ISC) AND OpenSSL` | `ISC`, `OpenSSL` | See flag below |
 
 **License note (`fips` feature only):** the `OpenSSL` license term carries the historic
 advertising clause, which is commonly treated as incompatible with GPL/AGPL

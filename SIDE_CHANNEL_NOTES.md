@@ -1,4 +1,4 @@
-# Side-Channel Notes — Citadel V3 Alpha
+# Side-Channel Notes — Citadel V3
 
 **Status:** Unreviewed. No independent side-channel analysis has been performed.
 
@@ -67,4 +67,4 @@ where possible. However, this is not formally verified.
 
 ---
 
-*Last updated: 2026-05-02 | citadel-v3-alpha-001*
+*Last updated: 2026-05-02 | citadel-v3-beta-001*

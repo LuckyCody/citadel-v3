@@ -3437,7 +3437,7 @@ mod crypto_backend_health_tests {
             let module = &v["fips_module"];
             assert_eq!(
                 module["version"].as_str(),
-                Some("AWS-LC-FIPS 3.4.0"),
+                Some("AWS-LC-FIPS 3.1.0"),
                 "pinned module version must be reported"
             );
             assert_eq!(
