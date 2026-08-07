@@ -25,9 +25,9 @@ services:
     image: citadel:latest
     container_name: citadel-api
     ports:
-      - "3000:3000"
+      - "8443:8443"
     environment:
-      - CITADEL_PORT=3000
+      - CITADEL_PORT=8443
       - CITADEL_DATA_DIR=/data
       - CITADEL_API_KEY_HASH=${CITADEL_API_KEY_HASH:-}
       - CITADEL_SEED_DEMO=${CITADEL_SEED_DEMO:-true}
@@ -38,7 +38,7 @@ services:
       - citadel-data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8443/health"]
       interval: 30s
       timeout: 3s
       retries: 3

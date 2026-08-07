@@ -72,7 +72,7 @@ function Start-ApiServer {
 
 function Wait-Health {
     for ($i = 0; $i -lt 20; $i++) {
-        try { return Invoke-RestMethod -Uri "http://127.0.0.1:3000/health" } catch {}
+        try { return Invoke-RestMethod -Uri "http://127.0.0.1:8443/health" } catch {}
         Start-Sleep -Seconds 1
     }
     throw "API did not become healthy after 20s"
@@ -107,21 +107,21 @@ function Create-Key {
     param($Headers, [string]$Name, [string]$Type, $ParentId=$null)
     $payload = @{ name=$Name; key_type=$Type }
     if ($ParentId) { $payload.parent_id = $ParentId }
-    return Invoke-RestMethod -Uri "http://127.0.0.1:3000/api/keys" `
+    return Invoke-RestMethod -Uri "http://127.0.0.1:8443/api/keys" `
            -Method Post -Headers $Headers `
            -Body ($payload | ConvertTo-Json) -ContentType "application/json"
 }
 
 function Activate-Key {
     param($Headers, [string]$KeyId)
-    Invoke-RestMethod -Uri "http://127.0.0.1:3000/api/keys/$KeyId/activate" `
+    Invoke-RestMethod -Uri "http://127.0.0.1:8443/api/keys/$KeyId/activate" `
         -Method Post -Headers $Headers -Body "{}" -ContentType "application/json"
 }
 
 function Encrypt-Blob {
     param($Headers, [string]$DekId, [string]$Text, [string]$Aad, [string]$Context)
     $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Text))
-    return Invoke-RestMethod -Uri "http://127.0.0.1:3000/api/keys/$DekId/encrypt" `
+    return Invoke-RestMethod -Uri "http://127.0.0.1:8443/api/keys/$DekId/encrypt" `
            -Method Post -Headers $Headers `
            -Body (@{ plaintext=$b64; aad=$Aad; context=$Context } | ConvertTo-Json) `
            -ContentType "application/json"
@@ -129,7 +129,7 @@ function Encrypt-Blob {
 
 function Decrypt-Blob {
     param($Headers, $Blob, [string]$Aad, [string]$Context)
-    return Invoke-RestMethod -Uri "http://127.0.0.1:3000/api/decrypt" `
+    return Invoke-RestMethod -Uri "http://127.0.0.1:8443/api/decrypt" `
            -Method Post -Headers $Headers `
            -Body (@{ blob=$Blob; aad=$Aad; context=$Context } | ConvertTo-Json -Depth 30) `
            -ContentType "application/json"
@@ -152,7 +152,7 @@ function Run-ServerProcess {
     return $p.ExitCode
 }
 
-Write-Host "=== Citadel V3 Full Validation === alpha-001 ==="
+Write-Host "=== Citadel V3 Full Validation === beta-001 ==="
 Write-Host "Logs: $logDir"
 
 # -- 1. Code quality ---------------------------------------------------------
@@ -210,10 +210,10 @@ try {
 
     # -- 3. Auth --------------------------------------------------------------
     $results += Must-Fail "no auth returns 401" {
-        Invoke-RestMethod -Uri "http://127.0.0.1:3000/api/status"
+        Invoke-RestMethod -Uri "http://127.0.0.1:8443/api/status"
     }
     $results += Must-Fail "wrong key returns 401" {
-        Invoke-RestMethod -Uri "http://127.0.0.1:3000/api/status" `
+        Invoke-RestMethod -Uri "http://127.0.0.1:8443/api/status" `
             -Headers @{ Authorization = "Bearer wrong-key" }
     }
 
@@ -287,13 +287,13 @@ try {
     }
 
     $results += Must-Fail "malformed JSON rejected" {
-        Invoke-RestMethod -Uri "http://127.0.0.1:3000/api/keys" `
+        Invoke-RestMethod -Uri "http://127.0.0.1:8443/api/keys" `
             -Method Post -Headers $headers `
             -Body "not json {{" -ContentType "application/json"
     }
 
     $results += Must-Fail "nonexistent key rejected" {
-        Invoke-RestMethod -Uri "http://127.0.0.1:3000/api/keys/not-a-real-key/encrypt" `
+        Invoke-RestMethod -Uri "http://127.0.0.1:8443/api/keys/not-a-real-key/encrypt" `
             -Method Post -Headers $headers `
             -Body (@{ plaintext="aGVsbG8="; aad="x"; context="v3" } | ConvertTo-Json) `
             -ContentType "application/json"

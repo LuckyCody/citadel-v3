@@ -7,7 +7,7 @@
 //! Serves the dashboard and exposes REST endpoints.
 //!
 //! Configuration (environment variables):
-//!   CITADEL_PORT              - Listen port (default: 3000)
+//!   CITADEL_PORT              - Listen port (default: 8443)
 //!   CITADEL_DATA_DIR          - Persistent data directory (default: ./citadel-data)
 //!   CITADEL_API_KEY           - Bootstrap admin key, plaintext (dev only)
 //!   CITADEL_API_KEY_HASH      - Bootstrap admin key, HMAC-SHA256 hex (use hash-apikey tool)
@@ -3404,7 +3404,7 @@ async fn main() {
     let port: u16 = std::env::var("CITADEL_PORT")
         .ok()
         .and_then(|p| p.parse().ok())
-        .unwrap_or(3000);
+        .unwrap_or(8443);
 
     let app = build_app().await;
 

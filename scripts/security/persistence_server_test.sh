@@ -12,14 +12,14 @@
 #
 # Prerequisites:
 #   - citadel-api binary built (release or debug)
-#   - No other Citadel instance on port 3000
+#   - No other Citadel instance on port 8443
 
 set -euo pipefail
 
 CITADEL_DIR="${CITADEL_WORKSPACE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 BINARY="$CITADEL_DIR/target/release/citadel-api"
 DATA_DIR=$(mktemp -d /tmp/citadel-persist-XXXXXX)
-PORT=3000
+PORT=8443
 BASE_URL="http://localhost:$PORT"
 
 MASTER_KEY=$(openssl rand -hex 32)

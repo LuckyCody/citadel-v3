@@ -33,7 +33,7 @@ export CITADEL_ALLOW_PLAINTEXT_KEYS=1
 export CITADEL_DATA_DIR="$DATA_DIR"
 export CITADEL_RATE_LIMIT_RPS=10000
 export CITADEL_RATE_LIMIT_BURST=20000
-export CITADEL_URL="http://localhost:3000"
+export CITADEL_URL="http://localhost:8443"
 
 SERVER_PID=""
 
@@ -77,7 +77,7 @@ SERVER_PID=$!
 echo "  PID: $SERVER_PID"
 
 for i in $(seq 1 30); do
-    if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+    if curl -sf http://localhost:8443/health > /dev/null 2>&1; then
         echo "  Healthy after ${i}s"
         break
     fi
@@ -125,7 +125,7 @@ done
 
 if [ -n "$ST_CMD" ] && [ -f "$SCRIPT_DIR/openapi.yaml" ]; then
     if $ST_CMD run "$SCRIPT_DIR/openapi.yaml" \
-        --url http://localhost:3000 \
+        --url http://localhost:8443 \
         -H "Authorization:Bearer $CITADEL_API_KEY" \
         -n 500 \
         -c not_a_server_error,status_code_conformance,response_schema_conformance \

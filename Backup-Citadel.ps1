@@ -56,7 +56,7 @@ function Invoke-Backup {
 
     Write-Status "Checking keystore health..."
     try {
-        $raw = docker exec $ContainerName curl -sf http://localhost:3000/health 2>$null
+        $raw = docker exec $ContainerName curl -sf http://localhost:8443/health 2>$null
         $healthCheck = $raw | ConvertFrom-Json
         if ($healthCheck.status -eq "ok") {
             Write-Ok "API healthy (v$($healthCheck.version))"
@@ -229,7 +229,7 @@ function Invoke-Restore {
 
     Write-Status "Verifying restored system..."
     try {
-        $raw = docker exec $ContainerName curl -sf http://localhost:3000/health 2>$null
+        $raw = docker exec $ContainerName curl -sf http://localhost:8443/health 2>$null
         $check = $raw | ConvertFrom-Json
         if ($check.status -eq "ok") {
             Write-Ok "Health check passed"

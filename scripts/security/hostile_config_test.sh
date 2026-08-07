@@ -43,7 +43,7 @@ check_starts() {
     local pid=$!
     sleep 3
 
-    if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+    if curl -sf http://localhost:8443/health > /dev/null 2>&1; then
         echo "  [PASS] $name — started correctly"
         PASS=$((PASS+1))
     else

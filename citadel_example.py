@@ -276,7 +276,7 @@ def demo_threat_awareness(client: CitadelClient):
 # ---------------------------------------------------------------------------
 
 def main():
-    base_url = os.environ.get("CITADEL_URL", "http://localhost:3000")
+    base_url = os.environ.get("CITADEL_URL", "http://localhost:8443")
     api_key = os.environ.get("CITADEL_KEY", "")
 
     if not api_key:

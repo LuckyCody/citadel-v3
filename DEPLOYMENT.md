@@ -145,7 +145,7 @@ Edit `Caddyfile` for your environment:
 **Option A — Real domain with Let's Encrypt (recommended):**
 ```
 citadel.yourdomain.com {
-    reverse_proxy citadel:3000
+    reverse_proxy citadel:8443
     header {
         Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
         X-Content-Type-Options "nosniff"
@@ -159,7 +159,7 @@ citadel.yourdomain.com {
 ```
 :443 {
     tls internal
-    reverse_proxy citadel:3000
+    reverse_proxy citadel:8443
     # ... same headers ...
 }
 ```
@@ -245,7 +245,7 @@ done
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CITADEL_PORT` | `3000` | Internal listen port |
+| `CITADEL_PORT` | `8443` | Internal listen port |
 | `CITADEL_DATA_DIR` | `./citadel-data` | Key material and audit log directory |
 
 > **Data path per deployment type:**
@@ -283,7 +283,7 @@ The rate limiter runs in-memory (no Redis needed). For multi-instance deployment
 With `CITADEL_LOG_FORMAT=json`, output looks like:
 
 ```json
-{"timestamp":"2026-02-12T10:30:00Z","level":"INFO","target":"citadel_api","message":"starting Citadel API Server v0.1.0","port":3000,"rate_rps":20.0,"rate_burst":50}
+{"timestamp":"2026-02-12T10:30:00Z","level":"INFO","target":"citadel_api","message":"starting Citadel API Server v0.1.0","port":8443,"rate_rps":20.0,"rate_burst":50}
 {"timestamp":"2026-02-12T10:30:01Z","level":"WARN","target":"citadel_api","message":"rate limit exceeded","ip":"192.168.1.50","path":"/api/keys"}
 {"timestamp":"2026-02-12T10:30:01Z","level":"WARN","target":"citadel_api","message":"invalid API key","ip":"10.0.0.5","path":"/api/status"}
 ```
@@ -306,7 +306,7 @@ Internet
        │ plaintext HTTP (internal Docker network only)
        ▼
 ┌──────────────┐
-│  Citadel API  │  :3000 (not exposed to host)
+│  Citadel API  │  :8443 (not exposed to host)
 │  ┌──────────┐ │
 │  │ Rate     │ │  Per-IP token bucket
 │  │ Limiter  │ │
@@ -347,10 +347,10 @@ After Tier 1 is deployed, the next priorities are:
 3. **Key export/import** — portable key bundles for server migration
 ---
 
-## API Key Management (Operational Limitations — Alpha)
+## API Key Management (Operational Limitations)
 
 ### Current state
-Citadel V3 Alpha-001 supports a single bootstrap admin key per deployment.
+Citadel V3 supports a single bootstrap admin key per deployment.
 The key is configured via CITADEL_API_KEY_HASH and stored in api-keys.json.
 
 ### What is not yet proven

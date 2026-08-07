@@ -11,7 +11,7 @@
 # Uncomment and set CITADEL_DOMAIN env var or replace directly.
 #
 # {$CITADEL_DOMAIN:citadel.example.com} {
-#     reverse_proxy citadel:3000
+#     reverse_proxy citadel:8443
 #
 #     # Security headers
 #     header {
@@ -37,7 +37,7 @@
 :443 {
     tls internal
 
-    reverse_proxy citadel:3000
+    reverse_proxy citadel:8443
 
     header {
         Strict-Transport-Security "max-age=63072000; includeSubDomains"

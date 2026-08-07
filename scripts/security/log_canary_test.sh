@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-BASE_URL="${CITADEL_URL:-http://localhost:3000}"
+BASE_URL="${CITADEL_URL:-http://localhost:8443}"
 API_KEY="${CITADEL_API_KEY:-redteam-test-key}"
 LOG_FILE="${1:-${CITADEL_LOG_FILE:-/tmp/citadel-canary.log}}"
 

@@ -115,7 +115,7 @@ jobs:
           echo "CITADEL_MASTER_KEY=$MASTER_KEY" >> $GITHUB_ENV
           echo "CITADEL_API_KEY=$API_KEY" >> $GITHUB_ENV
           echo "CITADEL_API_KEY_HASH=$API_KEY_HASH" >> $GITHUB_ENV
-          echo "CITADEL_URL=http://localhost:3000" >> $GITHUB_ENV
+          echo "CITADEL_URL=http://localhost:8443" >> $GITHUB_ENV
 
       # Persistence test manages its own server
       - name: Persistence / restart test
@@ -134,7 +134,7 @@ jobs:
           CITADEL_DATA_DIR=$DATA_DIR ./target/release/citadel-api > /tmp/ci-server.log 2>&1 &
           echo "SERVER_PID=$!" >> $GITHUB_ENV
           for i in $(seq 1 30); do
-            curl -sf http://localhost:3000/health > /dev/null 2>&1 && break
+            curl -sf http://localhost:8443/health > /dev/null 2>&1 && break
             sleep 1
           done
 
@@ -188,7 +188,7 @@ jobs:
           ./target/release/citadel-api > /tmp/schema-server.log 2>&1 &
           echo "SERVER_PID=$!" >> $GITHUB_ENV
           for i in $(seq 1 30); do
-            curl -sf http://localhost:3000/health > /dev/null 2>&1 && break
+            curl -sf http://localhost:8443/health > /dev/null 2>&1 && break
             sleep 1
           done
 
@@ -196,7 +196,7 @@ jobs:
         run: |
           EXIT=0
           ~/.local/bin/schemathesis run scripts/security/openapi.yaml \
-            --url http://localhost:3000 \
+            --url http://localhost:8443 \
             -H "Authorization:Bearer $CITADEL_API_KEY" \
             -n 500 \
             -c not_a_server_error,status_code_conformance,response_schema_conformance \

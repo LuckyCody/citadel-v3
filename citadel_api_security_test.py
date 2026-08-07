@@ -10,7 +10,7 @@ Usage:
     #   CITADEL_API_KEY=test-secret-key cargo run -p citadel-api
     #
     # Then run:
-    #   python citadel_api_security_test.py --url http://localhost:3000 --key test-secret-key
+    #   python citadel_api_security_test.py --url http://localhost:8443 --key test-secret-key
 
 Requires: pip install requests
 """
@@ -386,7 +386,7 @@ def test_whoami(base_url: str, key: str):
 
 def main():
     parser = argparse.ArgumentParser(description="citadel-api security tests")
-    parser.add_argument("--url", default="http://localhost:3000", help="API base URL")
+    parser.add_argument("--url", default="http://localhost:8443", help="API base URL")
     parser.add_argument("--key", required=True, help="Admin API key")
     args = parser.parse_args()
 

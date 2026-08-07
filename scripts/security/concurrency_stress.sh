@@ -5,12 +5,12 @@
 # and authorization bypass under load. Uses curl + background jobs (no extra deps).
 #
 # Safety:
-#   - Binds only to localhost:3000
+#   - Binds only to localhost:8443
 #   - Never touches Ollama or ports 11434/11435/8090/8091
 #   - Cleans up only its own background jobs
 #
 # Prerequisites:
-#   - Citadel server running on localhost:3000
+#   - Citadel server running on localhost:8443
 #   - curl, python3
 #
 # Usage:
@@ -21,7 +21,7 @@
 
 set -euo pipefail
 
-BASE_URL="${CITADEL_URL:-http://localhost:3000}"
+BASE_URL="${CITADEL_URL:-http://localhost:8443}"
 API_KEY="${CITADEL_API_KEY:-redteam-test-key}"
 ROUNDS="${1:-100}"
 CONCURRENCY="${2:-50}"
