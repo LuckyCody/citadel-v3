@@ -7,7 +7,7 @@
 The implementation:
 - Uses NIST-standardized primitives (ML-KEM-768, ML-KEM-1024, P-384, AES-256-GCM, HKDF-SHA256, X25519)
 - Follows established hybrid construction patterns (`0xA3`: X25519 + ML-KEM-768; `0xA4`: P-384 + ML-KEM-1024)
-- Has broad automated coverage; the 2026-07-15 locked Ubuntu baseline passed 353 tests, with 7 explicitly ignored and 0 failed
+- Has broad automated coverage; CI [run 31141328479](https://github.com/mrcord77/citadel-v3/actions/runs/31141328479) (2026-08-06) passed 500 tests across the workspace, ACVP/KAT, and stress suites combined, with 9 explicitly ignored and 0 failed
 - Has dudect-based timing validation covering all attacker-controlled-input classes
 - Has NOT undergone independent security audit
 

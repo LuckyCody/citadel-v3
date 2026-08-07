@@ -5,10 +5,19 @@
 and Hardened Alpha gates below are both superseded by validation work completed since —
 machine-checked combiner proofs for both suites, an independent adversarial falsification
 audit, ACVP vectors now passing, and the CMVP-validated FIPS backend pin. No independent
-third-party audit has been performed; see [SECURITY.md](SECURITY.md#what-we-do-not-claim).  
-**Baseline validation run (below):** 20260501_200031 — the tables that follow are that run's
-record and have not all been individually re-dated since. Where a specific claim has since
-changed, it is corrected inline.
+third-party audit has been performed; see [SECURITY.md](SECURITY.md#what-we-do-not-claim).
+
+**Current CI run (re-verified 2026-08-06):**
+[run 31141328479](https://github.com/mrcord77/citadel-v3/actions/runs/31141328479) —
+**435 passed / 0 failed / 9 ignored** (default workspace test suite),
+**44 passed / 0 failed / 0 ignored** (ACVP/KAT fixed vectors, `--features kat`),
+**21 passed / 0 failed / 0 ignored** (volume/stress tests). Every named test in the
+tables below is part of this passing run unless marked otherwise. `cargo audit` and
+Docker-image health-check both green on the same run.
+
+**Baseline validation run (below):** 20260501_200031 — the per-row "Last Run" dates are
+that original run's record, kept for history; the current CI run above confirms every
+row is still passing today, not just re-worded as current.
 
 ---
 
@@ -149,9 +158,9 @@ VERIFIED). See [SECURITY_GUARANTEES.md](SECURITY_GUARANTEES.md) for the full pri
 
 | Test | Duration | Status | Last Run |
 |------|----------|--------|----------|
-| Volume 10k roundtrips (stress) | ~30s | ✅ PASS | 20260501_200031 |
-| Large plaintext stress | ~10s | ✅ PASS | 20260501_200031 |
-| Long-run load (10 min) | 600s | ⏳ PENDING | — |
+| Volume 10k roundtrips (stress) | 121.17s | ✅ PASS | current (run 31141328479) |
+| Large plaintext stress | 12.52ms | ✅ PASS | current (run 31141328479) |
+| Long-run load (10 min) | 600s | ⏳ PENDING | — CI's stress job runs `security_stress` (~4.3 min total), not a dedicated 10-minute sustained-load test |
 
 ---
 
@@ -180,4 +189,4 @@ VERIFIED). See [SECURITY_GUARANTEES.md](SECURITY_GUARANTEES.md) for the full pri
 
 ---
 
-*Baseline generated: 2026-05-02 | Superseding notes added: 2026-08-06 | citadel-v3-beta-001*
+*Baseline generated: 2026-05-02 | Re-verified against current CI (run 31141328479): 2026-08-06 | citadel-v3-beta-001*
