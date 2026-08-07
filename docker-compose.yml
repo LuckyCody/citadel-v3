@@ -26,6 +26,7 @@ services:
       CITADEL_ALLOW_PLAINTEXT_KEYS: "1"
       CITADEL_SEED_DEMO: "true"
       CITADEL_API_KEY: "dev-secret"
+      CITADEL_ALLOW_FLAT_DEKS: "1"
     volumes:
       - citadel_dev_data:/data
     healthcheck:
