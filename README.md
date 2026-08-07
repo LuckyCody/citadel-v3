@@ -52,7 +52,7 @@ curl http://localhost:8443/health
 # {"status":"ok","version":"0.2.0"}
 ```
 
-Dashboard (after running the steps above): http://localhost:8443
+Dashboard (after running the steps above): http://localhost:8443 — sign in with API key `dev-secret` (set by the dev compose file; never use this value outside local development)
 
 For a production deployment (hashed API key, Redis-backed replay protection, TLS),
 see [QUICKSTART.md](QUICKSTART.md).

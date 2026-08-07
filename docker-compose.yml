@@ -25,6 +25,7 @@ services:
       CITADEL_ENV: development
       CITADEL_ALLOW_PLAINTEXT_KEYS: "1"
       CITADEL_SEED_DEMO: "true"
+      CITADEL_API_KEY: "dev-secret"
     volumes:
       - citadel_dev_data:/data
     healthcheck:

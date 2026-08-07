@@ -53,12 +53,15 @@ cargo run -p citadel-api
 ```bash
 # Start with the dev compose (no master key required)
 docker compose up -d   # uses root docker-compose.yml which sets dev mode
+# Dashboard at http://localhost:8443 — sign in with API key: dev-secret
 
-# Or inline:
+# Or inline (build first — there is no published citadel:v3 image to pull):
+docker build -t citadel:v3 .
 docker run -p 8443:8443 \
   -e CITADEL_ENV=development \
   -e CITADEL_ALLOW_PLAINTEXT_KEYS=1 \
   -e CITADEL_SEED_DEMO=true \
+  -e CITADEL_API_KEY=dev-secret \
   citadel:v3
 ```
 
