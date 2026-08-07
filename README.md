@@ -298,6 +298,7 @@ citadel-v3/
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
 | [SUPPORT.md](SUPPORT.md) | Support tiers |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution policy |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 | [API_FREEZE.md](API_FREEZE.md) | API stability guarantees |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment guide |
