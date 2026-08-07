@@ -2099,6 +2099,13 @@ impl Keystore {
         self.threat.lock().unwrap().record_events(events);
     }
 
+    /// Explicitly reset threat state to Low, discarding all recorded events
+    /// and any manual override. See `ThreatAssessor::reset` for why this is
+    /// distinct from injecting a `ManualDeescalation` event.
+    pub fn reset_threat_state(&self) {
+        self.threat.lock().unwrap().reset();
+    }
+
     /// P158 — Record an audit event directly into the tamper-evident audit chain.
     /// Used by the API layer to write auth failures and other security events
     /// that originate outside the keystore's own operations.

@@ -186,18 +186,18 @@ Citadel monitors security events and automatically adjusts key policies:
 |-------|---------|----------|
 | LOW | Normal operations | Standard crypto-periods |
 | GUARDED | Minor anomalies | Slightly tighter rotation |
-| ELEVATED | Suspicious patterns | Compressed rotation schedules |
-| HIGH | Active threat indicators | Forced rotation, reduced usage limits |
+| ELEVATED | Suspicious patterns | Compressed rotation schedules, auto-rotate policy forced on |
+| HIGH | Active threat indicators | Further compression, reduced usage limits |
 | CRITICAL | Under attack | Maximum restrictions |
 
-Events that raise threat level: failed authentication, decryption failures, rapid access patterns, manual escalation. Score decays over time.
+Events that raise threat level: failed authentication, decryption failures, rapid access patterns, manual escalation. Score decays over time. "Forced on" tightens the effective *policy* immediately (rotation age, grace period, usage limits) — it does not itself execute a rotation; keys still rotate on their normal schedule check, just against the newly-compressed parameters.
 
 **Try it live:** the dashboard (`http://localhost:8443` after [Quick Start](#quick-start)) has an
 "Inject Threat Events" panel that calls this system directly (`POST /api/threat/event`) — click any
 event button and watch the Adaptive Policy Engine table update in real time: rotation ages compress,
-grace periods shrink, auto-rotate forces on. Click **Reset** to decay the score back down and confirm
-policies relax to baseline. This is the fastest way to see the adaptive system actually work rather
-than take the table above on faith.
+grace periods shrink, auto-rotate forces on. Click **Reset** to immediately clear the recorded events
+and confirm policies relax back to baseline. This is the fastest way to see the adaptive system
+actually work rather than take the table above on faith.
 
 ## Cryptography
 

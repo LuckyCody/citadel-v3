@@ -1543,7 +1543,10 @@ async fn get_status(
     }
     let ks = &state.keystore;
     let level = ks.threat_level();
-    let all = ks.list_keys().await.unwrap_or_default();
+    let all = match ks.list_keys().await {
+        Ok(keys) => keys,
+        Err(e) => return err500(e.to_string()).into_response(),
+    };
     let active = all.iter().filter(|k| k.state == KeyState::Active).count();
     Json(StatusResponse {
         threat_level: level.value(),
@@ -2564,9 +2567,7 @@ async fn reset_threat(
     if let Err(resp) = require_global_admin(&auth) {
         return resp;
     }
-    state
-        .keystore
-        .record_threat_event(ThreatEvent::new(ThreatEventKind::ManualDeescalation, 0.0));
+    state.keystore.reset_threat_state();
     let level = state.keystore.threat_level();
     Json(serde_json::json!({
         "status": "reset", "score": state.keystore.threat_score(),

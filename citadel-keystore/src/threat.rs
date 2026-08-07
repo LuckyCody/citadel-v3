@@ -279,8 +279,45 @@ impl ThreatAssessor {
         self.recompute_level();
     }
 
-    /// Get the current effective threat level.
-    pub fn current_level(&self) -> ThreatLevel {
+    /// Explicitly reset threat state: discards all recorded events and any
+    /// manual override, returning to Low. This is a deliberate, audited
+    /// "start over" operation for operators — distinct from
+    /// `ManualDeescalation`, which only clears an override and lets the
+    /// real accumulated score (still including every prior event) decide
+    /// the level. Without this, a "reset" that only cleared the override
+    /// would leave the score and level unchanged whenever real event
+    /// history alone already justified the current level.
+    pub fn reset(&mut self) {
+        let old = self.current_level;
+        self.events.clear();
+        self.manual_override = None;
+        self.current_level = ThreatLevel::Low;
+        if old != ThreatLevel::Low {
+            let reason = format!("threat state reset (was {})", old.label());
+            self.level_history
+                .push((Utc::now(), ThreatLevel::Low, reason.clone()));
+            if let Some(audit) = &self.audit {
+                audit.record(
+                    AuditEvent::system_event(AuditAction::PolicyEvaluated {
+                        verdict: format!(
+                            "threat level changed: {} \u{2192} {} (reset)",
+                            old,
+                            ThreatLevel::Low
+                        ),
+                    })
+                    .with_detail(reason),
+                );
+            }
+        }
+    }
+
+    /// Get the current effective threat level, refreshing from the latest
+    /// decayed score first. Without this, a level that should have
+    /// de-escalated (or escalated) purely from time decay would stay stale
+    /// until the next event happened to be recorded — showing a decayed
+    /// score next to a level/policy table that no longer matches it.
+    pub fn current_level(&mut self) -> ThreatLevel {
+        self.recompute_level();
         self.manual_override.unwrap_or(self.current_level)
     }
 
@@ -305,7 +342,11 @@ impl ThreatAssessor {
     }
 
     /// Compute comprehensive security metrics for the dashboard.
-    pub fn security_metrics(&self, total_keys: usize, compliant_keys: usize) -> SecurityMetrics {
+    pub fn security_metrics(
+        &mut self,
+        total_keys: usize,
+        compliant_keys: usize,
+    ) -> SecurityMetrics {
         let level = self.current_level();
         let raw = self.compute_score();
         let lv = level.value() as f64;
@@ -493,35 +534,39 @@ impl PolicyAdapter {
         let factor = Self::scaling_factor(level);
         let mut adapted = base.clone();
 
-        // Scale rotation age triggers (with floor)
+        // Scale rotation age triggers (with floor, never looser than the base —
+        // the floor exists to stop extreme *compression* from thrashing, not to
+        // relax a base policy that was already tighter than the floor)
         adapted.rotation_triggers = base
             .rotation_triggers
             .iter()
             .map(|t| match t {
                 crate::policy::RotationTrigger::Age(d) => {
                     let scaled = Duration::from_secs((d.as_secs() as f64 * factor.age) as u64);
-                    crate::policy::RotationTrigger::Age(scaled.max(FLOOR_ROTATION_AGE))
+                    crate::policy::RotationTrigger::Age(scaled.max(FLOOR_ROTATION_AGE).min(*d))
                 }
                 other => other.clone(),
             })
             .collect();
 
-        // Scale grace period (with floor)
+        // Scale grace period (with floor, never looser than the base)
         let scaled_grace = Duration::from_secs(
             (base.rotation_grace_period.as_secs() as f64 * factor.grace) as u64,
         );
-        adapted.rotation_grace_period = scaled_grace.max(FLOOR_GRACE_PERIOD);
+        adapted.rotation_grace_period = scaled_grace
+            .max(FLOOR_GRACE_PERIOD)
+            .min(base.rotation_grace_period);
 
-        // Scale max lifetime (with floor)
+        // Scale max lifetime (with floor, never looser than the base)
         adapted.max_lifetime = base.max_lifetime.map(|d| {
             let scaled = Duration::from_secs((d.as_secs() as f64 * factor.lifetime) as u64);
-            scaled.max(FLOOR_MAX_LIFETIME)
+            scaled.max(FLOOR_MAX_LIFETIME).min(d)
         });
 
-        // Scale usage limit (with floor)
+        // Scale usage limit (with floor, never looser than the base)
         adapted.max_usage_count = base.max_usage_count.map(|c| {
             let scaled = ((c as f64) * factor.usage) as u64;
-            scaled.max(FLOOR_USAGE_COUNT)
+            scaled.max(FLOOR_USAGE_COUNT).min(c)
         });
 
         // Force auto-rotate at Level 3+

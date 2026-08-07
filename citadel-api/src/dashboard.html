@@ -41,7 +41,11 @@ async function api(path, opts) {
   if (res.status === 401) throw new Error("AUTH");
   if (res.status === 403) throw new Error("FORBIDDEN");
   if (res.status === 429) throw new Error("RATE_LIMITED");
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || ("Request failed: HTTP " + res.status));
+  }
+  return data;
 }
 
 const THREAT_CONFIGS = {
@@ -436,6 +440,7 @@ function CitadelDashboard() {
   const [flashLevel, setFlashLevel] = useState(false);
   const [connected, setConnected] = useState(false);
   const [tab, setTab] = useState("ops");
+  const [opError, setOpError] = useState("");
   const prevLevel = useRef(1);
 
   const refresh = useCallback(async () => {
@@ -464,38 +469,50 @@ function CitadelDashboard() {
   }, [refresh, authInfo]);
 
   const injectEvent = async (kind, severity) => {
-    const result = await api("/api/threat/event", {
-      method: "POST",
-      body: JSON.stringify({ kind, severity }),
-    });
-    const ek = EVENT_KINDS.find(e => e.kind === kind);
-    setEvents(prev => [{ id: Date.now()+Math.random(), label: ek?.label||kind, icon: ek?.icon||"?",
-      severity, time: new Date().toLocaleTimeString(),
-      resultLevel: result.name, resultScore: result.score,
-    }, ...prev].slice(0, 50));
-    refresh();
+    setOpError("");
+    try {
+      const result = await api("/api/threat/event", {
+        method: "POST",
+        body: JSON.stringify({ kind, severity }),
+      });
+      const ek = EVENT_KINDS.find(e => e.kind === kind);
+      setEvents(prev => [{ id: Date.now()+Math.random(), label: ek?.label||kind, icon: ek?.icon||"?",
+        severity, time: new Date().toLocaleTimeString(),
+        resultLevel: result.name, resultScore: result.score,
+      }, ...prev].slice(0, 50));
+      refresh();
+    } catch(e) { setOpError(e.message || "Failed to inject event"); }
   };
 
   const resetThreats = async () => {
-    await api("/api/threat/reset", { method: "POST" });
-    setEvents([]);
-    refresh();
+    setOpError("");
+    try {
+      await api("/api/threat/reset", { method: "POST" });
+      setEvents([]);
+      refresh();
+    } catch(e) { setOpError(e.message || "Failed to reset threat state"); }
   };
 
   const generateKey = async () => {
-    const result = await api("/api/keys", {
-      method: "POST",
-      body: JSON.stringify({ name: "new-dek-" + Date.now().toString(36), key_type: "dek", policy_id: "default-dek" }),
-    });
-    if (result.key_id) {
-      await api("/api/keys/" + result.key_id + "/activate", { method: "POST" });
-    }
-    refresh();
+    setOpError("");
+    try {
+      const result = await api("/api/keys", {
+        method: "POST",
+        body: JSON.stringify({ name: "new-dek-" + Date.now().toString(36), key_type: "dek", policy_id: "default-dek" }),
+      });
+      if (result.key_id) {
+        await api("/api/keys/" + result.key_id + "/activate", { method: "POST" });
+      }
+      refresh();
+    } catch(e) { setOpError(e.message || "Failed to create key"); }
   };
 
   const rotateKey = async (id) => {
-    await api("/api/keys/" + id + "/rotate", { method: "POST" });
-    refresh();
+    setOpError("");
+    try {
+      await api("/api/keys/" + id + "/rotate", { method: "POST" });
+      refresh();
+    } catch(e) { setOpError(e.message || "Failed to rotate key"); }
   };
 
   const logout = () => {
@@ -615,6 +632,11 @@ function CitadelDashboard() {
 
         {/* === OPERATIONS TAB === */}
         {tab === "ops" && (<>
+
+        {opError && <div style={{ fontSize:10, color:"#ef4444", marginBottom:16, padding:"8px 12px",
+          background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:6 }}>
+          {opError}
+        </div>}
 
         {/* Top Row */}
         <div style={{ display:"grid", gridTemplateColumns:"300px 1fr", gap:20, marginBottom:20 }}>
