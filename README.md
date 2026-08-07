@@ -192,6 +192,13 @@ Citadel monitors security events and automatically adjusts key policies:
 
 Events that raise threat level: failed authentication, decryption failures, rapid access patterns, manual escalation. Score decays over time.
 
+**Try it live:** the dashboard (`http://localhost:8443` after [Quick Start](#quick-start)) has an
+"Inject Threat Events" panel that calls this system directly (`POST /api/threat/event`) — click any
+event button and watch the Adaptive Policy Engine table update in real time: rotation ages compress,
+grace periods shrink, auto-rotate forces on. Click **Reset** to decay the score back down and confirm
+policies relax to baseline. This is the fastest way to see the adaptive system actually work rather
+than take the table above on faith.
+
 ## Cryptography
 
 Citadel ships two envelope suites, chosen by a self-describing wire suite byte (no negotiation):
