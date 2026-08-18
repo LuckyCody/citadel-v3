@@ -1,0 +1,56 @@
+# ClusterFuzzLite Sustained Campaign — Final Receipt
+
+Campaign closed 2026-08-17 by owner decision; corpus + histories archived here
+before the scheduled workflows were disabled. This is the sustained-run evidence
+for Gauntlet Tier 3 ("parser/decoder robustness, sustained — 0 crashes over a
+sustained run, coverage tracked").
+
+## Campaign window
+- Storage-backed fuzzing: 2026-07-21T19:03Z (first corpus upload) to
+  2026-08-17T07:27Z (last corpus upload) — 27 days.
+- Daily scheduled batch: 30 minutes libFuzzer, AddressSanitizer, language=rust,
+  via google/clusterfuzzlite (workflow `.github/workflows/cflite_batch.yml`).
+- PR fuzzing on every pull request (`cflite_pr.yml`); separate nightly
+  cargo-fuzz smoke (`fuzz.yml`).
+
+## Run record (from GitHub Actions API, JSON histories in this directory)
+- Batch: 31 runs — 24 completed fuzzing runs, all green.
+  7 non-starts: 2 on 2026-07-21 (private-repo auth setup, fixed same day),
+  5 on 2026-07-27..31 (GitHub billing/spending-limit — jobs never started;
+  resolved 2026-08-01). No completed run ever failed.
+- PR fuzzing: 28 runs, 24 success.
+- Nightly smoke: 6 runs, 5 success.
+- Completed batch fuzzing time: 24 x 30 min = 12 hours ASan-instrumented,
+  coverage-guided, corpus-seeded (cumulative across the window; excludes PR
+  and smoke run time).
+
+## Findings
+- **Zero crashes.** No crash artifacts were ever committed to the storage repo
+  (crashes/ directory absent), across all completed batch + PR runs.
+
+## Corpus (archived in ./citadel-v3-corpus, git history = 30 daily uploads)
+| target              | files | size     |
+|---------------------|------:|---------:|
+| decode_envelope_v2  |    19 |  16.3 KB |
+| decode_wire         |     4 |   3.4 KB |
+| decrypt_full        |     8 |   ~28 B  |
+| decrypt_v2_mutation |    38 |   0.9 KB |
+| fuzz_decrypt        |    57 |  40.6 KB |
+| fuzz_ffi_free       |   501 |  21.8 KB |
+| fuzz_roundtrip      |   250 | 153.7 KB |
+| fuzz_wire_parse     |     7 |   6.8 KB |
+| **total**           | **884** |        |
+
+## Reuse
+- The corpus seeds any future fuzzing session (local cargo-fuzz: copy a target
+  dir into `fuzz/corpus/<target>/`; or re-enable the workflows — the storage
+  repo wiring is intact and will resume seeding automatically).
+- Verification trail: https://github.com/mrcord77/citadel-v3/actions
+  (workflows cflite_batch.yml / cflite_pr.yml / fuzz.yml) and
+  https://github.com/mrcord77/citadel-v3-corpus commit history.
+
+## Shutdown state (2026-08-17)
+- Workflows disabled via `gh workflow disable`: cflite_batch.yml,
+  cflite_pr.yml, fuzz.yml. Nothing deleted; re-enable restores the pipeline.
+- Storage repo left intact (private). Do not delete it: its git history is the
+  timestamped evidence chain.
