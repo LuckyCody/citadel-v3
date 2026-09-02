@@ -126,7 +126,7 @@ fn hkdf_sha256_rfc5869_test_case_3_no_salt() {
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. HKDF — citadel protocol construction (self-consistency pin)
 //    Verifies our exact PROTOCOL_ID + info construction is stable.
-//    Cross-verified by citadel_cross_verify.py using Python's cryptography lib.
+//    Cross-verified by tools/validation/citadel_cross_verify.py using Python's cryptography lib.
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
@@ -353,7 +353,7 @@ fn sha3_256_nist_448bit_message() {
 //    as a raw scalar without re-clamping, while the RFC vectors were generated
 //    with a specific clamping convention. The properties that actually matter
 //    for citadel (symmetry, correct length, uniqueness) are verified here.
-//    Python's RFC 7748 KAT is in citadel_cross_verify.py section 4.
+//    Python's RFC 7748 KAT is in tools/validation/citadel_cross_verify.py section 4.
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
@@ -435,7 +435,7 @@ fn x25519_public_key_derivation_is_deterministic() {
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. COMPOSITION — full KDF + AEAD with fixed inputs (pinned)
 //    Verifies citadel's composition of SHA3-256 + HKDF + AES-GCM is stable.
-//    Cross-verified by citadel_cross_verify.py.
+//    Cross-verified by tools/validation/citadel_cross_verify.py.
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
@@ -482,7 +482,7 @@ fn composition_kdf_plus_aead_pinned() {
     let pt = cipher.decrypt(nonce, Payload { msg: &ct, aad }).unwrap();
     assert_eq!(&pt, plaintext, "Composition round-trip failed");
 
-    // Cross-verified by Python (citadel_cross_verify.py):
+    // Cross-verified by Python (tools/validation/citadel_cross_verify.py):
     //   ct_hash = c1cc7758975a0748851260d508d303600af043b706962bb77d9adfb4b9322fe0
     //   aes_key = 42463031ea5408a266c0d0403730d323b3c8a416a82809fcc80768f41353d876
     let expected_ct_hash =

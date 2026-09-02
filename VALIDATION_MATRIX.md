@@ -60,11 +60,11 @@ VERIFIED). See [SECURITY_GUARANTEES.md](docs/security/SECURITY_GUARANTEES.md) fo
 
 | Guarantee | Test Name | Script | Status | Last Run | Limitation |
 |-----------|-----------|--------|--------|----------|------------|
-| Replay rejected before restart | validation script step | citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 | — |
-| Replay rejected after restart | validation script step | citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 | — |
+| Replay rejected before restart | validation script step | tools/validation/citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 | — |
+| Replay rejected after restart | validation script step | tools/validation/citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 | — |
 | 100 concurrent replays of same blob | `it_replay_spam_concurrency_is_safe` | citadel-api | ✅ PASS | 20260502 | In-process only |
 | FileReplayStore at 10,000 entries | `file_store_large_entry_count_remains_consistent` | citadel-keystore | ✅ PASS | 20260502 | ~98s runtime |
-| Multi-process replay safety | `citadel_multiprocess_replay_harness.ps1` | — | ⏳ PENDING | — | FileReplayStore is single-process only |
+| Multi-process replay safety | `tools/validation/citadel_multiprocess_replay_harness.ps1` | — | ⏳ PENDING | — | FileReplayStore is single-process only |
 | MemoryReplayStore eviction | `memory_store_expired_entries_evicted` | citadel-keystore | ✅ PASS | 20260501 | — |
 
 ---
@@ -87,7 +87,7 @@ VERIFIED). See [SECURITY_GUARANTEES.md](docs/security/SECURITY_GUARANTEES.md) fo
 | 50 concurrent encrypts to same DEK | `it_concurrent_encrypt_decrypt_is_safe` step 1 | ✅ PASS | 20260502 | In-process tokio tasks |
 | Rotation under encrypt load | `it_concurrent_encrypt_decrypt_is_safe` step 2 | ✅ PASS | 20260502 | 20 tasks only |
 | Inactive-key race returns clean 4xx | `it_concurrent_encrypt_decrypt_is_safe` step 3 | ✅ PASS | 20260502 | — |
-| Multi-process concurrency | `citadel_multiprocess_replay_harness.ps1` | ⏳ PENDING | — | Not yet confirmed safe |
+| Multi-process concurrency | `tools/validation/citadel_multiprocess_replay_harness.ps1` | ⏳ PENDING | — | Not yet confirmed safe |
 
 ---
 
@@ -95,18 +95,18 @@ VERIFIED). See [SECURITY_GUARANTEES.md](docs/security/SECURITY_GUARANTEES.md) fo
 
 | Guarantee | Test Name | Script | Status | Last Run |
 |-----------|-----------|--------|--------|----------|
-| No auth returns 401 | validation script step | citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 |
-| Wrong key returns 401 | validation script step | citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 |
-| Malformed JSON rejected | validation script step | citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 |
-| Nonexistent key rejected | validation script step | citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 |
-| Corrupted ciphertext rejected | validation script step | citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 |
-| Wrong AAD rejected | validation script step | citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 |
-| Wrong context rejected | validation script step | citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 |
+| No auth returns 401 | validation script step | tools/validation/citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 |
+| Wrong key returns 401 | validation script step | tools/validation/citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 |
+| Malformed JSON rejected | validation script step | tools/validation/citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 |
+| Nonexistent key rejected | validation script step | tools/validation/citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 |
+| Corrupted ciphertext rejected | validation script step | tools/validation/citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 |
+| Wrong AAD rejected | validation script step | tools/validation/citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 |
+| Wrong context rejected | validation script step | tools/validation/citadel_full_validation.ps1 | ✅ PASS | 20260501_200031 |
 | Opaque error responses | `it_corrupted_blob_returns_error` | citadel-api | ✅ PASS | 20260501 |
 | Error includes request_id | — | — | ✅ IMPLEMENTED | 20260502 |
 | Rate limiting activates | `it_rate_limit_activates_under_spam` | citadel-api | ✅ PASS | 20260501 |
 | Wrong-key spam rate limited | `it_wrong_key_spam_is_rate_limited` | citadel-api | ✅ PASS | 20260501 |
-| 100x adversarial abuse storm | `citadel_abuse_harness.ps1` | — | ⏳ PENDING | — |
+| 100x adversarial abuse storm | `tools/validation/citadel_abuse_harness.ps1` | — | ⏳ PENDING | — |
 
 ---
 
