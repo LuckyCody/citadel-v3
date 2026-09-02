@@ -1,0 +1,80 @@
+# Reproducibility run for the consistency audit (fork-only; lives on ci/repro-run, never merges).
+# Runs the repo's own documented verification paths on a clean ubuntu-latest:
+#   1. README from-source build
+#   2. cargo test --workspace --locked
+#   3. the canonical judge: scripts/test-citadel-ubuntu.sh (as documented, then --online fallback)
+#   4. clippy (default + pedantic report)
+#   5. cargo audit + cargo deny against the repo's own deny.toml
+#   6. fuzz targets compile check
+#   7. citadel_example.py end-to-end against a dev-mode server
+name: audit-repro
+on:
+  workflow_dispatch:
+  push:
+    branches: [ci/repro-run]
+jobs:
+  repro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust toolchain versions
+        run: rustc --version && cargo --version
+      - name: "A. README from-source build"
+        run: cargo build --release -p citadel-api --locked
+      - name: "B. cargo test --workspace --locked"
+        run: cargo test --workspace --locked 2>&1 | tee test-output.txt
+      - name: "C1. Canonical judge, exactly as README documents it"
+        id: judge_as_documented
+        continue-on-error: true
+        run: bash scripts/test-citadel-ubuntu.sh --runs 1 --receipt-dir ./judge-receipts
+      - name: "C2. Judge outcome (as-documented)"
+        run: echo "as-documented judge outcome=${{ steps.judge_as_documented.outcome }}"
+      - name: "C3. Canonical judge with --online (fallback if C1 failed)"
+        if: steps.judge_as_documented.outcome == 'failure'
+        run: bash scripts/test-citadel-ubuntu.sh --runs 1 --online --receipt-dir ./judge-receipts
+      - name: "C4. Judge receipts"
+        run: find ./judge-receipts -type f | head -50 && cat ./judge-receipts/*.json 2>/dev/null | head -100 || true
+      - name: "F1. clippy default level"
+        continue-on-error: true
+        run: cargo clippy --workspace --all-targets --locked 2>&1 | tee clippy-default.txt | tail -5
+      - name: "F2. clippy pedantic report"
+        continue-on-error: true
+        run: |
+          cargo clippy --workspace --all-targets --locked -- -W clippy::pedantic 2>&1 | tee clippy-pedantic.txt | grep -c "^warning" || true
+          grep "^warning" clippy-pedantic.txt | sort | uniq -c | sort -rn | head -25 || true
+      - name: "G1. cargo audit"
+        continue-on-error: true
+        run: |
+          cargo install cargo-audit --locked -q
+          cargo audit 2>&1 | tee audit-output.txt
+      - name: "G2. cargo deny (his own gate)"
+        continue-on-error: true
+        run: |
+          cargo install cargo-deny --locked -q
+          cargo deny check 2>&1 | tee deny-output.txt
+      - name: "E. fuzz targets compile"
+        continue-on-error: true
+        run: |
+          rustup toolchain install nightly --profile minimal
+          cargo install cargo-fuzz --locked -q
+          cd fuzz && cargo +nightly fuzz build 2>&1 | tail -20
+      - name: "H. citadel_example.py end-to-end (dev mode)"
+        continue-on-error: true
+        run: |
+          CITADEL_ENV=development CITADEL_ALLOW_PLAINTEXT_KEYS=1 CITADEL_API_KEY=your-secret-key CITADEL_SEED_DEMO=true ./target/release/citadel-api &
+          for i in $(seq 1 30); do curl -sf http://localhost:8443/health && break; sleep 1; done
+          pip install requests -q
+          CITADEL_API_KEY=your-secret-key python3 citadel_example.py 2>&1 | tail -30
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-repro-reports
+          path: |
+            test-output.txt
+            clippy-default.txt
+            clippy-pedantic.txt
+            audit-output.txt
+            deny-output.txt
+            judge-receipts/
