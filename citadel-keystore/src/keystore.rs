@@ -1919,7 +1919,12 @@ impl Keystore {
         // claim() returns Ok(false) if slot already taken (replay), Ok(true) if claimed.
         // We hold the replay key as a local to pass to release() on decrypt failure.
         {
-            let cache = self.replay_cache.lock().unwrap();
+            // Recover from poisoning (Q5.1): a panicked holder must not brick the
+            // replay cache — and with it every future decrypt.
+            let cache = self
+                .replay_cache
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             match cache.claim(&cache_key, Duration::from_secs(86400)) {
                 Ok(true) => {
                     // Slot claimed — proceed with decrypt. release() will be called
@@ -2066,7 +2071,10 @@ impl Keystore {
     }
 
     fn current_threat_level(&self) -> ThreatLevel {
-        self.threat.lock().unwrap().current_level()
+        self.threat
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .current_level()
     }
 
     fn effective_policy_for(&self, meta: &KeyMetadata) -> Option<KeyPolicy> {
@@ -2092,18 +2100,27 @@ impl Keystore {
     // -----------------------------------------------------------------------
 
     pub fn record_threat_event(&self, event: ThreatEvent) {
-        self.threat.lock().unwrap().record_event(event);
+        self.threat
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .record_event(event);
     }
 
     pub fn record_threat_events(&self, events: Vec<ThreatEvent>) {
-        self.threat.lock().unwrap().record_events(events);
+        self.threat
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .record_events(events);
     }
 
     /// Explicitly reset threat state to Low, discarding all recorded events
     /// and any manual override. See `ThreatAssessor::reset` for why this is
     /// distinct from injecting a `ManualDeescalation` event.
     pub fn reset_threat_state(&self) {
-        self.threat.lock().unwrap().reset();
+        self.threat
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .reset();
     }
 
     /// P158 — Record an audit event directly into the tamper-evident audit chain.
@@ -2123,11 +2140,17 @@ impl Keystore {
     /// Used by the doctor to verify actual runtime state (not just env hints).
     /// Returns values like `"memory"`, `"file"`, `"redis"`, or `"unknown"`.
     pub fn replay_backend_name(&self) -> &'static str {
-        self.replay_cache.lock().unwrap().backend_name()
+        self.replay_cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .backend_name()
     }
 
     pub fn threat_score(&self) -> f64 {
-        self.threat.lock().unwrap().raw_score()
+        self.threat
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .raw_score()
     }
 
     pub async fn security_metrics(&self) -> Result<SecurityMetrics, KeystoreError> {
@@ -2158,12 +2181,16 @@ impl Keystore {
         Ok(self
             .threat
             .lock()
-            .unwrap()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .security_metrics(total, compliant))
     }
 
     pub fn threat_history(&self) -> Vec<(chrono::DateTime<Utc>, ThreatLevel, String)> {
-        self.threat.lock().unwrap().level_history().to_vec()
+        self.threat
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .level_history()
+            .to_vec()
     }
 
     pub fn policy_adaptation_summary(

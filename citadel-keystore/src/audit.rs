@@ -408,7 +408,12 @@ impl AuditSinkSync for IntegrityChainSink {
     fn record(&self, mut event: AuditEvent) {
         use sha2::{Digest, Sha256};
 
-        let mut state = self.state.lock().unwrap();
+        // Recover from poisoning (Q5.1): a panicked writer must not brick the
+        // audit chain for every subsequent event.
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         // Stamp the event with chain metadata
         event.sequence = Some(state.sequence);
