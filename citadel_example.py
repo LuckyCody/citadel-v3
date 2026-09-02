@@ -14,7 +14,8 @@ Prerequisites:
     pip install requests
 
 Usage:
-    # Set your Citadel API key (encrypt scope required)
+    # Set your Citadel API key (encrypt scope required).
+    # CITADEL_KEY is read first; CITADEL_API_KEY works as a fallback.
     export CITADEL_KEY="your-api-key-here"
 
     # Run the example
@@ -277,10 +278,10 @@ def demo_threat_awareness(client: CitadelClient):
 
 def main():
     base_url = os.environ.get("CITADEL_URL", "http://localhost:8443")
-    api_key = os.environ.get("CITADEL_KEY", "")
+    api_key = os.environ.get("CITADEL_KEY", "") or os.environ.get("CITADEL_API_KEY", "")
 
     if not api_key:
-        print("Set CITADEL_KEY environment variable to your API key.")
+        print("Set CITADEL_KEY (or CITADEL_API_KEY) environment variable to your API key.")
         print("  The key needs 'read' and 'encrypt' scopes.")
         print()
         print("Example:")
