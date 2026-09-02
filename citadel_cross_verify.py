@@ -16,9 +16,16 @@ Usage:
   # Basic verification (no citadel binary needed):
   python citadel_cross_verify.py
 
-  # With a real citadel ciphertext (export_test_vector must be run first):
-  cargo run --example export_test_vector > test_vector.json
-  python citadel_cross_verify.py --vector test_vector.json
+  # Round-trip vectors from the real generator (public API, envelope v2):
+  cargo run -p citadel-envelope --example generate_vectors > test_vectors.json
+  # NOTE: test_vectors.json is NOT consumable by --vector below. It contains
+  # public round-trip vectors (keys, ciphertexts) but no intermediate secrets.
+
+  # Optional --vector mode: verifies the v1 composition (citadel-env-v1 KDF)
+  # of one ciphertext from a hand-built JSON file with the fields
+  # combined_ss, kem_ct, nonce, aead_ct (hex) and aad, context, plaintext
+  # (ASCII). No shipped example emits this schema today.
+  python citadel_cross_verify.py --vector my_vector.json
 
 Requires: pip install cryptography
 """
@@ -297,7 +304,9 @@ def test_real_ciphertext(vector_path: str):
             vec = json.load(f)
     except FileNotFoundError:
         print(f"  ⚠️  SKIP — {vector_path} not found")
-        print("  To generate: cargo run --example export_test_vector > test_vector.json")
+        print("  No shipped example emits this schema; build the JSON by hand with")
+        print("  combined_ss, kem_ct, nonce, aead_ct (hex) and aad, context,")
+        print("  plaintext (ASCII). See the module docstring.")
         return
     except json.JSONDecodeError as e:
         print(f"  ⚠️  SKIP — invalid JSON: {e}")
@@ -343,7 +352,11 @@ def main():
     parser.add_argument(
         "--vector",
         default=None,
-        help="Path to JSON test vector from export_test_vector example",
+        help=(
+            "Path to a hand-built JSON test vector with combined_ss, kem_ct, "
+            "nonce, aead_ct (hex) and aad, context, plaintext (ASCII); "
+            "no shipped example emits this schema (see module docstring)"
+        ),
     )
     args = parser.parse_args()
 
