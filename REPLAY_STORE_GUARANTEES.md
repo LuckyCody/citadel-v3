@@ -1,6 +1,8 @@
 # Citadel V3 — Replay Store Guarantees
 
-> **Update:** ReplayStore now uses atomic `claim()+release()` instead of the old `claim()+release()` two-step. `claim()` is check-and-insert under a single lock — no race window. `release()` frees the slot only on decrypt failure (anti-poisoning). Successful decrypt keeps the claim permanently until TTL.
+> **Operational per-backend guarantees.** For durability boundaries and crash windows, [REPLAY_TRUST_BOUNDARIES.md](REPLAY_TRUST_BOUNDARIES.md) is canonical. Where the two disagree, RTB governs.
+
+> **Update:** ReplayStore now uses an atomic `claim()`/`release()` model, replacing the earlier non-atomic check-then-record two-step. `claim()` is check-and-insert under a single lock — no race window. `release()` frees the slot only on decrypt failure (anti-poisoning). Successful decrypt keeps the claim permanently until TTL.
 
 ## What the Replay Store Does
 
@@ -47,8 +49,8 @@ grows continuously with traffic. For long-running deployments:
 
 | Scenario | Behavior |
 |----------|----------|
-| Truncated `replay.json` | Safe recovery (starts fresh) or fail-closed |
-| Invalid JSON `replay.json` | Safe recovery (starts fresh) or fail-closed |
+| Truncated `replay.json` | **Fail-closed** — `FileReplayStore::new()` returns an error; the store never starts fresh (test: `file_store_truncated_json_returns_err`) |
+| Invalid JSON `replay.json` | **Fail-closed** — `FileReplayStore::new()` returns an error; the store never starts fresh (test: `file_store_invalid_json_returns_err`) |
 | Missing `replay.json` at startup | **Fails startup (exit 1)** — fail-closed |
 | Permission denied reading | Fail-closed expected |
 | Permission denied writing | Returns error — operation rejected |
@@ -60,7 +62,7 @@ unless the operator explicitly deletes the file and restarts.
 
 ## MemoryReplayStore
 
-Used in tests only. Not persistent across restarts. Entries are evicted when TTL expires.
+Development-mode default (also used in tests). Not persistent across restarts. Entries are evicted when TTL expires.
 
 ---
 

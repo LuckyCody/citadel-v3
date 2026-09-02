@@ -1,5 +1,7 @@
 # Side-Channel Notes — Citadel V3
 
+> **Superseded by [TIMING.md](TIMING.md)**, the full timing validation record. Known-stale here: API-key comparison now uses `subtle::ConstantTimeEq` (citadel-api/src/main.rs), not `==`.
+
 **Status:** Unreviewed. No independent side-channel analysis has been performed.
 
 ---
@@ -26,8 +28,9 @@ where possible. However, this is not formally verified.
 
 ## What Is Not Proven
 
-- **Constant-time key comparison:** API key hash comparison uses `==` on byte arrays.
-  This may be vulnerable to timing attacks on the authentication path.
+- **Constant-time key comparison:** API key hash comparison uses `subtle::ConstantTimeEq`
+  (`citadel-api/src/main.rs`). The constant-time property is inherited from the `subtle`
+  crate and has not been independently verified on the authentication path.
 - **Constant-time KEM operations:** ML-KEM-768 and X25519 constant-time behavior
   is inherited from dependencies. Not independently verified on all platforms.
 - **Cache-timing:** No cache-timing analysis has been performed.
@@ -51,7 +54,7 @@ where possible. However, this is not formally verified.
 
 ## Sensitive Operations (External Audit Should Review)
 
-1. API key verification — `==` comparison on HMAC hashes
+1. API key verification — `subtle::ConstantTimeEq` comparison on HMAC hashes
 2. Decryption error path — uniform response, but timing may vary
 3. ML-KEM decapsulation — experimental crate, constant-time not proven
 4. Key material zeroization — depends on compiler not optimizing away
@@ -60,7 +63,7 @@ where possible. However, this is not formally verified.
 
 ## What External Audit Should Cover
 
-- Constant-time API key comparison (replace `==` with `subtle::ConstantTimeEq`)
+- Constant-time API key comparison (verify the `subtle::ConstantTimeEq` path)
 - ML-KEM-768 timing properties in `ml-kem` crate
 - Memory layout of key material during operations
 - Zeroization completeness across all key paths

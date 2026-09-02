@@ -1,5 +1,7 @@
 # Replay Protection Trust Boundaries
 
+> **Canonical for replay durability semantics.** Config names herein are historical: the API reads `CITADEL_REPLAY_STORE` (not `CITADEL_REPLAY_BACKEND`), and no `CITADEL_REPLAY_FLUSH_MODE` switch exists — batched flushing (5 s / 100 ops) is the only file-store mode; use `force_flush()` on shutdown. The Redis backend described under 'Future' is shipped (`--features redis-backend`).
+
 ## Overview
 
 Citadel v3 provides replay protection with **backend-dependent durability guarantees**.
@@ -151,7 +153,7 @@ CITADEL_REPLAY_BACKEND=redis
 **Applies To**: FileReplayStore (both modes)  
 **Attack Scenario**:
 1. Attacker gains filesystem access
-2. Attacker truncates/modifies replay.db
+2. Attacker truncates/modifies replay.json
 3. Replay protection bypassed
 
 **Mitigations**:

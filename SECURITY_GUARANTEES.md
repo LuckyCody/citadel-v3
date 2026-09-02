@@ -46,7 +46,9 @@ before a restart can be replayed within the TTL window (default 24h).
 
 ### File backend (single-node production)
 **Guarantee:** Replays are rejected across process restarts. Nonces written to
-`CITADEL_DATA_DIR/replay.json` survive restart.  
+`CITADEL_DATA_DIR/replay.json` survive restart. File backend durability is
+**batched** — see [REPLAY_TRUST_BOUNDARIES.md](REPLAY_TRUST_BOUNDARIES.md) for
+the crash window; "survives restart" assumes a flushed claim.  
 **NOT guaranteed:** Multi-instance safety. If two API instances share the same data
 directory, race conditions can allow a replay to succeed if the ciphertext arrives
 at the second instance before replication completes.  
@@ -123,7 +125,7 @@ Multiple API instances sharing a load balancer: per-IP rate limiting is per-inst
 | KEM classical (`0xA4`) | P-384 ECDH | NIST SP 800-186 / SEC1 | p384 =0.14.0 |
 | KEM post-quantum (`0xA3`) | ML-KEM-768 | NIST FIPS 203 | ml-kem =0.3.2 |
 | KEM post-quantum (`0xA4`) | ML-KEM-1024 | NIST FIPS 203 | ml-kem =0.3.2 |
-| AEAD | AES-256-GCM | NIST SP 800-38D | aes-gcm 0.10 |
+| AEAD | AES-256-GCM | NIST SP 800-38D | aes-gcm 0.11 |
 | KDF | HKDF-SHA256 | RFC 5869 | hkdf 0.12 |
 | MAC (auth) | HMAC-SHA256 | RFC 2104 | hmac 0.12 |
 | Hash | SHA-256 / SHA3-256 | FIPS 180-4 | sha2/sha3 0.10 |

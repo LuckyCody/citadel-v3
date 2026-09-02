@@ -1,6 +1,6 @@
 # Supply-Chain Advisory Status
 
-Last reviewed: 2026-07-20. Authoritative tools: `cargo audit` (advisories) and
+Last reviewed: 2026-07-20 (FIPS-module advisory-exceptions addendum added 2026-08-04, packet 058). Authoritative tools: `cargo audit` (advisories) and
 `cargo deny check` (advisories + bans + licenses + sources). Re-run any time.
 
 ## Policy

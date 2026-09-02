@@ -24,7 +24,7 @@ Two wire suites are supported, selected by the suite byte and additively staged
 
 ## What Citadel V3 protects against
 
-### Confirmed by tests (328+ passing, 0 failures)
+### Confirmed by tests (0 failures — current counts in [VALIDATION_MATRIX.md](VALIDATION_MATRIX.md): 435 workspace + 44 KAT + 21 stress passing)
 
 | Threat | Protection | Test |
 |--------|-----------|------|
@@ -116,10 +116,15 @@ the network layer are out of scope.
 The primitives used (ML-KEM-768, AES-256-GCM, HKDF-SHA256) follow NIST
 standards. Citadel itself has not undergone FIPS 140-3 validation.
 
-An optional `--features fips` build routes the v2 envelope's
-cryptographic operations for both suites through the AWS-LC FIPS module, pinned to
+An optional `--features fips` build selects the AWS-LC FIPS module, pinned to
 the CMVP-validated build (AWS-LC-FIPS 3.1.0 via `aws-lc-fips-sys 0.13.11`, certs
-#5298/#5314), with wire bytes proven identical to the default build. Scope, honestly
+#5298/#5314), with wire bytes proven identical to the default build. The FIPS
+backend does not move every operation into AWS-LC: suite `0xA4`'s key-encapsulation
+operations (P-384 ECDH, ML-KEM-1024 encapsulation and decapsulation) and the
+symmetric primitives both suites share (AES-256-GCM, HKDF-SHA256, SHA-2, SHA-3,
+random nonce) run in AWS-LC; suite `0xA3`'s key-encapsulation arm, which is X25519
+and ML-KEM-768, stays in pure Rust on both builds (whitepaper §5 has the exact
+per-operation table). Scope, honestly
 stated:
 - The AWS-LC-FIPS module itself is CMVP-validated at this pin. That does not make
   Citadel a FIPS-validated or FIPS-compliant product — see SECURITY_MATURITY.md.
@@ -162,7 +167,7 @@ document must never state a stronger claim than those.
 | KEM classical (`0xA4`) | P-384 ECDH | NIST SP 800-186 / SEC1 | p384 | =0.14.0 | RustCrypto pure Rust; `subtle` + constant-time formulas, generated assembly not vendor-assessed; not independently audited |
 | KEM post-quantum (`0xA3`) | ML-KEM-768 | NIST FIPS 203 | ml-kem | =0.3.2 | RustCrypto pure Rust; not independently audited |
 | KEM post-quantum (`0xA4`) | ML-KEM-1024 | NIST FIPS 203 | ml-kem | =0.3.2 | RustCrypto pure Rust; not independently audited |
-| AEAD | AES-256-GCM | NIST SP 800-38D | aes-gcm | 0.10 | Stable |
+| AEAD | AES-256-GCM | NIST SP 800-38D | aes-gcm | 0.11 | Stable |
 | KDF | HKDF-SHA256 | RFC 5869 | hkdf | 0.12 | Stable |
 | MAC (API auth) | HMAC-SHA256 | RFC 2104 | hmac | 0.12 | Stable |
 | Signing (optional) | ML-DSA-65 | NIST FIPS 204 | ml-dsa | =0.1.0-rc.9 | RustCrypto (pure Rust) |

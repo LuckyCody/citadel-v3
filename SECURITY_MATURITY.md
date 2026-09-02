@@ -1,5 +1,7 @@
 # Citadel v3 Security Maturity Assessment
 
+> **Canonical for deployment-readiness posture.** Evidence per claim: [VALIDATION_MATRIX.md](VALIDATION_MATRIX.md). Attacker model: [THREAT_MODEL.md](THREAT_MODEL.md).
+
 ## Current Status: Beta-Stage Cryptographic Infrastructure
 
 ---
@@ -38,9 +40,9 @@
 - **Compliance-critical systems**
   - Without formal security certification
   - Requiring FIPS 140-2/3 validation (the optional `fips` build routes envelope
-    operations through the AWS-LC FIPS module, but that module's CMVP status is
-    review-in-process at the current pin — NOT validated; see the FIPS-backend
-    section of the factory `CLAIM_EVIDENCE_MATRIX.md`, which controls all wording)
+    operations through the CMVP-validated AWS-LC-FIPS 3.1.0 module, certs
+    #5298/#5314 — Citadel itself remains unvalidated; controlling record:
+    [SUPPLY_CHAIN.md](SUPPLY_CHAIN.md) §FIPS module advisory exceptions)
   - Subject to regulatory audit requirements
 
 ---
@@ -260,5 +262,5 @@ It IS:
 ---
 
 **Document Version**: 1.0  
-**Last Updated**: Round 4 Security Audit  
+**Last Updated**: 2026-08-06 (Round 4 Security Audit)  
 **Next Review**: After operational hardening phase
