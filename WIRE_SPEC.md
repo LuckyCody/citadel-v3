@@ -1,7 +1,9 @@
 # Citadel Envelope Wire Format — Formal Specification
 
+> **⚠️ SUPERSEDED / HISTORICAL — DO NOT IMPLEMENT FROM THIS DOCUMENT.** The key schedule in §4–§5 (two-stage HKDF, labels `citadel-hybrid-v1` / `citadel-hybrid-env-v1|aes|`) describes a pre-release design that was never shipped. The implemented v1 derivation is single-stage with label `citadel-env-v1|aes|` — see [SPEC.md](SPEC.md) (normative for v1) and `citadel-envelope/src/kdf.rs`. The current envelope format is v2: [WIRE_SPEC_V2.md](WIRE_SPEC_V2.md).
+
 **Version:** 1.0.0  
-**Status:** FINAL  
+**Status:** SUPERSEDED — HISTORICAL  
 **Date:** 2026-01-28
 
 ---

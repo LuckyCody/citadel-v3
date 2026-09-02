@@ -1,4 +1,6 @@
-# Citadel Envelope Format (v1)
+# Citadel Envelope Format — Binding Semantics (non-normative)
+
+> **Non-normative overview.** Byte-level authority: [WIRE_SPEC_V2.md](WIRE_SPEC_V2.md) (current, v2) and [SPEC.md](SPEC.md) (legacy v1). The binding rules here apply to both versions.
 
 This document describes the high-level encoding and binding semantics used by this crate.
 

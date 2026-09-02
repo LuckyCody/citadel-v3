@@ -2,6 +2,8 @@
 
 **Version:** 2.0.0-draft1  
 **Status:** frozen implementation target  
+> **Canonical wire specification.** Supersedes [SPEC.md](SPEC.md) (v1, retained for the legacy decrypt path) and [WIRE_SPEC.md](WIRE_SPEC.md) (historical, inaccurate).
+
 **Date:** 2026-07-15
 
 This document specifies the non-streaming Citadel envelope v2 format. It is

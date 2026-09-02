@@ -1,5 +1,7 @@
 # Citadel Envelope — v1 Structured Wire Specification
 
+> **Status: normative for the legacy v1 format (decrypt-only).** New encryption emits envelope v2 — see [WIRE_SPEC_V2.md](WIRE_SPEC_V2.md), the canonical wire specification. v1 sealing requires the `legacy-envelope-v1` feature. This document supersedes [WIRE_SPEC.md](WIRE_SPEC.md), whose v1 key schedule never matched the implementation.
+
 This document describes the **v1 structured** wire format implemented in the Rust `citadel-envelope` crate.
 
 ---
