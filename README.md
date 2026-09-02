@@ -2,7 +2,7 @@
 
 Post-quantum hybrid encryption and key management server.
 
-Citadel combines a classical and a post-quantum key-encapsulation mechanism with AES-256-GCM data encryption, following NIST's hybrid approach for the post-quantum transition. Two envelope suites are supported: **`0xA3`** (X25519 + ML-KEM-768) and **`0xA4`** (P-384 + ML-KEM-1024, NIST category 5, CNSA 2.0-aligned). Applications encrypt and decrypt through a REST API; Citadel manages the keys — generation, rotation, revocation, access control, and audit logging. An optional `fips` feature routes all envelope operations through the AWS-LC cryptographic library (see [Cryptography](#cryptography)).
+Citadel combines a classical and a post-quantum key-encapsulation mechanism with AES-256-GCM data encryption, following NIST's hybrid approach for the post-quantum transition. Two envelope suites are supported: **`0xA3`** (X25519 + ML-KEM-768) and **`0xA4`** (P-384 + ML-KEM-1024, NIST category 5, CNSA 2.0-aligned). Applications encrypt and decrypt through a REST API; Citadel manages the keys — generation, rotation, revocation, access control, and audit logging. An optional `fips` feature routes the FIPS-scoped envelope operations — suite `0xA4`'s KEM plus the symmetric primitives both suites share — through the AWS-LC cryptographic library (see [Cryptography](#cryptography) for the exact scope).
 
 **Status:** Working beta-stage implementation. Unaudited. No production deployments. The per-claim validation record is [`VALIDATION_MATRIX.md`](VALIDATION_MATRIX.md); see [Security](#security) below.
 
@@ -256,7 +256,7 @@ Citadel composes NIST-standardized primitives (ML-KEM, X25519, P-384, AES-256-GC
 - **Fuzzing** of the wire-format parser, the full decryption path, the seal/open round trip, and the FFI free path.
 - **Adversarial keystore and FFI tests**: corrupted ciphertext, replay injection, truncated blobs, wrong-key, null handling, concurrent keygen, wrong-buffer-length, and zero-before-free.
 - **Constant-time evaluation** of the shipped paths with dudect (see [TIMING.md](TIMING.md) for the exact results).
-- With `--features fips`, the envelope operations execute inside the exact AWS-LC build that CMVP validated as AWS-LC-FIPS 3.1.0 (certificates #5298 / #5314).
+- With `--features fips`, the FIPS-scoped envelope operations (see [Cryptography](#cryptography)) execute inside the exact AWS-LC build that CMVP validated as AWS-LC-FIPS 3.1.0 (certificates #5298 / #5314).
 
 The full security model, replay-protection behavior per backend, the primitive table, and the per-claim status are in [SECURITY_GUARANTEES.md](SECURITY_GUARANTEES.md).
 
