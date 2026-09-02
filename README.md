@@ -291,6 +291,7 @@ citadel-v3/
 
 | Document | Audience |
 |----------|----------|
+| [docs/INDEX.md](docs/INDEX.md) | Which document governs which topic (start here for any spec question) |
 | [QUICKSTART.md](QUICKSTART.md) | Getting started |
 | [INTEGRATION_GUIDE.md](docs/ops/INTEGRATION_GUIDE.md) | SDK integration guide |
 | [SPEC.md](docs/spec/SPEC.md) | v1 wire format specification |
