@@ -1,3 +1,5 @@
+> **This fork:** an executed consistency once-over of citadel-v3 (not a security audit). Start at [START_HERE.md](START_HERE.md) — it maps the audit, the decision walkthrough, and the phase branches. Upstream: [mrcord77/citadel-v3](https://github.com/mrcord77/citadel-v3).
+
 # Citadel
 
 Post-quantum hybrid encryption and key management server.
