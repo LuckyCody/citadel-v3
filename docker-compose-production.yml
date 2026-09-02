@@ -1,5 +1,9 @@
 # =============================================================================
 # Citadel API Server - Production Docker Compose
+#
+# DEPRECATED — use `deploy/docker/docker-compose.yml` (this file predates the
+# required-vars startup gate: no MASTER_KEY / ENV / REPLAY_STORE, no Redis,
+# demo seed on).
 # =============================================================================
 
 services:

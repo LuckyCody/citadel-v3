@@ -199,7 +199,7 @@ This is a critical operational concern — choose your replay backend knowing wh
 
 > **Memory backend restart risk:** If the API restarts, all nonces seen before the restart are forgotten. An attacker who captured a ciphertext can replay it within the TTL window. This is acceptable in development. **Never use memory replay in production.**
 
-> **File backend restart safety:** Nonces are claimed atomically and written to `CITADEL_DATA_DIR/replay.json` on every successful claim(). A restart reloads the file. TTL-expired entries are purged on load. Single-node only — not safe if multiple API instances share the same data directory.
+> **File backend restart safety:** Nonces are claimed atomically and persisted to `CITADEL_DATA_DIR/replay.json`. File backend durability is **batched** — see [REPLAY_TRUST_BOUNDARIES.md](REPLAY_TRUST_BOUNDARIES.md) for the crash window; "survives restart" assumes a flushed claim. A restart reloads the file. TTL-expired entries are purged on load. Single-node only — not safe if multiple API instances share the same data directory.
 
 > **Redis backend:** Nonces are stored in Redis with TTL. Restarts reconnect to the same Redis instance. Safe for multi-node deployments.
 > The production compose configures Redis automatically.
@@ -247,13 +247,6 @@ done
 |----------|---------|-------------|
 | `CITADEL_PORT` | `8443` | Internal listen port |
 | `CITADEL_DATA_DIR` | `./citadel-data` | Key material and audit log directory |
-
-> **Data path per deployment type:**
-> - **Docker container:** `/data` (Dockerfile creates and chowns this path)
-> - **Native binary / systemd:** `/var/lib/citadel/data` (set in citadel.service)
-> - **Local dev (cargo):** `./citadel-data` (default, relative to working directory)
->
-> These are different deployment targets — the difference is intentional, not a bug.
 | `CITADEL_API_KEY_HASH` | — | HMAC-SHA256 hex hash of API key using CITADEL_MASTER_KEY (production) |
 | `CITADEL_API_KEY` | — | Plaintext API key (dev only, hashed at startup) |
 | `CITADEL_SEED_DEMO` | `false` | Seed demo keys on first run |
@@ -261,6 +254,13 @@ done
 | `CITADEL_RATE_LIMIT_RPS` | `20` | Requests per second per IP |
 | `CITADEL_RATE_LIMIT_BURST` | `50` | Burst capacity per IP |
 | `CITADEL_DOMAIN` | — | Domain for Caddy TLS (production only) |
+
+> **Data path per deployment type** (for `CITADEL_DATA_DIR`):
+> - **Docker container:** `/data` (Dockerfile creates and chowns this path)
+> - **Native binary / systemd:** `/var/lib/citadel/data` (set in citadel.service)
+> - **Local dev (cargo):** `./citadel-data` (default, relative to working directory)
+>
+> These are different deployment targets — the difference is intentional, not a bug.
 
 ---
 
@@ -283,7 +283,7 @@ The rate limiter runs in-memory (no Redis needed). For multi-instance deployment
 With `CITADEL_LOG_FORMAT=json`, output looks like:
 
 ```json
-{"timestamp":"2026-02-12T10:30:00Z","level":"INFO","target":"citadel_api","message":"starting Citadel API Server v0.1.0","port":8443,"rate_rps":20.0,"rate_burst":50}
+{"timestamp":"2026-02-12T10:30:00Z","level":"INFO","target":"citadel_api","message":"starting Citadel API Server v0.2.0","port":8443,"rate_rps":20.0,"rate_burst":50}
 {"timestamp":"2026-02-12T10:30:01Z","level":"WARN","target":"citadel_api","message":"rate limit exceeded","ip":"192.168.1.50","path":"/api/keys"}
 {"timestamp":"2026-02-12T10:30:01Z","level":"WARN","target":"citadel_api","message":"invalid API key","ip":"10.0.0.5","path":"/api/status"}
 ```
@@ -332,13 +332,15 @@ If you have an existing deployment with `CITADEL_API_KEY`:
 2. Generate the hash: `CITADEL_MASTER_KEY=<key> cargo run --bin hash-apikey -- "your-current-key"`
 3. Set `CITADEL_API_KEY_HASH` to the output
 4. Remove `CITADEL_API_KEY` from your environment
-5. Switch to `docker-compose-production.yml` when ready for TLS
+5. Switch to `deploy/docker/docker-compose.yml` when ready for production
 
 No key material migration is needed — the data directory is unchanged.
 
 ---
 
 ## What's Next (Tier 2)
+
+> **Historical.** Scoped multi-key auth shipped in 0.2.0 and is enforced per route (`required_scope`); see README §API Key Scopes. Retained for the untested-rotation caveats only.
 
 After Tier 1 is deployed, the next priorities are:
 
@@ -348,6 +350,8 @@ After Tier 1 is deployed, the next priorities are:
 ---
 
 ## API Key Management (Operational Limitations)
+
+> **Historical.** Scoped multi-key auth shipped in 0.2.0 and is enforced per route (`required_scope`); see README §API Key Scopes. Retained for the untested-rotation caveats only.
 
 ### Current state
 Citadel V3 supports a single bootstrap admin key per deployment.
