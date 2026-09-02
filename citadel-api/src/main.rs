@@ -1458,6 +1458,54 @@ fn err500(msg: impl Into<String>) -> (StatusCode, Json<ApiError>) {
     )
 }
 
+/// Q5.2 — keystore operation whose error text is being classified.
+#[derive(Clone, Copy)]
+enum KeystoreOp {
+    Encrypt,
+    Sign,
+    Verify,
+}
+
+/// Q5.2 — classify a keystore operation error message into the client-facing
+/// status code: one honestly-labeled place instead of ad-hoc `msg.contains`
+/// chains inline in each handler.
+///
+/// LIMITATION: `EncryptError`, `SignError`, and `VerifyError` carry
+/// `pub String`, not the underlying typed `KeystoreError`, so classification
+/// is still substring matching on error text. Matching on variants would
+/// require a cross-crate signature change in citadel-keystore; until that is
+/// ruled on, this helper centralizes the matching with each operation's
+/// existing rules unchanged.
+fn keystore_op_error_status(op: KeystoreOp, msg: &str) -> StatusCode {
+    match op {
+        // Policy / compliance denials are authorization failures.
+        KeystoreOp::Encrypt => {
+            if msg.contains("policy") || msg.contains("compliance") {
+                StatusCode::FORBIDDEN
+            } else {
+                StatusCode::BAD_REQUEST
+            }
+        }
+        // Enforcement / lifecycle denials (enforcer refusal, revoked key,
+        // not-Active state) are authorization failures; everything else —
+        // wrong key type included — is a client error.
+        KeystoreOp::Sign => {
+            if msg.contains("StateEnforcer") || msg.contains("revoked") || msg.contains("Active") {
+                StatusCode::FORBIDDEN
+            } else {
+                StatusCode::BAD_REQUEST
+            }
+        }
+        KeystoreOp::Verify => {
+            if msg.contains("not found") {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::BAD_REQUEST
+            }
+        }
+    }
+}
+
 /// Q5.1b — last-resort panic boundary for the router stack.
 ///
 /// Without this, a panicking handler tears down the connection mid-response and
@@ -1590,7 +1638,11 @@ async fn get_status(
     let level = ks.threat_level();
     let all = match ks.list_keys().await {
         Ok(keys) => keys,
-        Err(e) => return err500(e.to_string()).into_response(),
+        // Q5.2: log the internal detail, return the uniform body.
+        Err(e) => {
+            tracing::error!(error = %e, "status: list_keys failed");
+            return err500("internal error").into_response();
+        }
     };
     let active = all.iter().filter(|k| k.state == KeyState::Active).count();
     Json(StatusResponse {
@@ -1614,9 +1666,16 @@ async fn get_metrics(
     match state.keystore.security_metrics().await {
         Ok(m) => match serde_json::to_value(m) {
             Ok(v) => (StatusCode::OK, Json(v)).into_response(),
-            Err(e) => err500(format!("metrics serialize: {}", e)).into_response(),
+            // Q5.2: log the internal detail, return the uniform body.
+            Err(e) => {
+                tracing::error!(error = %e, "metrics: serialization failed");
+                err500("internal error").into_response()
+            }
         },
-        Err(e) => err500(e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "metrics: security_metrics failed");
+            err500("internal error").into_response()
+        }
     }
 }
 
@@ -1659,7 +1718,11 @@ async fn list_keys_handler(
 
             Json(filtered_keys).into_response()
         }
-        Err(e) => err500(e.to_string()).into_response(),
+        // Q5.2: log the internal detail, return the uniform body.
+        Err(e) => {
+            tracing::error!(error = %e, "list keys: list_keys failed");
+            err500("internal error").into_response()
+        }
     }
 }
 
@@ -1986,18 +2049,14 @@ async fn encrypt_data(
         Ok(blob) => (StatusCode::OK, Json(blob)).into_response(),
         Err(e) => {
             let msg = e.to_string();
-            if msg.contains("policy") || msg.contains("compliance") {
-                (
-                    StatusCode::FORBIDDEN,
-                    Json(ApiError {
-                        error: msg,
-                        request_id: Some(new_request_id()),
-                    }),
-                )
-                    .into_response()
-            } else {
-                err(msg).into_response()
-            }
+            (
+                keystore_op_error_status(KeystoreOp::Encrypt, &msg),
+                Json(ApiError {
+                    error: msg,
+                    request_id: Some(new_request_id()),
+                }),
+            )
+                .into_response()
         }
     }
 }
@@ -2201,27 +2260,14 @@ async fn sign_data(
         Ok(signed) => (StatusCode::OK, Json(signed)).into_response(),
         Err(e) => {
             let msg = e.to_string();
-            if msg.contains("StateEnforcer") || msg.contains("revoked") || msg.contains("Active") {
-                (
-                    StatusCode::FORBIDDEN,
-                    Json(ApiError {
-                        error: msg,
-                        request_id: Some(new_request_id()),
-                    }),
-                )
-                    .into_response()
-            } else if msg.contains("KeyType") || msg.contains("Signing") {
-                (
-                    StatusCode::BAD_REQUEST,
-                    Json(ApiError {
-                        error: msg,
-                        request_id: Some(new_request_id()),
-                    }),
-                )
-                    .into_response()
-            } else {
-                err(msg).into_response()
-            }
+            (
+                keystore_op_error_status(KeystoreOp::Sign, &msg),
+                Json(ApiError {
+                    error: msg,
+                    request_id: Some(new_request_id()),
+                }),
+            )
+                .into_response()
         }
     }
 }
@@ -2284,25 +2330,14 @@ async fn verify_signature_handler(
             .into_response(),
         Err(e) => {
             let msg = e.to_string();
-            if msg.contains("not found") {
-                (
-                    StatusCode::NOT_FOUND,
-                    Json(ApiError {
-                        error: msg,
-                        request_id: Some(new_request_id()),
-                    }),
-                )
-                    .into_response()
-            } else {
-                (
-                    StatusCode::BAD_REQUEST,
-                    Json(ApiError {
-                        error: msg,
-                        request_id: Some(new_request_id()),
-                    }),
-                )
-                    .into_response()
-            }
+            (
+                keystore_op_error_status(KeystoreOp::Verify, &msg),
+                Json(ApiError {
+                    error: msg,
+                    request_id: Some(new_request_id()),
+                }),
+            )
+                .into_response()
         }
     }
 }
@@ -2669,7 +2704,11 @@ async fn expire_due(
             "skipped": report.skipped,
         }))
         .into_response(),
-        Err(e) => err500(e.to_string()).into_response(),
+        // Q5.2: log the internal detail, return the uniform body.
+        Err(e) => {
+            tracing::error!(error = %e, "expire: expire_due_keys failed");
+            err500("internal error").into_response()
+        }
     }
 }
 
