@@ -13,7 +13,7 @@
 #     citadel:v3
 #
 # For Redis multi-node replay, set CITADEL_REPLAY_STORE=redis and CITADEL_REDIS_URL.
-# See DEPLOYMENT.md for full production setup.
+# See docs/ops/DEPLOYMENT.md for full production setup.
 # =============================================================================
 
 # Stage 1: Build

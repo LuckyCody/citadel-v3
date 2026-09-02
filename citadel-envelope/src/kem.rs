@@ -7,7 +7,7 @@
 //!
 //! ML-KEM-768 provider: RustCrypto `ml-kem` 0.3.2.
 //! Selected by the Packet 006 preregistered provider gate; see
-//! PROVIDER_BAKEOFF_2026.md. Citadel v1 retains the legacy expanded private-key
+//! docs/history/PROVIDER_BAKEOFF_2026.md. Citadel v1 retains the legacy expanded private-key
 //! encoding for compatibility while validating it at import.
 //!
 //! Key serialization:

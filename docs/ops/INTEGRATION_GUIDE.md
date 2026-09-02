@@ -67,4 +67,4 @@ If you hit integration issues, the most common problems are:
 - Feature flags not enabled for the CLI
 - Path mismatches in `Cargo.toml`
 
-See [SECURITY.md](SECURITY.md) for vulnerability reporting and [SUPPORT.md](SUPPORT.md) for support tiers.
+See [SECURITY.md](../../SECURITY.md) for vulnerability reporting and [SUPPORT.md](../../SUPPORT.md) for support tiers.

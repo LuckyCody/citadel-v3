@@ -292,12 +292,12 @@ citadel-v3/
 | Document | Audience |
 |----------|----------|
 | [QUICKSTART.md](QUICKSTART.md) | Getting started |
-| [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) | SDK integration guide |
+| [INTEGRATION_GUIDE.md](docs/ops/INTEGRATION_GUIDE.md) | SDK integration guide |
 | [SPEC.md](docs/spec/SPEC.md) | v1 wire format specification |
 | [WIRE_SPEC.md](docs/spec/WIRE_SPEC.md) | v1 wire format, formal RFC-2119 notation (historical — superseded) |
 | [WIRE_SPEC_V2.md](docs/spec/WIRE_SPEC_V2.md) | v2 wire format (current envelope format) |
 | [FORMAT.md](docs/spec/FORMAT.md) | Envelope encoding and binding-rules overview |
-| [MIGRATION.md](MIGRATION.md) | Python prototype → Rust migration guide |
+| [MIGRATION.md](docs/history/MIGRATION.md) | Python prototype → Rust migration guide |
 | [THREAT_MODEL.md](docs/security/THREAT_MODEL.md) | Security goals and assumptions |
 | [VALIDATION_MATRIX.md](VALIDATION_MATRIX.md) | Per-claim test evidence and gate status |
 | [COMPLIANCE_MATRIX.md](docs/security/COMPLIANCE_MATRIX.md) | NIST 800-57 compliance mapping |
@@ -307,10 +307,10 @@ citadel-v3/
 | [TIMING.md](docs/security/TIMING.md) | Full timing/dudect validation record |
 | [REPLAY_STORE_GUARANTEES.md](docs/security/REPLAY_STORE_GUARANTEES.md) | Replay-protection guarantees by backend |
 | [REPLAY_TRUST_BOUNDARIES.md](docs/security/REPLAY_TRUST_BOUNDARIES.md) | Replay-protection trust boundaries |
-| [PROVIDER_DECISION_LOG.md](PROVIDER_DECISION_LOG.md) | ML-KEM provider selection history |
-| [PROVIDER_BAKEOFF_2026.md](PROVIDER_BAKEOFF_2026.md) | ML-KEM provider bakeoff scorecard |
+| [PROVIDER_DECISION_LOG.md](docs/history/PROVIDER_DECISION_LOG.md) | ML-KEM provider selection history |
+| [PROVIDER_BAKEOFF_2026.md](docs/history/PROVIDER_BAKEOFF_2026.md) | ML-KEM provider bakeoff scorecard |
 | [SUPPLY_CHAIN.md](docs/security/SUPPLY_CHAIN.md) | Dependency advisory and license-exception status |
-| [CITADEL_OVERVIEW.md](CITADEL_OVERVIEW.md) | Commercial positioning |
+| [CITADEL_OVERVIEW.md](docs/ops/CITADEL_OVERVIEW.md) | Commercial positioning |
 | [scripts/security/openapi.yaml](scripts/security/openapi.yaml) | Machine-readable HTTP API description (OpenAPI) |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
 | [SUPPORT.md](SUPPORT.md) | Support tiers |
@@ -318,7 +318,7 @@ citadel-v3/
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution policy |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 | [API_FREEZE.md](API_FREEZE.md) | API stability guarantees |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment guide |
+| [DEPLOYMENT.md](docs/ops/DEPLOYMENT.md) | Production deployment guide |
 | [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md) | Commercial license terms |
 
 ## License
