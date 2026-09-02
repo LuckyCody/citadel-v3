@@ -234,7 +234,7 @@ version[1] || suite_kem[1] || suite_aead[1] || flags[1] || kem_ct_len[2] ||
 x25519_ephemeral_pk[32] || mlkem768_ct[1088] || nonce[12] || aead_ct[variable]
 ```
 
-The layout above illustrates suite `0xA3`; suite `0xA4` substitutes a P-384 ephemeral key and the ML-KEM-1024 ciphertext. Self-describing, versioned, no negotiation (prevents downgrade attacks). [SPEC.md](SPEC.md) specifies the v1 wire format; [WIRE_SPEC_V2.md](WIRE_SPEC_V2.md) specifies the current envelope-v2 header.
+The layout above illustrates suite `0xA3`; suite `0xA4` substitutes a P-384 ephemeral key and the ML-KEM-1024 ciphertext. Self-describing, versioned, no negotiation (prevents downgrade attacks). [SPEC.md](docs/spec/SPEC.md) specifies the v1 wire format; [WIRE_SPEC_V2.md](docs/spec/WIRE_SPEC_V2.md) specifies the current envelope-v2 header.
 
 ### Security Properties
 
@@ -282,7 +282,7 @@ citadel-v3/
 ├── citadel-signer/        # ML-DSA-65 signing service
 ├── citadel-ffi/           # C ABI + Python/Java/C bindings
 ├── LICENSE, LICENSE-EXCEPTION, NOTICE, COPYING, COMMERCIAL_LICENSE.md
-├── SPEC.md                # Legacy v1 wire spec (current: WIRE_SPEC_V2.md)
+├── docs/spec/SPEC.md      # Legacy v1 wire spec (current: docs/spec/WIRE_SPEC_V2.md)
 ├── THREAT_MODEL.md        # Security goals and attacker model
 ├── SECURITY_GUARANTEES.md # What is and is not protected
 ├── VALIDATION_MATRIX.md   # Per-claim test evidence and gate status
@@ -295,10 +295,10 @@ citadel-v3/
 |----------|----------|
 | [QUICKSTART.md](QUICKSTART.md) | Getting started |
 | [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) | SDK integration guide |
-| [SPEC.md](SPEC.md) | v1 wire format specification |
-| [WIRE_SPEC.md](WIRE_SPEC.md) | v1 wire format, formal RFC-2119 notation (historical — superseded) |
-| [WIRE_SPEC_V2.md](WIRE_SPEC_V2.md) | v2 wire format (current envelope format) |
-| [FORMAT.md](FORMAT.md) | Envelope encoding and binding-rules overview |
+| [SPEC.md](docs/spec/SPEC.md) | v1 wire format specification |
+| [WIRE_SPEC.md](docs/spec/WIRE_SPEC.md) | v1 wire format, formal RFC-2119 notation (historical — superseded) |
+| [WIRE_SPEC_V2.md](docs/spec/WIRE_SPEC_V2.md) | v2 wire format (current envelope format) |
+| [FORMAT.md](docs/spec/FORMAT.md) | Envelope encoding and binding-rules overview |
 | [MIGRATION.md](MIGRATION.md) | Python prototype → Rust migration guide |
 | [THREAT_MODEL.md](THREAT_MODEL.md) | Security goals and assumptions |
 | [VALIDATION_MATRIX.md](VALIDATION_MATRIX.md) | Per-claim test evidence and gate status |

@@ -309,7 +309,7 @@ Test vectors are provided in JSON format with hex-encoded byte strings:
 }
 ```
 
-See `test_vectors.json` for canonical test vectors.
+See [`test_vectors.json`](../../test_vectors.json) (repository root) for canonical test vectors.
 
 ---
 

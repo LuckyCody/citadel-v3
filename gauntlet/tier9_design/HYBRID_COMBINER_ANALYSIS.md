@@ -89,7 +89,7 @@ IETF/TLS 1.3 hybrid-KEM combiners. **No design flaw found.**
   is a *positive* result that free measurement tools cannot produce: the design
   question a cryptographer would ask first has a defensible answer.
 - **Recommended, in priority order:** (a) document the ROM/dual-PRF assumption
-  explicitly in `SPEC.md`/`WIRE_SPEC.md`; (b) optionally move to a keyed-Extract
+  explicitly in `docs/spec/SPEC.md`/`docs/spec/WIRE_SPEC.md`; (b) optionally move to a keyed-Extract
   dual-PRF variant for belt-and-suspenders; (c) commission a machine-checked
   computational proof (EasyCrypt/CryptoVerif) as the final rigor step — this is the
   one item here that genuinely benefits from paid cryptographic expertise.
