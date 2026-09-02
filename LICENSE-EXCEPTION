@@ -5,7 +5,7 @@ Copyright (C) 2026 Andre Cordero
 
 Citadel's first-party crates are licensed under the GNU Affero General Public
 License, version 3 or (at your option) any later version (AGPL-3.0-or-later),
-whose full text is in COPYING / AGPL-3.0.txt. The following is an additional
+whose full text is in COPYING. The following is an additional
 permission granted under section 7 of that license. It is relevant only when
 Citadel is built with the `fips` feature, which links the AWS-LC cryptographic
 library; the default (pure-Rust) build links no OpenSSL-licensed code and does

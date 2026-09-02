@@ -327,7 +327,7 @@ citadel-v3/
 
 Citadel is dual-licensed:
 
-- **GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)** — for open-source use. Full text in [COPYING](COPYING) / [AGPL-3.0.txt](AGPL-3.0.txt).
+- **GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)** — for open-source use. Full text in [COPYING](COPYING).
 - **Commercial License** — for proprietary or commercial use. See [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md).
 
 AGPL permits commercial use, provided you comply with its terms — including that if you run a modified version as a network service, you make the source available to users of that service. The commercial license is the alternative for organizations that cannot or do not want to comply with those AGPL obligations (for example, embedding Citadel in a closed-source product or service without releasing source).
