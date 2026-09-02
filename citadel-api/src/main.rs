@@ -1458,6 +1458,32 @@ fn err500(msg: impl Into<String>) -> (StatusCode, Json<ApiError>) {
     )
 }
 
+/// Q5.1b — last-resort panic boundary for the router stack.
+///
+/// Without this, a panicking handler tears down the connection mid-response and
+/// the client sees a protocol error instead of a response. With it, a panic
+/// becomes the same uniform `ApiError` 500 body every other internal failure
+/// produces. The panic detail goes to the log, never to the client.
+fn handle_panic(panic: Box<dyn std::any::Any + Send + 'static>) -> axum::response::Response {
+    let detail = if let Some(s) = panic.downcast_ref::<&str>() {
+        (*s).to_string()
+    } else if let Some(s) = panic.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "non-string panic payload".to_string()
+    };
+    let request_id = new_request_id();
+    tracing::error!(request_id = %request_id, panic = %detail, "handler panicked");
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ApiError {
+            error: "internal error".into(),
+            request_id: Some(request_id),
+        }),
+    )
+        .into_response()
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -3401,6 +3427,12 @@ pub async fn build_app() -> Router {
             rate_limit_middleware,
         ))
         .layer(cors)
+        // Q5.1b: outermost layer so a panic anywhere below (handlers and the
+        // auth/rate-limit middleware included) returns the uniform ApiError
+        // 500 instead of dropping the connection.
+        .layer(tower_http::catch_panic::CatchPanicLayer::custom(
+            handle_panic,
+        ))
         .with_state(state);
 
     tracing::info!(
@@ -3758,6 +3790,46 @@ mod integration {
     async fn json(resp: axum::response::Response) -> serde_json::Value {
         let b = resp.into_body().collect().await.unwrap().to_bytes();
         serde_json::from_slice(&b).unwrap_or(serde_json::json!({"raw": format!("{:?}", b)}))
+    }
+
+    /// Q5.1b — a panic behind CatchPanicLayer returns the uniform ApiError 500
+    /// instead of dropping the connection. The production router has no
+    /// panicking route to hit, so this wires the identical layer + handler
+    /// (`CatchPanicLayer::custom(handle_panic)`, exactly as installed in
+    /// build_app) around a purpose-built panicking route.
+    #[tokio::test]
+    async fn panicking_handler_returns_uniform_500_json() {
+        async fn panicking_handler() -> &'static str {
+            panic!("test-only handler panic")
+        }
+
+        let app = Router::new().route("/panic", get(panicking_handler)).layer(
+            tower_http::catch_panic::CatchPanicLayer::custom(super::handle_panic),
+        );
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/panic")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = json(resp).await;
+        assert_eq!(
+            body["error"], "internal error",
+            "panic body must be the uniform ApiError, got: {}",
+            body
+        );
+        assert!(
+            body["request_id"].as_str().is_some_and(|s| !s.is_empty()),
+            "panic body must carry a request_id, got: {}",
+            body
+        );
     }
 
     fn auth(key: &str) -> String {
