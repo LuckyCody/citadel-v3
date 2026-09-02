@@ -38,6 +38,52 @@ MAX_AAD_LEN           = 65536     # 64 KiB
 MAX_CONTEXT_LEN       = 4096      # 4 KiB
 ```
 
+### 1.1 Per-suite lengths: suite 0xA4 (P-384 ECDH + ML-KEM-1024)
+
+Suite `0xA4` reuses every suite-invariant constant above (`MAGIC`, `VERSION`,
+`FLAGS`, `SUITE_KDF`, `SUITE_AEAD`, `HEADER_LEN`, `NONCE_LEN`, `TAG_LEN`, and
+the three `MAX_*` limits) and overrides only the KEM-derived lengths:
+
+<!-- Values match code exactly:
+     citadel-envelope/src/kem_p384.rs:56  P384_POINT_BYTES = 97 (uncompressed SEC1: 04 || x[48] || y[48])
+     citadel-envelope/src/kem_p384.rs:63  P384_SCALAR_BYTES = 48
+     citadel-envelope/src/kem_p384.rs:66  MLKEM1024_EK_BYTES = 1568
+     citadel-envelope/src/kem_p384.rs:69  MLKEM1024_CT_BYTES = 1568
+     citadel-envelope/src/kem_p384.rs:77  MLKEM_SEED_BYTES = 64
+     citadel-envelope/src/kem_p384.rs:80  P384_MLKEM1024_PUBLIC_KEY_BYTES = 97 + 1568 = 1665
+     citadel-envelope/src/kem_p384.rs:83  P384_MLKEM1024_SECRET_KEY_BYTES = 48 + 64 = 112
+     citadel-envelope/src/kem_p384.rs:20  ikm = p384_ecdh_x[48] || mlkem_ss[32] (80 bytes)
+     citadel-envelope/src/wire.rs:136-145 SUITE_TABLE row for 0xA4
+       (kem_ciphertext_bytes = 1665, kem_public_key_bytes = 1665, kem_secret_key_bytes = 112)
+     citadel-envelope/src/wire_v2.rs:24   HEADER_LEN = 98 (suite-invariant) -->
+
+```
+SUITE_KEM             = A4    # P-384 ECDH + ML-KEM-1024
+P384_EPHEMERAL_LEN    = 97    # uncompressed SEC1 point: 04 || x[48] || y[48]
+MLKEM1024_CT_LEN      = 1568
+KEM_CT_LEN            = 1665  # P384_EPHEMERAL_LEN + MLKEM1024_CT_LEN
+MLKEM1024_EK_LEN      = 1568
+PUBLIC_KEY_LEN        = 1665  # p384_sec1[97] || mlkem1024_ek[1568]
+SECRET_KEY_LEN        = 112   # p384_scalar[48] || mlkem1024_(d,z)_seed[64]
+MIN_ENVELOPE_LEN      = 1779  # HEADER_LEN + KEM_CT_LEN + TAG_LEN
+```
+
+For `0xA4` envelopes the header's KEM suite byte (offset 6) is `A4`, the
+`kem_ct_len` field is `BE16(1665)`, and
+`kem_ct = p384_ephemeral_public_sec1 || mlkem1024_ciphertext` occupies bytes
+`98..1763`; the AEAD ciphertext and tag follow at offset 1763. The wire layout
+in §2 is otherwise unchanged.
+
+`recipient_key_hash = SHA3-256(p384_sec1[97] || mlkem1024_ek[1568])` over the
+1665-byte serialized hybrid public key. The P-384 ephemeral and recipient
+points are uncompressed SEC1 only (`04` tag); compressed (`02`/`03`), hybrid
+(`06`/`07`), identity, and off-curve encodings MUST be rejected.
+
+The hybrid key schedule of §5 applies with per-suite component sizes:
+`ikm = p384_ecdh_x[48] || mlkem_ss[32]` (80 bytes). The non-contributory
+rejection applies to the classical arm (identity / off-curve P-384 points).
+KDF transcript, AEAD associated data, and all other rules are suite-invariant.
+
 ## 2. Wire layout
 
 ```
