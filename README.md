@@ -49,7 +49,7 @@ docker compose up -d
 
 # Verify
 curl http://localhost:8443/health
-# {"status":"ok","version":"0.2.0"}
+# {"crypto_backend":{"backend":"rustcrypto","fips_module":null},"status":"ok","version":"0.2.0"}
 ```
 
 Dashboard (after running the steps above): http://localhost:8443 — sign in with API key `dev-secret` (set by the dev compose file; never use this value outside local development)
@@ -115,7 +115,7 @@ r = requests.post(f"{api}/api/decrypt", headers=headers, json={
 plaintext = r.json()["plaintext"]
 ```
 
-See [citadel_example.py](citadel_example.py) for a complete working example with AAD binding, key rotation, and threat-aware application behavior.
+See [citadel_example.py](citadel_example.py) for a complete working example with AAD binding, key rotation, and threat-aware application behavior (the example reads its API key from the `CITADEL_KEY` environment variable).
 
 ### curl
 

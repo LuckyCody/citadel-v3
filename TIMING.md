@@ -48,10 +48,11 @@ reproducible key-material-dependent timing signals in ML-KEM-768 decapsulation.
 Same-key and same-key/two-ciphertext-pool controls pass, so the harness is not
 simply distinguishing ciphertext pools or class layout.
 
-### Observed results
+### Observed results (historical record)
 
 Tested on DigitalOcean Premium Intel vCPU (x86-64), Ubuntu 24.04,
-Rust 1.96/1.97, release profile, 2026-07-09.
+Rust 1.96/1.97, release profile, 2026-07-09. (Provider set as of that run —
+includes the since-removed PQClean benches.)
 
 | Provider | Control (same-key) | key-A-vs-key-B |
 |---|---|---|
@@ -382,7 +383,7 @@ Hard-gated dudect benches compare only same-public-class inputs: same public wir
 | `bench_stage_mlkem_same_key_shared_buffer_control` | Harness control | Confirms the ML-KEM shared-buffer harness does not distinguish arbitrary dudect classes when key material is fixed. |
 | `bench_stage_mlkem_same_key_pool_a_vs_pool_b_shared_buffer_success` | Harness control | Confirms two independent valid ciphertext pools for the same ML-KEM key do not explain a key-A-vs-key-B signal. |
 | `bench_stage_mlkem_key_a_vs_key_b_shared_buffer_success` | Provider diagnostic | Detects secret-key-material-dependent timing in the active ML-KEM provider after address/layout and ciphertext-pool controls pass. |
-| `bench_pqclean_mlkem_*` | Provider comparison | Dev-only PQClean-backed comparison benches. |
+| `bench_rustcrypto_mlkem_*`, `bench_libcrux_mlkem_*` | Provider comparison | Dev-only provider-comparison benches (RustCrypto ml-kem / libcrux backed; the earlier PQClean benches were removed with the provider switch to RustCrypto). |
 | `bench_info_valid_vs_short_public_format` | Informational | Expected public-format timing gap from structural parse early return. |
 | `bench_info_wrong_key_a_vs_b_failure` | Informational | Wrong-key failure behavior; useful drift signal, but not a clean gate because it mixes key variation with guaranteed authentication failure. |
 
@@ -422,19 +423,21 @@ on Windows directly (SAC blocks unsigned build scripts).
 
 ### Standalone ML-KEM repro (no Citadel envelope)
 
-The `mlkem_standalone` bench calls PQClean, libcrux, and AWS-LC ML-KEM-768
-directly — no Citadel types, no hybrid wrapper, no KDF, no AEAD.
+The `mlkem_standalone` bench calls the RustCrypto `ml-kem` (production provider),
+libcrux, and AWS-LC ML-KEM-768 implementations directly — no Citadel types, no
+hybrid wrapper, no KDF, no AEAD. (The PQClean-backed benches referenced in the
+historical results were removed with the provider switch to RustCrypto.)
 
 ```bash
 cd /path/to/citadel-v3
 source ~/.cargo/env 2>/dev/null || true
 
 # Controls — must stay |t| < 4.5
-cargo bench --bench mlkem_standalone -p citadel-envelope -- --filter pqclean_same_key_control
-cargo bench --bench mlkem_standalone -p citadel-envelope -- --filter pqclean_same_key_two_pool_control
+cargo bench --bench mlkem_standalone -p citadel-envelope -- --filter rustcrypto_same_key_control
+cargo bench --bench mlkem_standalone -p citadel-envelope -- --filter rustcrypto_same_key_two_pool_control
 
 # Key-A-vs-key-B — all three providers
-cargo bench --bench mlkem_standalone -p citadel-envelope -- --filter pqclean_key_a_vs_key_b
+cargo bench --bench mlkem_standalone -p citadel-envelope -- --filter rustcrypto_key_a_vs_key_b
 cargo bench --bench mlkem_standalone -p citadel-envelope -- --filter libcrux_key_a_vs_key_b
 cargo bench --bench mlkem_standalone -p citadel-envelope -- --filter awslc_key_a_vs_key_b
 ```

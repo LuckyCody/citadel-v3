@@ -12,6 +12,7 @@ All notable changes to Citadel are documented here. Format loosely follows
   docs and one stale test assertion), and the AGPL commercial-license
   wording. Reconciled `VALIDATION_MATRIX.md` and `COMPLIANCE_MATRIX.md`,
   which had not been updated since the initial commit, with current status.
+- Note: public git history begins 2026-07-09 as a squashed import of the private development repository; document dates earlier than that (e.g. API_FREEZE 2026-02-05, the 2026-05-01 baseline validation run) refer to the private history.
 
 ## [0.2.0] — 2026-08-06 (beta)
 

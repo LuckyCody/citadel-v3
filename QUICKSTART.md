@@ -69,7 +69,7 @@ docker run -p 8443:8443 \
 
 ```bash
 curl http://localhost:8443/health
-# → {"status":"ok","version":"0.2.0"}
+# → {"crypto_backend":{"backend":"rustcrypto","fips_module":null},"status":"ok","version":"0.2.0"}
 ```
 
 ---

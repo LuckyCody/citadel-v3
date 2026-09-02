@@ -32,3 +32,15 @@ Capabilities A1-A35/B/C/D/E/F/G/H: untouched (no code or config-behavior changes
 | API_FREEZE.md | Retitled "SDK / FFI Stability Contract"; Updated line (2026-08-06, 0.2.0; HTTP REST API not covered) | S1 §2 / worklist G |
 | INTEGRATION_GUIDE.md | Crate diagram → 7 real workspace crates (self-flagging header note kept) | S4 §3.15; S1 §1; worklist G |
 | citadel-cli/src/main.rs | Doc-comment gains missing `key rewrap` line (comment-only) | S1 §3; worklist G |
+
+## Second wave (same phase-A scope)
+
+| File | What changed | Why (audit item) |
+|---|---|---|
+| VALIDATION_MATRIX.md | Evidence names re-pointed to tests that exist: primitive-KAT globs → real fn names in tests/primitive_kat.rs; `p006_*`/`p007_*` → `aes256gcm_nist_*`; `p012_wrong_key_*` → `wrong_key_rejected` (nist_acvp_kat.rs) + `wrong_key_fails` (roundtrip.rs); corruption rows → `file_store_*_returns_err` (fail-closed behavior stated); master-key gate row now cites hostile_config_test.sh's "No CITADEL_MASTER_KEY" refuses-startup check instead of the unrelated `it_health_no_auth_required`. No PASS/PENDING status changed. | S0 rows 28-31 |
+| TIMING.md | Repro procedure de-staled: PQClean bench filters → the real `rustcrypto_*` benches in benches/mlkem_standalone.rs; policy row `bench_pqclean_mlkem_*` → `bench_rustcrypto_mlkem_*`/`bench_libcrux_mlkem_*`; historical results tables untouched, heading labeled "(historical record)" | S0 row 12 |
+| CHANGELOG.md | Note under [Unreleased]/Changed: public git history begins 2026-07-09 as a squashed import; earlier document dates refer to the private history | S0 reproducibility caveat |
+| Cargo.lock | `cargo update -p chacha20` 0.10.1 → 0.10.2 (0.10.1 is yanked) — dependency version state: capability-neutral patch bump restoring the repo's own deny policy to green | wave-2 item 4 |
+| README.md | citadel_example.py note: API key read from `CITADEL_KEY` env var; /health sample updated to the real three-field shape (`crypto_backend` + `status` + `version`) | wave-2 items 5-6 |
+| INTEGRATION_GUIDE.md | Same `CITADEL_KEY` env-var note on the example reference | wave-2 item 5 |
+| QUICKSTART.md | /health sample extended to the real three-field shape, consistent with README | wave-2 item 6 |

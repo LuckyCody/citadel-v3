@@ -57,7 +57,8 @@ let pt = citadel.open(&sk, &ct, &aad, &ctx).unwrap();
 ## API integration
 
 See `citadel_example.py` for a complete Python integration example including
-AAD binding, key rotation, and threat-aware behavior.
+AAD binding, key rotation, and threat-aware behavior (the example reads its
+API key from the `CITADEL_KEY` environment variable).
 
 ## Questions?
 

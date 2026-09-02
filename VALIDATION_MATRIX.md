@@ -25,10 +25,10 @@ row is still passing today, not just re-worded as current.
 
 | Guarantee | Test Name | Crate | Status | Last Run | Limitation |
 |-----------|-----------|-------|--------|----------|------------|
-| X25519 + ML-KEM-768 hybrid KEM | `primitive_kat_*` | citadel-envelope | ✅ PASS | 20260501 | Self-consistency only, not ACVP vectors |
-| AES-256-GCM authenticated encryption | `p006_*`, `p007_*` | citadel-envelope | ✅ PASS | 20260501 | — |
-| HKDF-SHA256 key derivation | `hkdf_kat_*` | citadel-envelope | ✅ PASS | 20260501 | — |
-| Wrong-key isolation (IND-CCA2 property) | `p012_wrong_key_*` | citadel-envelope | ✅ PASS | 20260501 | — |
+| X25519 + ML-KEM-768 hybrid KEM | `x25519_*`, `mlkem768_*`, `hybrid_kem_combines_x25519_and_mlkem768` (tests/primitive_kat.rs) | citadel-envelope | ✅ PASS | 20260501 | Self-consistency only, not ACVP vectors |
+| AES-256-GCM authenticated encryption | `aes256gcm_nist_*`, `aes256gcm_wrong_aad_fails` (tests/primitive_kat.rs) | citadel-envelope | ✅ PASS | 20260501 | — |
+| HKDF-SHA256 key derivation | `hkdf_sha256_rfc5869_test_case_*`, `hkdf_citadel_protocol_derivation_pinned` (tests/primitive_kat.rs) | citadel-envelope | ✅ PASS | 20260501 | — |
+| Wrong-key isolation (IND-CCA2 property) | `wrong_key_rejected` (tests/nist_acvp_kat.rs), `wrong_key_fails` (tests/roundtrip.rs) | citadel-envelope | ✅ PASS | 20260501 | — |
 | ML-KEM ACVP/NIST official vectors | `nist_acvp_kat`, `acvp_mlkem1024`, `production_mlkem_acvp` | citadel-envelope | ✅ PASS (60/60) | current | Superseded — see [SECURITY.md](SECURITY.md#cryptographic-provider-assurance) |
 
 **Suite `0xA4` (P-384 + ML-KEM-1024):** added after this baseline run; not itemized row-by-row
@@ -73,8 +73,8 @@ VERIFIED). See [SECURITY_GUARANTEES.md](SECURITY_GUARANTEES.md) for the full pri
 
 | Scenario | Test Name | Status | Expected Behavior |
 |----------|-----------|--------|-------------------|
-| Truncated replay.json | `file_store_truncated_json_fails_closed` | ✅ PASS | Safe recovery or fail-closed |
-| Invalid JSON replay.json | `file_store_invalid_json_fails_safely` | ✅ PASS | Safe recovery or fail-closed |
+| Truncated replay.json | `file_store_truncated_json_returns_err` | ✅ PASS | Fail-closed (`FileReplayStore::new()` returns Err) |
+| Invalid JSON replay.json | `file_store_invalid_json_returns_err` | ✅ PASS | Fail-closed (`FileReplayStore::new()` returns Err) |
 | Missing replay store at startup | validation script step | ✅ PASS | SAFE_FAILED_STARTUP (exit 1) |
 | Permission denied read | — | ⏳ PENDING | Fail-closed expected |
 
@@ -129,7 +129,7 @@ VERIFIED). See [SECURITY_GUARANTEES.md](SECURITY_GUARANTEES.md) for the full pri
 |------|------|--------|----------|
 | Missing replay store blocks startup | validation script step | ✅ PASS | 20260501_200031 |
 | Corrupt api-keys.json blocks startup | validation script step | ✅ PASS | 20260501_200031 |
-| Missing CITADEL_MASTER_KEY blocks startup | `it_health_no_auth_required` (dev mode only) | ✅ PASS | 20260501 |
+| Missing CITADEL_MASTER_KEY blocks startup | `scripts/security/hostile_config_test.sh` — "No CITADEL_MASTER_KEY" refuses startup under `CITADEL_ENV=production` | ✅ PASS | 20260501 |
 
 ---
 
