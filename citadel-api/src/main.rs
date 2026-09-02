@@ -483,27 +483,31 @@ fn hmac_sha256(plaintext: &str, master_key_bytes: &[u8]) -> [u8; 32] {
 /// - At least 16 unique byte values (prevents patterns like 0x00...00 or 0xAA...AA)
 /// - Not in weak key blocklist
 ///
-/// Returns decoded bytes on success, panics on validation failure.
-fn validate_master_key(hex_str: &str) -> Vec<u8> {
+/// Returns decoded bytes on success, an operator-facing message on failure.
+/// The full validation runs ONCE at startup (create_keystore's master key
+/// gate), which exits on `Err` — so an `Err` on the per-request path through
+/// `hash_api_key` is unreachable-but-safe and maps to a uniform 500, never a
+/// panic (Q5.1a).
+fn validate_master_key(hex_str: &str) -> Result<Vec<u8>, String> {
     // Decode hex
     let bytes = match hex::decode(hex_str.trim()) {
         Ok(b) => b,
         Err(e) => {
-            panic!(
-                "[FATAL] CITADEL_MASTER_KEY is not valid hex: {}. \
+            return Err(format!(
+                "CITADEL_MASTER_KEY is not valid hex: {}. \
                  Generate with: openssl rand -hex 32",
                 e
-            );
+            ));
         }
     };
 
     // Check length
     if bytes.len() != 32 {
-        panic!(
-            "[FATAL] CITADEL_MASTER_KEY must be exactly 32 bytes (64 hex chars). \
+        return Err(format!(
+            "CITADEL_MASTER_KEY must be exactly 32 bytes (64 hex chars). \
              Got {} bytes. Generate with: openssl rand -hex 32",
             bytes.len()
-        );
+        ));
     }
 
     // Check entropy: at least 16 unique byte values
@@ -512,21 +516,22 @@ fn validate_master_key(hex_str: &str) -> Vec<u8> {
         unique_bytes.insert(b);
     }
     if unique_bytes.len() < 16 {
-        panic!(
-            "[FATAL] CITADEL_MASTER_KEY has insufficient entropy: only {} unique bytes out of 32. \
+        return Err(format!(
+            "CITADEL_MASTER_KEY has insufficient entropy: only {} unique bytes out of 32. \
              This indicates a weak or patterned key (e.g., all zeros, repeating pattern). \
              Generate a strong key with: openssl rand -hex 32",
             unique_bytes.len()
-        );
+        ));
     }
 
     // Check against weak key patterns
     let all_zeros = bytes.iter().all(|&b| b == 0x00);
     let all_same = bytes.iter().all(|&b| b == bytes[0]);
     if all_zeros || all_same {
-        panic!(
-            "[FATAL] CITADEL_MASTER_KEY uses a trivial pattern (all same byte). \
+        return Err(
+            "CITADEL_MASTER_KEY uses a trivial pattern (all same byte). \
              Generate a strong key with: openssl rand -hex 32"
+                .to_string(),
         );
     }
 
@@ -537,20 +542,21 @@ fn validate_master_key(hex_str: &str) -> Vec<u8> {
     // cannot see but are exactly the kind of "looks diverse, isn't random" key
     // an operator's broken generation script could produce.
     if is_arithmetic_progression(&bytes) {
-        panic!(
-            "[FATAL] CITADEL_MASTER_KEY is an arithmetic byte sequence (constant stride) — \
+        return Err(
+            "CITADEL_MASTER_KEY is an arithmetic byte sequence (constant stride) — \
              not random. Generate a strong key with: openssl rand -hex 32"
+                .to_string(),
         );
     }
     if let Some(period) = shortest_repeating_period(&bytes) {
-        panic!(
-            "[FATAL] CITADEL_MASTER_KEY repeats with a short period ({} bytes) — not random. \
+        return Err(format!(
+            "CITADEL_MASTER_KEY repeats with a short period ({} bytes) — not random. \
              Generate a strong key with: openssl rand -hex 32",
             period
-        );
+        ));
     }
 
-    bytes
+    Ok(bytes)
 }
 
 /// True if `bytes[i+1] - bytes[i] (mod 256)` is the same constant for every i —
@@ -574,16 +580,20 @@ fn shortest_repeating_period(bytes: &[u8]) -> Option<usize> {
     (1..=16).find(|&p| p < bytes.len() && bytes.iter().enumerate().all(|(i, &b)| b == bytes[i % p]))
 }
 
-fn hash_api_key(key: &str) -> [u8; 32] {
+/// Q5.1a: returns `Err` instead of panicking when key material is unavailable
+/// or invalid. Startup (create_keystore) already ran the same full validation
+/// and exited on failure, so an `Err` here is unreachable-but-safe; request
+/// paths map it to the uniform 500 flow.
+fn hash_api_key(key: &str) -> Result<[u8; 32], String> {
     if std::env::var("CITADEL_PROFILE").as_deref() == Ok("local-pilot") {
         let config = LocalPilotConfig::from_env()
-            .unwrap_or_else(|e| panic!("[FATAL] invalid local-pilot configuration: {e}"));
+            .map_err(|e| format!("invalid local-pilot configuration: {e}"))?;
         let provider = LinuxFileRootKeyProvider::open(&config.root_key_file)
-            .unwrap_or_else(|e| panic!("[FATAL] local-pilot root custody unavailable: {e}"));
+            .map_err(|e| format!("local-pilot root custody unavailable: {e}"))?;
         let root_key = provider
             .load_root_key()
-            .unwrap_or_else(|e| panic!("[FATAL] local-pilot root custody unavailable: {e}"));
-        return hmac_sha256(key, root_key.as_ref());
+            .map_err(|e| format!("local-pilot root custody unavailable: {e}"))?;
+        return Ok(hmac_sha256(key, root_key.as_ref()));
     }
 
     // Use CITADEL_MASTER_KEY as HMAC key.
@@ -594,12 +604,12 @@ fn hash_api_key(key: &str) -> [u8; 32] {
     let mut master_key_bytes = if master_key_str == "citadel-api-pepper-not-configured" {
         master_key_str.into_bytes()
     } else {
-        validate_master_key(&master_key_str)
+        validate_master_key(&master_key_str)?
     };
 
     let result = hmac_sha256(key, &master_key_bytes);
     master_key_bytes.zeroize();
-    result
+    Ok(result)
 }
 
 /// Generate a random API key.
@@ -1062,7 +1072,16 @@ async fn auth_middleware(
     match auth_header {
         Some(val) if val.starts_with("Bearer ") => {
             let provided = &val[7..];
-            let provided_hash = hash_api_key(provided);
+            // Unreachable-but-safe: startup already ran the full master key
+            // validation and exited on failure (Q5.1a).
+            let provided_hash = match hash_api_key(provided) {
+                Ok(h) => h,
+                Err(e) => {
+                    drop(store);
+                    tracing::error!(error = %e, "API key hashing unavailable at request time");
+                    return err500("internal error").into_response();
+                }
+            };
 
             match store.authenticate(&provided_hash) {
                 Some(entry) => {
@@ -2745,7 +2764,15 @@ async fn create_api_key(
     }
 
     let plaintext_key = generate_api_key();
-    let key_hash = hash_api_key(&plaintext_key);
+    // Unreachable-but-safe: startup already ran the full master key validation
+    // and exited on failure (Q5.1a).
+    let key_hash = match hash_api_key(&plaintext_key) {
+        Ok(h) => h,
+        Err(e) => {
+            tracing::error!(error = %e, "API key hashing unavailable at request time");
+            return err500("internal error").into_response();
+        }
+    };
     let key_id = generate_key_id();
 
     let entry = ApiKeyEntry {
@@ -2889,22 +2916,20 @@ fn create_keystore(data_dir: &str) -> Keystore {
 
     if !local_pilot {
         match std::env::var("CITADEL_MASTER_KEY") {
-            Ok(val) => match hex::decode(val.trim()) {
-                Err(e) => {
-                    eprintln!("[FATAL] CITADEL_MASTER_KEY is not valid hex: {}", e);
-                    eprintln!("  Generate a valid key: openssl rand -hex 32");
+            // Q5.1a: run the FULL validation (hex, length, entropy, pattern
+            // checks) once here, so a weak key is rejected before the server
+            // accepts requests — not at the first authenticated request.
+            Ok(val) => match validate_master_key(&val) {
+                Err(msg) => {
+                    eprintln!("[FATAL] {}", msg);
                     std::process::exit(1);
                 }
-                Ok(bytes) if bytes.len() != 32 => {
-                    eprintln!(
-                        "[FATAL] CITADEL_MASTER_KEY must decode to 32 bytes, got {}.",
-                        bytes.len()
+                Ok(mut bytes) => {
+                    bytes.zeroize();
+                    tracing::info!(
+                        "CITADEL_MASTER_KEY validated: 32-byte key material with \
+                         entropy and pattern checks passed."
                     );
-                    eprintln!("  Generate a valid key: openssl rand -hex 32");
-                    std::process::exit(1);
-                }
-                Ok(_) => {
-                    tracing::info!("CITADEL_MASTER_KEY validated: 32-byte key material ready.");
                 }
             },
             Err(_) => {
@@ -3150,7 +3175,13 @@ fn resolve_bootstrap_hash() -> Option<[u8; 32]> {
         tracing::warn!(
             "using CITADEL_API_KEY (plaintext) - use CITADEL_API_KEY_HASH for production"
         );
-        return Some(hash_api_key(pt));
+        match hash_api_key(pt) {
+            Ok(hash) => return Some(hash),
+            Err(e) => {
+                tracing::error!("CITADEL_API_KEY could not be hashed: {}", e);
+                std::process::exit(1);
+            }
+        }
     }
     None
 }
@@ -3532,8 +3563,8 @@ mod api_key_tests {
         let short_key = "abc123";
         let valid_key = generate_api_key();
         assert_ne!(
-            hash_api_key(short_key),
-            hash_api_key(&valid_key),
+            hash_api_key(short_key).expect("valid master key"),
+            hash_api_key(&valid_key).expect("valid master key"),
             "short key must not produce the same hash as a valid key"
         );
         std::env::remove_var("CITADEL_MASTER_KEY");
@@ -3547,12 +3578,12 @@ mod api_key_tests {
             "CITADEL_MASTER_KEY",
             "88816273d77d9036dec20d868c89308e463493e9bb8948a986380c10dccd865c",
         );
-        let h1 = hash_api_key("same-key");
+        let h1 = hash_api_key("same-key").expect("valid master key");
         std::env::set_var(
             "CITADEL_MASTER_KEY",
             "d5721c3eec350a1433742b6cd685786701c5748cbe9ddfc18ac16266129d0314",
         );
-        let h2 = hash_api_key("same-key");
+        let h2 = hash_api_key("same-key").expect("valid master key");
         assert_ne!(
             h1, h2,
             "different master keys must produce different hashes"
@@ -3563,46 +3594,57 @@ mod api_key_tests {
     /// The original finding: 00 01 02 ... 1f has 32/32 unique bytes and would have
     /// passed the old unique-byte-count-only check despite being fully predictable.
     #[test]
-    #[should_panic(expected = "arithmetic byte sequence")]
     fn sequential_master_key_is_rejected() {
         let seq: String = (0u8..32).map(|b| format!("{:02x}", b)).collect();
-        validate_master_key(&seq);
+        let err = validate_master_key(&seq).unwrap_err();
+        assert!(err.contains("arithmetic byte sequence"), "got: {}", err);
     }
 
     #[test]
-    #[should_panic(expected = "arithmetic byte sequence")]
     fn descending_sequential_master_key_is_rejected() {
         let seq: String = (0u8..32)
             .map(|b| format!("{:02x}", 0xffu8.wrapping_sub(b)))
             .collect();
-        validate_master_key(&seq);
+        let err = validate_master_key(&seq).unwrap_err();
+        assert!(err.contains("arithmetic byte sequence"), "got: {}", err);
     }
 
     #[test]
-    #[should_panic(expected = "insufficient entropy")]
     fn short_period_repeat_master_key_is_caught_by_unique_count() {
         // 8-byte block repeated 4x = 32 bytes, period 8, only 8 unique byte values —
         // periods this short are already caught by the unique-count check.
         let key = "0102030405060708".repeat(4);
-        validate_master_key(&key);
+        let err = validate_master_key(&key).unwrap_err();
+        assert!(err.contains("insufficient entropy"), "got: {}", err);
     }
 
     #[test]
-    #[should_panic(expected = "repeats with a short period")]
     fn period_16_repeat_master_key_is_rejected() {
         // 16-byte fully-diverse block repeated twice = 32 bytes, exactly 16 unique
         // bytes — clears the unique-count threshold (`< 16` is false at exactly 16)
         // but is a fully predictable period-16 repeat. This is the case the
         // periodicity check exists to catch.
         let key = "000102030405060708090a0b0c0d0e0f".repeat(2);
-        validate_master_key(&key);
+        let err = validate_master_key(&key).unwrap_err();
+        assert!(err.contains("repeats with a short period"), "got: {}", err);
+    }
+
+    /// Q5.1a — the startup gate now runs the FULL validation, so a well-formed
+    /// (hex, 64-char) but low-entropy key must be rejected before the server
+    /// accepts requests. This is the exact input the old startup gate (hex +
+    /// length only) let through to panic at the first authenticated request.
+    #[test]
+    fn low_entropy_master_key_is_rejected_by_startup_validation() {
+        let key = "aa".repeat(32); // valid hex, 32 bytes, 1 unique byte value
+        let err = validate_master_key(&key).unwrap_err();
+        assert!(err.contains("insufficient entropy"), "got: {}", err);
     }
 
     #[test]
     fn real_random_master_key_is_accepted() {
         // A genuinely random 32-byte key (openssl rand -hex 32) must still pass.
         let key = "88816273d77d9036dec20d868c89308e463493e9bb8948a986380c10dccd865c";
-        let bytes = validate_master_key(key);
+        let bytes = validate_master_key(key).expect("random key must validate");
         assert_eq!(bytes.len(), 32);
     }
 
