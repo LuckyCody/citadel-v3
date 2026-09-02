@@ -138,29 +138,73 @@ CITADEL_MASTER_KEY=$CITADEL_MASTER_KEY cargo run --bin hash-apikey -- "your-exis
 
 Save the plaintext key for clients. Set the **hash** as `CITADEL_API_KEY_HASH`.
 
-### 2. Configure TLS with Caddy
+### TLS termination with Caddy (optional)
 
-Edit `Caddyfile` for your environment:
+The production compose (`deploy/docker/docker-compose.yml`) serves plaintext HTTP on
+`:8443`; put a TLS terminator in front of it. The Caddy pattern below was carried out
+of the deprecated root `docker-compose-production.yml` (now quarantined in `attic/`) —
+add the service block to your compose and provide a `Caddyfile` next to it.
 
-**Option A — Real domain with Let's Encrypt (recommended):**
+**Caddy service block** (compose):
+```yaml
+  caddy:
+    image: caddy:2-alpine
+    container_name: citadel-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      citadel:
+        condition: service_healthy
+    environment:
+      - CITADEL_DOMAIN=${CITADEL_DOMAIN:-}
+
+# and add to the top-level volumes: section
+#   caddy-data:
+#     driver: local
+#   caddy-config:
+#     driver: local
 ```
-citadel.yourdomain.com {
+
+**Caddyfile — Option A, real domain with Let's Encrypt (recommended):**
+```
+{$CITADEL_DOMAIN:citadel.example.com} {
     reverse_proxy citadel:8443
+
     header {
         Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
         X-Content-Type-Options "nosniff"
         X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
         -Server
+    }
+
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 100mb
+            roll_keep 5
+        }
+        format json
     }
 }
 ```
 
-**Option B — Self-signed cert for internal/staging:**
+**Caddyfile — Option B, self-signed cert for internal/staging:**
 ```
 :443 {
     tls internal
     reverse_proxy citadel:8443
-    # ... same headers ...
+    # ... same headers as Option A ...
+}
+
+# Redirect HTTP -> HTTPS
+:80 {
+    redir https://{host}{uri} permanent
 }
 ```
 
@@ -238,6 +282,21 @@ for i in $(seq 1 60); do
     -H "Authorization: Bearer your-plaintext-key"
 done
 ```
+
+### Volume-level backup
+
+`citadel backup create` (CLI) is the **primary, encrypted backup mechanism** — use it
+for key-material backups. As a coarse, volume-level snapshot of the Docker data volume
+(`citadel_data`, as declared in `deploy/docker/docker-compose.yml`), you can
+additionally tar the raw volume:
+
+```bash
+docker run --rm -v citadel_data:/data -v "$PWD":/backup alpine \
+  tar czf /backup/citadel-data-$(date +%F).tar.gz -C /data .
+```
+
+Note: this snapshot is **not** encrypted by Citadel — it copies the volume bytes as-is.
+Store it accordingly, and prefer `citadel backup create` wherever possible.
 
 ---
 
