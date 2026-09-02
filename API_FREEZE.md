@@ -1,7 +1,8 @@
-# API Stability Contract
+# SDK / FFI Stability Contract
 
 **Version:** 0.1.0  
 **Date:** 2026-02-05  
+**Updated:** 2026-08-06 (0.2.0) — Tier-2 additions for suite 0xA4; HTTP REST API is NOT covered by this freeze.  
 **Status:** FROZEN
 
 This document defines the **stable public interface** of Citadel SDK. Items listed here are guaranteed to remain compatible across minor versions.

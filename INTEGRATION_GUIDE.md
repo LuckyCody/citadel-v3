@@ -10,10 +10,12 @@ This document explains how to integrate Citadel V3 into your application or exis
 
 ```
 citadel_v3/
-├── citadel-envelope/   # Hybrid KEM + wire format (X25519 + ML-KEM-768 + AES-256-GCM)
+├── citadel-core/       # StateEnforcer — runtime lifecycle/authorization enforcement (layer 1)
+├── citadel-envelope/   # Hybrid KEM + wire format (suites 0xA3/0xA4 + AES-256-GCM)
+├── citadel-signer/     # ML-DSA-65 signing + CitadelAssertion (CNA) format
 ├── citadel-keystore/   # Key lifecycle, hierarchy, replay, audit
 ├── citadel-api/        # Axum REST API (port 8443)
-├── citadel-cli/        # CLI: key, migrate, doctor, backup, replay commands
+├── citadel-cli/        # CLI: key, migrate, doctor, audit, backup, replay commands
 ├── citadel-ffi/        # C/Java/Python FFI layer
 └── deploy/             # systemd, docker, kubernetes templates
 ```

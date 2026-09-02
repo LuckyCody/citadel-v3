@@ -2,6 +2,8 @@
 
 ## Overview
 
+Citadel is offered with three support tiers — Open Source (free), Pro, and Enterprise — described below, plus custom/OEM arrangements.
+
 ---
 
 ## Open Source (Free)

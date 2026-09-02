@@ -137,6 +137,7 @@ curl -X POST http://localhost:8443/api/keys/$DEK_ID/encrypt \
 
 | Endpoint | Method | Scope | Description |
 |----------|--------|-------|-------------|
+| `/` | GET | — | Embedded web dashboard |
 | `/health` | GET | — | Health check |
 | `/api/status` | GET | read | Threat level, key counts |
 | `/api/metrics` | GET | read | Security metrics |
@@ -149,12 +150,22 @@ curl -X POST http://localhost:8443/api/keys/$DEK_ID/encrypt \
 | `/api/keys/:id/destroy` | POST | manage | Destroy key material |
 | `/api/keys/:id/encrypt` | POST | encrypt | Encrypt data |
 | `/api/decrypt` | POST | encrypt | Decrypt data |
+| `/api/keys/:id/sign` | POST | encrypt | Sign data (ML-DSA-65) |
+| `/api/verify` | POST | read | Verify a signature |
+| `/api/keys/:id/verifying-key` | GET | read | Get a key's public verifying key |
+| `/api/assertions/issue` | POST | encrypt | Issue a Citadel assertion (CNA) |
+| `/api/assertions/verify` | POST | read | Verify a Citadel assertion |
 | `/api/threat` | GET | read | Threat intelligence details |
+| `/api/threat/event` | POST | manage | Inject a threat event |
+| `/api/threat/reset` | POST | manage | Reset threat state to baseline |
 | `/api/policies` | GET | read | Active key policies |
+| `/api/expire` | POST | manage | Expire keys past max lifetime |
 | `/api/auth/whoami` | GET | read | Current API key info |
 | `/api/auth/keys` | GET | admin | List API keys |
 | `/api/auth/keys` | POST | admin | Create API key |
 | `/api/auth/keys/:id` | DELETE | admin | Revoke API key |
+
+The machine-readable description of this API is [`scripts/security/openapi.yaml`](scripts/security/openapi.yaml).
 
 ## Key Hierarchy
 
@@ -212,7 +223,7 @@ Citadel ships two envelope suites, chosen by a self-describing wire suite byte (
 
 ### FIPS backend (optional `fips` feature)
 
-By default all cryptography runs in pure-Rust crates. Building with `--features fips` routes every envelope operation through the **AWS-LC** cryptographic library, executing inside the exact build that CMVP validated as **AWS-LC-FIPS 3.1.0** (certificates #5298 / #5314), with AES-GCM using the approved random-IV construction (GCM IV Scenario 2).
+By default all cryptography runs in pure-Rust crates. Building with `--features fips` selects the **AWS-LC** cryptographic library at the backend seam, executing inside the exact build that CMVP validated as **AWS-LC-FIPS 3.1.0** (certificates #5298 / #5314), with AES-GCM using the approved random-IV construction (GCM IV Scenario 2). The FIPS backend does not move every operation into AWS-LC: on the `fips` build, suite `0xA4`'s key-encapsulation operations (P-384 ECDH, ML-KEM-1024 encapsulation and decapsulation) run in AWS-LC, and so do the symmetric primitives both suites share (AES-256-GCM, HKDF-SHA256, SHA-2, SHA-3, and the module-generated random nonce). Suite `0xA3`'s key-encapsulation arm, which is X25519 and ML-KEM-768, stays in pure Rust on both builds. See the [whitepaper](whitepaper/CITADEL_WHITEPAPER.md) §5 for the exact per-operation scope table.
 
 **This does not make Citadel a FIPS-validated or FIPS-compliant product.** The operating environment is not tested under CMVP; key generation and ML-KEM seed expansion remain pure-Rust; and no regulatory compliance claim is made. The status and its bounds are stated in [`SECURITY_MATURITY.md`](SECURITY_MATURITY.md).
 
@@ -255,7 +266,7 @@ Everything above is our own validation and auditing work, on our own tools and t
 
 ## Compliance
 
-Mapped against 34 NIST SP 800-57 controls: 26 satisfied, 7 partial, 1 gap. See [COMPLIANCE_MATRIX.md](COMPLIANCE_MATRIX.md) for the full mapping.
+Mapped against 34 NIST SP 800-57 controls: 27 satisfied, 6 partial, 1 gap. See [COMPLIANCE_MATRIX.md](COMPLIANCE_MATRIX.md) for the full mapping.
 
 Relevant frameworks: NIST SP 800-57 (key management), CNSA 2.0 (PQC timeline), HIPAA (encryption at rest), SOC 2 (access controls and audit).
 
@@ -263,7 +274,7 @@ Relevant frameworks: NIST SP 800-57 (key management), CNSA 2.0 (PQC timeline), H
 
 ```
 citadel-v3/
-├── citadel-core/          # Shared types and primitives
+├── citadel-core/          # StateEnforcer — runtime lifecycle/authorization enforcement (layer 1)
 ├── citadel-envelope/      # Hybrid encryption core (suites 0xA3/0xA4; optional AWS-LC `fips` backend)
 ├── citadel-keystore/      # Key lifecycle, 4-level hierarchy, adaptive threat policies
 ├── citadel-api/           # HTTP server, scoped auth, rate limiting, dashboard
@@ -271,7 +282,7 @@ citadel-v3/
 ├── citadel-signer/        # ML-DSA-65 signing service
 ├── citadel-ffi/           # C ABI + Python/Java/C bindings
 ├── LICENSE, LICENSE-EXCEPTION, NOTICE, COPYING, COMMERCIAL_LICENSE.md
-├── SPEC.md                # Authoritative wire specification
+├── SPEC.md                # Legacy v1 wire spec (current: WIRE_SPEC_V2.md)
 ├── THREAT_MODEL.md        # Security goals and attacker model
 ├── SECURITY_GUARANTEES.md # What is and is not protected
 ├── VALIDATION_MATRIX.md   # Per-claim test evidence and gate status
@@ -285,7 +296,7 @@ citadel-v3/
 | [QUICKSTART.md](QUICKSTART.md) | Getting started |
 | [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) | SDK integration guide |
 | [SPEC.md](SPEC.md) | v1 wire format specification |
-| [WIRE_SPEC.md](WIRE_SPEC.md) | v1 wire format, formal RFC-2119 notation |
+| [WIRE_SPEC.md](WIRE_SPEC.md) | v1 wire format, formal RFC-2119 notation (historical — superseded) |
 | [WIRE_SPEC_V2.md](WIRE_SPEC_V2.md) | v2 wire format (current envelope format) |
 | [FORMAT.md](FORMAT.md) | Envelope encoding and binding-rules overview |
 | [MIGRATION.md](MIGRATION.md) | Python prototype → Rust migration guide |
@@ -302,6 +313,7 @@ citadel-v3/
 | [PROVIDER_BAKEOFF_2026.md](PROVIDER_BAKEOFF_2026.md) | ML-KEM provider bakeoff scorecard |
 | [SUPPLY_CHAIN.md](SUPPLY_CHAIN.md) | Dependency advisory and license-exception status |
 | [CITADEL_OVERVIEW.md](CITADEL_OVERVIEW.md) | Commercial positioning |
+| [scripts/security/openapi.yaml](scripts/security/openapi.yaml) | Machine-readable HTTP API description (OpenAPI) |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
 | [SUPPORT.md](SUPPORT.md) | Support tiers |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |

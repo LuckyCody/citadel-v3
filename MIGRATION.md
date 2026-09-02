@@ -1,5 +1,7 @@
 # Migration Guide: Python Prototype → Rust Implementation
 
+> **Historical (Python→Rust, v1 era).** Describes the v1 envelope; the current format is v2 ([WIRE_SPEC_V2.md](WIRE_SPEC_V2.md)). Retained for prototype-data migration only.
+
 ## Overview
 
 This document clarifies the relationship between the Python Citadel prototype and this Rust implementation.

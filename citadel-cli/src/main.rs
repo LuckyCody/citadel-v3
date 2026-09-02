@@ -12,6 +12,7 @@
 //! citadel key rotate <id>            — rotate a key
 //! citadel key revoke <id>            — revoke a key
 //! citadel key destroy <id>           — destroy a key
+//! citadel key rewrap <id>            — re-wrap under a new parent KEK
 //! citadel migrate hierarchy          — upgrade to V3 hierarchy
 //! citadel audit export               — export audit log
 //! citadel audit verify-chain         — verify audit hash chain

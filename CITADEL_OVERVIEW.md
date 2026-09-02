@@ -1,5 +1,7 @@
 # Citadel: Post-Quantum Key Management for Enterprise Applications
 
+> Commercial positioning summary — technical claims herein are simplified; [README.md](README.md) and [SECURITY_MATURITY.md](SECURITY_MATURITY.md) govern where they differ.
+
 ## The Problem
 
 NIST mandates post-quantum cryptography migration by 2035. Most organizations encrypt sensitive data with algorithms that quantum computers will break. The challenge isn't just swapping algorithms — it's managing the key lifecycle: rotation, revocation, access control, audit trails, and compliance reporting across thousands of keys.
@@ -18,10 +20,10 @@ Citadel is a self-hosted key management server that handles post-quantum encrypt
 Your App                    Citadel                      Storage
    |                          |                            |
    |-- encrypt(data, aad) --> |                            |
-   |                          |-- generate AES-256 key     |
-   |                          |-- encrypt with AES-256-GCM |
-   |                          |-- wrap key with hybrid KEM |
+   |                          |-- derive AES-256 key (HKDF)|
+   |                          |   from hybrid KEM secrets  |
    |                          |   (X25519 + ML-KEM-768)    |
+   |                          |-- encrypt with AES-256-GCM |
    | <-- encrypted blob ----- |                            |
    |                          |                            |
    |-- store blob ---------------------------------------->|
@@ -78,8 +80,10 @@ services:
   citadel:
     image: citadel:latest
     environment:
+      CITADEL_ENV: "production"
+      CITADEL_MASTER_KEY: "${CITADEL_MASTER_KEY}"
       CITADEL_API_KEY_HASH: "${API_KEY_HASH}"
-      CITADEL_SEED_DEMO: "true"
+      CITADEL_REPLAY_STORE: "file"
     volumes:
       - citadel-data:/data
     ports:
@@ -109,13 +113,13 @@ AAD binding prevents record substitution attacks — swapping ciphertext between
 
 ## Compliance
 
-Citadel maps to 34 controls in NIST SP 800-57: 26 satisfied, 7 partially satisfied, 1 gap. See COMPLIANCE_MATRIX.md for the full mapping.
+Citadel maps to 34 controls in NIST SP 800-57: 27 satisfied, 6 partially satisfied, 1 gap. See COMPLIANCE_MATRIX.md for the full mapping.
 
 | Framework | Relevant Controls |
 |-----------|------------------|
 | NIST SP 800-57 | Key lifecycle, hierarchy, crypto-periods |
 | NIST SP 800-131A | Algorithm transition (classical to PQC) |
-| CNSA 2.0 | ML-KEM-768 meets 2025 software requirement |
+| CNSA 2.0 | Suite `0xA4` (P-384 + ML-KEM-1024, category 5) is CNSA 2.0-aligned; ML-KEM-768 (`0xA3`, category 3) does not meet CNSA 2.0 |
 | HIPAA | Encryption at rest, access controls, audit logs |
 | SOC 2 | Logical access, key management, monitoring |
 
