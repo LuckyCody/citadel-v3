@@ -42,7 +42,7 @@ justified — all three fail the same class. Provider choice is made on build
 simplicity, maintenance, and audit history, not on a timing signal that all
 share equally.
 
-See TIMING.md for the full finding, risk assessment, and required wording.
+See docs/security/TIMING.md for the full finding, risk assessment, and required wording.
 
 ---
 

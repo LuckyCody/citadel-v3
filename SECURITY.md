@@ -83,7 +83,7 @@ Email: andre.cordero36@gmail.com
 
 ### What We Do NOT Guarantee
 
-1. **Key-material timing independence** — isolated ML-KEM private-byte classes show a small timing-distribution effect on the tested x86-64 host in the RustCrypto release provider and libcrux. Random-label controls pass, but the root cause is not proved. Treat this as a local/co-resident side-channel limitation; see `TIMING.md` for the full timing validation record.
+1. **Key-material timing independence** — isolated ML-KEM private-byte classes show a small timing-distribution effect on the tested x86-64 host in the RustCrypto release provider and libcrux. Random-label controls pass, but the root cause is not proved. Treat this as a local/co-resident side-channel limitation; see `docs/security/TIMING.md` for the full timing validation record.
 2. **Side-channel resistance** — not tested against power/EM/cache attacks beyond dudect
 3. **FIPS compliance** — uses NIST primitives, not a certified module
 4. **Constant-time validation** — source code follows CT discipline, but hardware data-dependent execution is unresolved
@@ -131,7 +131,7 @@ PQClean chain, which needed a `cc` C compiler, is no longer in the tree.)
 
 ## Timing Validation
 
-See `TIMING.md` for the complete timing validation model, including:
+See `docs/security/TIMING.md` for the complete timing validation model, including:
 - Secret/public inventories
 - Enforced invariants
 - Known limitation: key-value-dependent decapsulation timing (platform-level)

@@ -72,7 +72,7 @@ the key-value diagnostic remains a documented platform/provider limitation;
 it is not evidence that one candidate has a conventional secret-dependent
 branch. Citadel therefore makes no constant-time-validation or side-channel-
 hardening claim. Attacker-controlled input classes and the service response
-boundary remain the release-relevant timing checks described in `TIMING.md`.
+boundary remain the release-relevant timing checks described in `docs/security/TIMING.md`.
 
 ## Primary references
 

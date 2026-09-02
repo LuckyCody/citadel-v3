@@ -1,6 +1,6 @@
 # Citadel: Post-Quantum Key Management for Enterprise Applications
 
-> Commercial positioning summary — technical claims herein are simplified; [README.md](README.md) and [SECURITY_MATURITY.md](SECURITY_MATURITY.md) govern where they differ.
+> Commercial positioning summary — technical claims herein are simplified; [README.md](README.md) and [SECURITY_MATURITY.md](docs/security/SECURITY_MATURITY.md) govern where they differ.
 
 ## The Problem
 
@@ -113,7 +113,7 @@ AAD binding prevents record substitution attacks — swapping ciphertext between
 
 ## Compliance
 
-Citadel maps to 34 controls in NIST SP 800-57: 27 satisfied, 6 partially satisfied, 1 gap. See COMPLIANCE_MATRIX.md for the full mapping.
+Citadel maps to 34 controls in NIST SP 800-57: 27 satisfied, 6 partially satisfied, 1 gap. See docs/security/COMPLIANCE_MATRIX.md for the full mapping.
 
 | Framework | Relevant Controls |
 |-----------|------------------|
@@ -133,7 +133,7 @@ Citadel maps to 34 controls in NIST SP 800-57: 27 satisfied, 6 partially satisfi
 | Dashboard | Working, real-time threat visualization |
 | Independent audit | **Not yet completed** |
 | Production deployments | **None yet** |
-| FIPS validation | **Not a validated deployment.** The optional `fips` build routes envelope operations through a CMVP-validated AWS-LC module, but that does not make Citadel itself a validated product — see [SECURITY_MATURITY.md](SECURITY_MATURITY.md). |
+| FIPS validation | **Not a validated deployment.** The optional `fips` build routes envelope operations through a CMVP-validated AWS-LC module, but that does not make Citadel itself a validated product — see [SECURITY_MATURITY.md](docs/security/SECURITY_MATURITY.md). |
 
 ## What Independent Audit Would Cover
 

@@ -24,7 +24,7 @@ Two wire suites are supported, selected by the suite byte and additively staged
 
 ## What Citadel V3 protects against
 
-### Confirmed by tests (0 failures — current counts in [VALIDATION_MATRIX.md](VALIDATION_MATRIX.md): 435 workspace + 44 KAT + 21 stress passing)
+### Confirmed by tests (0 failures — current counts in [VALIDATION_MATRIX.md](../../VALIDATION_MATRIX.md): 435 workspace + 44 KAT + 21 stress passing)
 
 | Threat | Protection | Test |
 |--------|-----------|------|
@@ -208,5 +208,5 @@ Not appropriate for (without further work):
 ---
 
 *See [TIMING.md](TIMING.md) for the complete timing validation model.*
-*See [SECURITY.md](SECURITY.md) for the security policy and disclosure process.*
-*See [PROVIDER_DECISION_LOG.md](PROVIDER_DECISION_LOG.md) for ML-KEM provider history.*
+*See [SECURITY.md](../../SECURITY.md) for the security policy and disclosure process.*
+*See [PROVIDER_DECISION_LOG.md](../../PROVIDER_DECISION_LOG.md) for ML-KEM provider history.*

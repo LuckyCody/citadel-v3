@@ -1262,7 +1262,7 @@ fn run_independent_isolated_sample(mode: &str, count: usize, output: &PathBuf) {
 
 // ---------------------------------------------------------------------------
 // P-384 arm (suite 0xA4) — dudect screens for the NEW classical primitive.
-// The ML-KEM-1024 arm is the same family as 768 (already characterized in TIMING.md);
+// The ML-KEM-1024 arm is the same family as 768 (already characterized in docs/security/TIMING.md);
 // what 0xA4 adds is pure-Rust p384 ECDH, isolated here via `p384_ecdh_only`.
 // ---------------------------------------------------------------------------
 
@@ -1298,7 +1298,7 @@ fn bench_stage_p384_ecdh_key_a_vs_key_b_success(runner: &mut CtRunner, rng: &mut
         ));
     }
     // 1M samples: reach dudect's sufficiency estimate for a WELL-POWERED result on a box
-    // that provably detects ML-KEM's key-material signal (see TIMING.md P-384 baseline).
+    // that provably detects ML-KEM's key-material signal (see docs/security/TIMING.md P-384 baseline).
     for _ in 0..1_000_000 {
         let sample = &samples[rng.gen_range(0..samples.len())];
         runner.run_one(sample.0, || {
@@ -1352,7 +1352,7 @@ fn bench_stage_p384_ecdh_same_key_pool_a_vs_pool_b_control(
 /// cache/branch-predictor-hot and runs faster regardless of secrets. Measured `|t| ≈ 106`,
 /// which is the artifact, not a leak — the same-public-class control below
 /// (`..._same_key_pool_a_vs_pool_b_control`, varying-vs-varying) stays `< 4.5`. Kept as a
-/// demonstration of why TIMING.md requires same-public-class benches; the remote-relevant
+/// demonstration of why docs/security/TIMING.md requires same-public-class benches; the remote-relevant
 /// attacker-controlled screen is the pool control, not this.
 fn bench_info_p384_ecdh_fixed_vs_random_ciphertext(runner: &mut CtRunner, rng: &mut BenchRng) {
     let cit = CitadelP384::new();

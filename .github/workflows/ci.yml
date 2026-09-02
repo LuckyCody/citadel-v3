@@ -76,7 +76,7 @@ jobs:
       - name: Audit dependencies
         # Two scoped exceptions: advisories in the CMVP-validated aws-lc-fips-sys 0.13.11
         # pin (packet 051), NON-APPLICABLE to Citadel (no AES-CCM, no X.509/CRL); fixes exist
-        # only in the unvalidated 3.4.0. See deny.toml + SUPPLY_CHAIN.md. All other advisories
+        # only in the unvalidated 3.4.0. See deny.toml + docs/security/SUPPLY_CHAIN.md. All other advisories
         # still fail the build.
         run: cargo audit --ignore RUSTSEC-2026-0042 --ignore RUSTSEC-2026-0043
 

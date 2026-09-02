@@ -123,6 +123,6 @@ C2. **RustCrypto** crates (pure-Rust default backend), exact versions pinned in 
     recipient public `ProjectivePoint` by the secret scalar through the crate's constant-time `Mul`
     (no `_vartime` on the path), with `subtle` for secret-dependent selection and `from_sec1_bytes`
     rejecting off-curve and identity points before the multiply. The matching source-inspection record
-    is `TIMING.md`.*
+    is `docs/security/TIMING.md`.*
 C3. **dudect** reference implementation, O. Reparaz. https://github.com/oreparaz/dudect — *tool used;
     pairs with B10.*

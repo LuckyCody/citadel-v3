@@ -25,7 +25,7 @@ value" pinpoints the leaking instruction.
 
 ## Why this tier exists
 
-`TIMING.md` documents a *measured* key-material-dependent timing effect in ML-KEM
+`docs/security/TIMING.md` documents a *measured* key-material-dependent timing effect in ML-KEM
 decapsulation (via dudect — a black-box statistical test). dudect can only say
 "we saw/didn't see a difference." It cannot **locate** a leak or **prove** its
 absence. Tier 8 upgrades that to instruction-level evidence.
@@ -56,7 +56,7 @@ Target: the ML-KEM-768 decapsulation path (`kem::decapsulate` /
 ## Expected outcome
 
 Either (a) prove the decap path is constant-time at the instruction level —
-promoting `TIMING.md`'s measured wobble to "not a code-level leak; the effect is
+promoting `docs/security/TIMING.md`'s measured wobble to "not a code-level leak; the effect is
 platform/microarchitectural," or (b) locate the exact secret-dependent branch/access,
 which becomes a concrete fix. Both are strictly better than the current dudect-only
 evidence.

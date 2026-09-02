@@ -15,7 +15,7 @@
 #   * LICENSING: Citadel is AGPL-3.0-or-later and aws-lc-fips-sys carries an
 #     OpenSSL-license term. See LICENSE-EXCEPTION for the additional permission
 #     under AGPL section 7 covering this combination.
-# Controlling record: SUPPLY_CHAIN.md (§AWS-LC) and SECURITY_MATURITY.md.
+# Controlling record: docs/security/SUPPLY_CHAIN.md (§AWS-LC) and docs/security/SECURITY_MATURITY.md.
 #
 # Build:  docker build -f Dockerfile.fips -t citadel:v3-fips .
 # Verify: curl -s localhost:8443/health | jq .crypto_backend

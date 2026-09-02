@@ -192,7 +192,7 @@ $summary = @{
     instance_b_alive  = $bAlive
     double_decrypt    = $results.double_decrypt
     finding           = "FileReplayStore is single-process only. Redis required for multi-instance."
-    action_required   = "Document in DEPLOYMENT.md and REPLAY_STORE_GUARANTEES.md"
+    action_required   = "Document in DEPLOYMENT.md and docs/security/REPLAY_STORE_GUARANTEES.md"
 }
 $summary | ConvertTo-Json | Out-File "$logDir\multiprocess_result.json"
 

@@ -225,7 +225,7 @@ Citadel ships two envelope suites, chosen by a self-describing wire suite byte (
 
 By default all cryptography runs in pure-Rust crates. Building with `--features fips` selects the **AWS-LC** cryptographic library at the backend seam, executing inside the exact build that CMVP validated as **AWS-LC-FIPS 3.1.0** (certificates #5298 / #5314), with AES-GCM using the approved random-IV construction (GCM IV Scenario 2). The FIPS backend does not move every operation into AWS-LC: on the `fips` build, suite `0xA4`'s key-encapsulation operations (P-384 ECDH, ML-KEM-1024 encapsulation and decapsulation) run in AWS-LC, and so do the symmetric primitives both suites share (AES-256-GCM, HKDF-SHA256, SHA-2, SHA-3, and the module-generated random nonce). Suite `0xA3`'s key-encapsulation arm, which is X25519 and ML-KEM-768, stays in pure Rust on both builds. See the [whitepaper](whitepaper/CITADEL_WHITEPAPER.md) §5 for the exact per-operation scope table.
 
-**This does not make Citadel a FIPS-validated or FIPS-compliant product.** The operating environment is not tested under CMVP; key generation and ML-KEM seed expansion remain pure-Rust; and no regulatory compliance claim is made. The status and its bounds are stated in [`SECURITY_MATURITY.md`](SECURITY_MATURITY.md).
+**This does not make Citadel a FIPS-validated or FIPS-compliant product.** The operating environment is not tested under CMVP; key generation and ML-KEM seed expansion remain pure-Rust; and no regulatory compliance claim is made. The status and its bounds are stated in [`SECURITY_MATURITY.md`](docs/security/SECURITY_MATURITY.md).
 
 ### Wire Format
 
@@ -255,10 +255,10 @@ Citadel composes NIST-standardized primitives (ML-KEM, X25519, P-384, AES-256-GC
 - **Machine-checked proof** (CryptoVerif) that the `0xA4` combiner design keeps the derived key secret as long as either the classical or the post-quantum arm survives.
 - **Fuzzing** of the wire-format parser, the full decryption path, the seal/open round trip, and the FFI free path.
 - **Adversarial keystore and FFI tests**: corrupted ciphertext, replay injection, truncated blobs, wrong-key, null handling, concurrent keygen, wrong-buffer-length, and zero-before-free.
-- **Constant-time evaluation** of the shipped paths with dudect (see [TIMING.md](TIMING.md) for the exact results).
+- **Constant-time evaluation** of the shipped paths with dudect (see [TIMING.md](docs/security/TIMING.md) for the exact results).
 - With `--features fips`, the FIPS-scoped envelope operations (see [Cryptography](#cryptography)) execute inside the exact AWS-LC build that CMVP validated as AWS-LC-FIPS 3.1.0 (certificates #5298 / #5314).
 
-The full security model, replay-protection behavior per backend, the primitive table, and the per-claim status are in [SECURITY_GUARANTEES.md](SECURITY_GUARANTEES.md).
+The full security model, replay-protection behavior per backend, the primitive table, and the per-claim status are in [SECURITY_GUARANTEES.md](docs/security/SECURITY_GUARANTEES.md).
 
 ### What we do not claim
 
@@ -266,7 +266,7 @@ Everything above is our own validation and auditing work, on our own tools and t
 
 ## Compliance
 
-Mapped against 34 NIST SP 800-57 controls: 27 satisfied, 6 partial, 1 gap. See [COMPLIANCE_MATRIX.md](COMPLIANCE_MATRIX.md) for the full mapping.
+Mapped against 34 NIST SP 800-57 controls: 27 satisfied, 6 partial, 1 gap. See [COMPLIANCE_MATRIX.md](docs/security/COMPLIANCE_MATRIX.md) for the full mapping.
 
 Relevant frameworks: NIST SP 800-57 (key management), CNSA 2.0 (PQC timeline), HIPAA (encryption at rest), SOC 2 (access controls and audit).
 
@@ -282,11 +282,9 @@ citadel-v3/
 ├── citadel-signer/        # ML-DSA-65 signing service
 ├── citadel-ffi/           # C ABI + Python/Java/C bindings
 ├── LICENSE, LICENSE-EXCEPTION, NOTICE, COPYING, COMMERCIAL_LICENSE.md
-├── docs/spec/SPEC.md      # Legacy v1 wire spec (current: docs/spec/WIRE_SPEC_V2.md)
-├── THREAT_MODEL.md        # Security goals and attacker model
-├── SECURITY_GUARANTEES.md # What is and is not protected
-├── VALIDATION_MATRIX.md   # Per-claim test evidence and gate status
-└── COMPLIANCE_MATRIX.md   # NIST 800-57 control mapping
+├── docs/spec/             # Wire-format specs (WIRE_SPEC_V2.md current; SPEC.md legacy v1)
+├── docs/security/         # THREAT_MODEL, SECURITY_GUARANTEES, COMPLIANCE_MATRIX, ...
+└── VALIDATION_MATRIX.md   # Per-claim test evidence and gate status
 ```
 
 ## Documentation
@@ -300,18 +298,18 @@ citadel-v3/
 | [WIRE_SPEC_V2.md](docs/spec/WIRE_SPEC_V2.md) | v2 wire format (current envelope format) |
 | [FORMAT.md](docs/spec/FORMAT.md) | Envelope encoding and binding-rules overview |
 | [MIGRATION.md](MIGRATION.md) | Python prototype → Rust migration guide |
-| [THREAT_MODEL.md](THREAT_MODEL.md) | Security goals and assumptions |
+| [THREAT_MODEL.md](docs/security/THREAT_MODEL.md) | Security goals and assumptions |
 | [VALIDATION_MATRIX.md](VALIDATION_MATRIX.md) | Per-claim test evidence and gate status |
-| [COMPLIANCE_MATRIX.md](COMPLIANCE_MATRIX.md) | NIST 800-57 compliance mapping |
-| [SECURITY_GUARANTEES.md](SECURITY_GUARANTEES.md) | What is and is not protected |
-| [SECURITY_MATURITY.md](SECURITY_MATURITY.md) | Deployment-readiness scope and limits |
-| [SIDE_CHANNEL_NOTES.md](SIDE_CHANNEL_NOTES.md) | Timing/side-channel status |
-| [TIMING.md](TIMING.md) | Full timing/dudect validation record |
-| [REPLAY_STORE_GUARANTEES.md](REPLAY_STORE_GUARANTEES.md) | Replay-protection guarantees by backend |
-| [REPLAY_TRUST_BOUNDARIES.md](REPLAY_TRUST_BOUNDARIES.md) | Replay-protection trust boundaries |
+| [COMPLIANCE_MATRIX.md](docs/security/COMPLIANCE_MATRIX.md) | NIST 800-57 compliance mapping |
+| [SECURITY_GUARANTEES.md](docs/security/SECURITY_GUARANTEES.md) | What is and is not protected |
+| [SECURITY_MATURITY.md](docs/security/SECURITY_MATURITY.md) | Deployment-readiness scope and limits |
+| [SIDE_CHANNEL_NOTES.md](docs/security/SIDE_CHANNEL_NOTES.md) | Timing/side-channel status |
+| [TIMING.md](docs/security/TIMING.md) | Full timing/dudect validation record |
+| [REPLAY_STORE_GUARANTEES.md](docs/security/REPLAY_STORE_GUARANTEES.md) | Replay-protection guarantees by backend |
+| [REPLAY_TRUST_BOUNDARIES.md](docs/security/REPLAY_TRUST_BOUNDARIES.md) | Replay-protection trust boundaries |
 | [PROVIDER_DECISION_LOG.md](PROVIDER_DECISION_LOG.md) | ML-KEM provider selection history |
 | [PROVIDER_BAKEOFF_2026.md](PROVIDER_BAKEOFF_2026.md) | ML-KEM provider bakeoff scorecard |
-| [SUPPLY_CHAIN.md](SUPPLY_CHAIN.md) | Dependency advisory and license-exception status |
+| [SUPPLY_CHAIN.md](docs/security/SUPPLY_CHAIN.md) | Dependency advisory and license-exception status |
 | [CITADEL_OVERVIEW.md](CITADEL_OVERVIEW.md) | Commercial positioning |
 | [scripts/security/openapi.yaml](scripts/security/openapi.yaml) | Machine-readable HTTP API description (OpenAPI) |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |

@@ -1,7 +1,7 @@
 # Citadel V3 — Validation Matrix
 
 **Tag:** citadel-v3-beta-001  
-**Current status:** Beta-stage (see [SECURITY_MATURITY.md](SECURITY_MATURITY.md)). Alpha Freeze
+**Current status:** Beta-stage (see [SECURITY_MATURITY.md](docs/security/SECURITY_MATURITY.md)). Alpha Freeze
 and Hardened Alpha gates below are both superseded by validation work completed since —
 machine-checked combiner proofs for both suites, an independent adversarial falsification
 audit, ACVP vectors now passing, and the CMVP-validated FIPS backend pin. No independent
@@ -35,7 +35,7 @@ row is still passing today, not just re-worded as current.
 below. Its evidence lives in `citadel-envelope/tests/wycheproof_p384_ecdh.rs`,
 `proptest_a4.rs`, `v2_vector_a4.rs`, `awslc_ecdh_p384_differential.rs`, and the machine-checked
 combiner proofs in `gauntlet/tier12_combiner_proof/` (CTD2 P-384 and ML-KEM-1024 arms, both
-VERIFIED). See [SECURITY_GUARANTEES.md](SECURITY_GUARANTEES.md) for the full primitive table.
+VERIFIED). See [SECURITY_GUARANTEES.md](docs/security/SECURITY_GUARANTEES.md) for the full primitive table.
 
 ---
 

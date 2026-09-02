@@ -1,6 +1,6 @@
 # Citadel v3 Security Maturity Assessment
 
-> **Canonical for deployment-readiness posture.** Evidence per claim: [VALIDATION_MATRIX.md](VALIDATION_MATRIX.md). Attacker model: [THREAT_MODEL.md](THREAT_MODEL.md).
+> **Canonical for deployment-readiness posture.** Evidence per claim: [VALIDATION_MATRIX.md](../../VALIDATION_MATRIX.md). Attacker model: [THREAT_MODEL.md](THREAT_MODEL.md).
 
 ## Current Status: Beta-Stage Cryptographic Infrastructure
 
@@ -255,9 +255,9 @@ It IS:
 
 ## Contact and Support
 
-**Security Issues**: Do not open a public issue — see [SECURITY.md](SECURITY.md) for the disclosure process.
-**General Questions**: See [SUPPORT.md](SUPPORT.md)
-**Commercial Support**: See [SUPPORT.md](SUPPORT.md)
+**Security Issues**: Do not open a public issue — see [SECURITY.md](../../SECURITY.md) for the disclosure process.
+**General Questions**: See [SUPPORT.md](../../SUPPORT.md)
+**Commercial Support**: See [SUPPORT.md](../../SUPPORT.md)
 
 ---
 

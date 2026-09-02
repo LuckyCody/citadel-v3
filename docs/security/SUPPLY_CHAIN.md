@@ -82,7 +82,7 @@ allowlist is unchanged):**
 **License note (`fips` feature only):** the `OpenSSL` license term carries the historic
 advertising clause, which is commonly treated as incompatible with GPL/AGPL
 redistribution of combined works absent an explicit exception. Citadel is
-AGPL-3.0-or-later. [`LICENSE-EXCEPTION`](LICENSE-EXCEPTION) grants an additional
+AGPL-3.0-or-later. [`LICENSE-EXCEPTION`](../../LICENSE-EXCEPTION) grants an additional
 permission under AGPL section 7 covering exactly this combination, granted by the
 copyright holder (RepoSignal LLC / Andre Cordero) on his own code. The `fips`
 feature is opt-in and off by default; the default pure-Rust build links no

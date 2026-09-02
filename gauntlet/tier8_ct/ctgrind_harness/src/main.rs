@@ -6,7 +6,7 @@
 //! reported ("Conditional jump ... depends on uninitialised value(s)"). Clean =
 //! no secret-dependent control flow / addressing on this path (for this input).
 //!
-//! This targets exactly the operation `TIMING.md` flags a measured wobble on.
+//! This targets exactly the operation `docs/security/TIMING.md` flags a measured wobble on.
 
 use core::ffi::c_void;
 

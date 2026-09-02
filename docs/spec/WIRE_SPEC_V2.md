@@ -151,7 +151,7 @@ nonce. It MUST be unavailable from default production builds.
 
 Every failure from the public open operation MUST be the same opaque error.
 The implementation does not claim constant-time whole-operation behavior;
-The timing screens described in `TIMING.md` remain limitations rather than erased evidence.
+The timing screens described in `docs/security/TIMING.md` remain limitations rather than erased evidence.
 
 ## 8. Migration and downgrade behavior
 

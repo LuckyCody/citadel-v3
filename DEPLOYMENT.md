@@ -243,7 +243,7 @@ This is a critical operational concern — choose your replay backend knowing wh
 
 > **Memory backend restart risk:** If the API restarts, all nonces seen before the restart are forgotten. An attacker who captured a ciphertext can replay it within the TTL window. This is acceptable in development. **Never use memory replay in production.**
 
-> **File backend restart safety:** Nonces are claimed atomically and persisted to `CITADEL_DATA_DIR/replay.json`. File backend durability is **batched** — see [REPLAY_TRUST_BOUNDARIES.md](REPLAY_TRUST_BOUNDARIES.md) for the crash window; "survives restart" assumes a flushed claim. A restart reloads the file. TTL-expired entries are purged on load. Single-node only — not safe if multiple API instances share the same data directory.
+> **File backend restart safety:** Nonces are claimed atomically and persisted to `CITADEL_DATA_DIR/replay.json`. File backend durability is **batched** — see [REPLAY_TRUST_BOUNDARIES.md](docs/security/REPLAY_TRUST_BOUNDARIES.md) for the crash window; "survives restart" assumes a flushed claim. A restart reloads the file. TTL-expired entries are purged on load. Single-node only — not safe if multiple API instances share the same data directory.
 
 > **Redis backend:** Nonces are stored in Redis with TTL. Restarts reconnect to the same Redis instance. Safe for multi-node deployments.
 > The production compose configures Redis automatically.
